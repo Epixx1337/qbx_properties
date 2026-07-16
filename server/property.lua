@@ -249,17 +249,17 @@ end)
 
 lib.callback.register('qbx_properties:callback:requestRingers', function(source)
     local propertyId = enteredProperty[source]
-    local player = exports.qbx_core:GetPlayer(source)
+    local owner = exports.qbx_core:GetPlayer(source)
     local property = propertyId and MySQL.single.await('SELECT owner FROM properties WHERE id = ?', {propertyId})
-    if not player or not property or player.PlayerData.citizenid ~= property.owner then return {} end
+    if not owner or not property or owner.PlayerData.citizenid ~= property.owner then return {} end
     local players = ring[propertyId] or {}
     local ringers = {}
     for i = 1, #players do
-        local player = exports.qbx_core:GetPlayer(players[i])
-        if player then
+        local ringer = exports.qbx_core:GetPlayer(players[i])
+        if ringer then
             ringers[#ringers + 1] = {
-                citizenid = player.PlayerData.citizenid,
-                name = player.PlayerData.charinfo.firstname .. ' ' .. player.PlayerData.charinfo.lastname
+                citizenid = ringer.PlayerData.citizenid,
+                name = ringer.PlayerData.charinfo.firstname .. ' ' .. ringer.PlayerData.charinfo.lastname
             }
         end
     end
