@@ -123,8 +123,13 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - [oxmysql](https://github.com/CommunityOx/oxmysql)
 - [ox_inventory](https://github.com/CommunityOx/ox_inventory)
 - [ox_target](https://github.com/CommunityOx/ox_target)
-- [ox_doorlock](https://github.com/CommunityOx/ox_doorlock) for property and apartment doors — needs one added export, see below
+- [ox_doorlock](https://github.com/CommunityOx/ox_doorlock) for property and apartment doors — needs a few small additions, see below
 - screencapture (the screenshot-basic replacement) for realtor property photos
+
+**Optional integrations** (detected at runtime, everything works without them)
+
+- [Renewed-Banking](https://github.com/Renewed-Scripts/Renewed-Banking) — receives the `marketSociety` and `governmentAccount` payouts; without it those payouts are skipped
+- [scully_emotemenu](https://github.com/Scullyy/scully_emotemenu) — its keybinds are suspended while decorating so emote keys can't fire mid-edit
 
 **Assets used by specific features**
 
@@ -143,9 +148,34 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 The NUI is prebuilt in `web/build`. To rebuild after changing it: `cd web && bun i && bun run build`.
 
-## ox_doorlock exports
+## ox_doorlock additions
 
-Property doors are registered and removed at runtime, but stock ox_doorlock only manages doors through its admin UI. Add these two exports to ox_doorlock's `server/main.lua` (they slot in right after the other exports) — without them the resource prints a warning on start and doors are skipped:
+Stock ox_doorlock only manages doors through its admin UI and has no access hooks, so it needs three small additions. Without them the resource prints a warning on start and property doors are skipped.
+
+**1. The hook system.** Copy [docs/ox_doorlock/hooks.lua](docs/ox_doorlock/hooks.lua) into ox_doorlock's `server/` folder, then wire it into `server/main.lua`. At the top of the file:
+
+```lua
+local TriggerEventHooks = require 'server.hooks'
+```
+
+And at the end of the authorisation function (right after the `::continue::` label, replacing the plain `return authorised`):
+
+```lua
+    local hookResult = TriggerEventHooks('doorAuthorization', {
+        source = playerId,
+        door = door,
+        lockpick = lockpick,
+        authorised = authorised,
+    })
+
+    if hookResult == nil then return authorised end
+
+    return authorised or hookResult
+```
+
+qbx_properties registers a `doorAuthorization` hook on its own doors to let owners, keyholders and realtors through, and to unlock everything while a door is breached — normal ox_doorlock doors are untouched thanks to the hook's name filter.
+
+**2. Two exports** in `server/main.lua`, slotted in after the existing ones — `createDoorProgrammatic` to register doors at runtime and `removeDoorByName` to clean them up:
 
 ```lua
 exports('removeDoorByName', function(name)
