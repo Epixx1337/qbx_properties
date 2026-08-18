@@ -123,7 +123,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - [oxmysql](https://github.com/CommunityOx/oxmysql)
 - [ox_inventory](https://github.com/CommunityOx/ox_inventory)
 - [ox_target](https://github.com/CommunityOx/ox_target)
-- [ox_doorlock](https://github.com/CommunityOx/ox_doorlock) for property and apartment doors
+- [ox_doorlock](https://github.com/CommunityOx/ox_doorlock) for property and apartment doors — needs one added export, see below
 - screencapture (the screenshot-basic replacement) for realtor property photos
 
 **Assets used by specific features**
@@ -142,6 +142,33 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 5. Ensure the resource starts after its dependencies
 
 The NUI is prebuilt in `web/build`. To rebuild after changing it: `cd web && bun i && bun run build`.
+
+## ox_doorlock export
+
+Property doors are registered at runtime, but stock ox_doorlock only creates doors through its admin UI. Add this export to ox_doorlock's `server/main.lua` (it slots in right after the other exports) — without it the resource prints a warning on start and doors are skipped:
+
+```lua
+exports('createDoorProgrammatic', function(data)
+    if not data or not data.name or not data.coords then return end
+
+    if type(data.coords) ~= 'vector3' then
+        data.coords = vector3(data.coords.x, data.coords.y, data.coords.z)
+    end
+
+    if not data.state then data.state = 1 end
+
+    local insertId = MySQL.insert.await('INSERT INTO ox_doorlock (name, data) VALUES (?, ?)',
+        { data.name, encodeData(data) })
+    if not insertId then return end
+
+    local door = createDoor(insertId, data, data.name)
+    TriggerClientEvent('ox_doorlock:setState', -1, door.id, door.state, false, door)
+
+    return insertId
+end)
+```
+
+It inserts the door into the `ox_doorlock` table, registers it live and syncs it to every client, defaulting to locked. qbx_properties uses it for apartment unit doors, MLO property doors and placeable door furniture, and only creates a door when no door with that name exists yet.
 
 ## CDN key for property photos
 
