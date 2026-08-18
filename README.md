@@ -143,11 +143,22 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 The NUI is prebuilt in `web/build`. To rebuild after changing it: `cd web && bun i && bun run build`.
 
-## ox_doorlock export
+## ox_doorlock exports
 
-Property doors are registered at runtime, but stock ox_doorlock only creates doors through its admin UI. Add this export to ox_doorlock's `server/main.lua` (it slots in right after the other exports) — without it the resource prints a warning on start and doors are skipped:
+Property doors are registered and removed at runtime, but stock ox_doorlock only manages doors through its admin UI. Add these two exports to ox_doorlock's `server/main.lua` (they slot in right after the other exports) — without them the resource prints a warning on start and doors are skipped:
 
 ```lua
+exports('removeDoorByName', function(name)
+    local results = MySQL.query.await('SELECT id FROM ox_doorlock WHERE name LIKE ?', { name .. '%' })
+    if not results then return end
+
+    for _, row in ipairs(results) do
+        MySQL.update('DELETE FROM ox_doorlock WHERE id = ?', { row.id })
+        doors[row.id] = nil
+        TriggerClientEvent('ox_doorlock:editDoorlock', -1, row.id, nil)
+    end
+end)
+
 exports('createDoorProgrammatic', function(data)
     if not data or not data.name or not data.coords then return end
 
@@ -168,7 +179,7 @@ exports('createDoorProgrammatic', function(data)
 end)
 ```
 
-It inserts the door into the `ox_doorlock` table, registers it live and syncs it to every client, defaulting to locked. qbx_properties uses it for apartment unit doors, MLO property doors and placeable door furniture, and only creates a door when no door with that name exists yet.
+`createDoorProgrammatic` inserts the door into the `ox_doorlock` table, registers it live and syncs it to every client, defaulting to locked. `removeDoorByName` deletes every door whose name starts with the given prefix, which is how a property's furniture and extra doors are cleaned up before re-syncing. qbx_properties uses them for apartment unit doors, MLO property doors and placeable door furniture, and only creates a door when no door with that name exists yet.
 
 ## CDN key for property photos
 
