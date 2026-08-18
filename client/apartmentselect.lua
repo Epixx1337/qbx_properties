@@ -1,4 +1,5 @@
 local sharedConfig = require 'config.shared'
+local ApartmentOptions = GetApartmentOptions()
 local BoardCoords = vec4(-44.19, -585.99, 87.71, 250.0)
 local BoardModel = `tr_prop_tr_planning_board_01a`
 local RenderTarget = 'modgarage_01'
@@ -6,7 +7,7 @@ local Board, scaleform, buttonsScaleform, currentButtonID = nil, 0, 0, 1
 local previewCam
 
 local function SetupBoard()
-    lib.requestModel(BoardModel, 10000)
+    lib.requestModel(BoardModel, 60000)
     Board = CreateObject(BoardModel, BoardCoords.x, BoardCoords.y, BoardCoords.z, false, false, false)
     SetEntityHeading(Board, BoardCoords.w)
     SetModelAsNoLongerNeeded(BoardModel)
@@ -62,8 +63,8 @@ local function CreateNamedRenderTargetForModel(name, model)
 end
 
 local function StartScaleform()
-    scaleform = lib.requestScaleformMovie('AUTO_SHOP_BOARD', 10000) or 0
-    buttonsScaleform = lib.requestScaleformMovie('INSTRUCTIONAL_BUTTONS', 10000) or 0
+    scaleform = lib.requestScaleformMovie('AUTO_SHOP_BOARD', 60000) or 0
+    buttonsScaleform = lib.requestScaleformMovie('INSTRUCTIONAL_BUTTONS', 60000) or 0
     CreateThread(function()
         SetupInstructionalScaleform()
         while DoesCamExist(previewCam) do
@@ -99,13 +100,13 @@ local function SetupScaleform()
     local endIndex = startIndex + 2
 
     for i = startIndex, endIndex do
-        if sharedConfig.apartmentOptions[i] then
+        if ApartmentOptions[i] then
             ScaleformMovieMethodAddParamTextureNameString(string.format('selection%s', ((i - 1) % 6) + 1))
             BeginTextCommandScaleformString('STRING')
-            AddTextComponentSubstringPlayerName(sharedConfig.apartmentOptions[i].label)
+            AddTextComponentSubstringPlayerName(ApartmentOptions[i].label)
             EndTextCommandScaleformString()
             BeginTextCommandScaleformString('STRING')
-            AddTextComponentSubstringPlayerName(sharedConfig.apartmentOptions[i].description)
+            AddTextComponentSubstringPlayerName(ApartmentOptions[i].description)
         else
             ScaleformMovieMethodAddParamTextureNameString('empty')
             BeginTextCommandScaleformString('STRING')
@@ -119,13 +120,13 @@ local function SetupScaleform()
     end
 
     BeginTextCommandScaleformString('STRING')
-    AddTextComponentSubstringPlayerName(string.format('%s/%s', currentButtonID, #sharedConfig.apartmentOptions))
+    AddTextComponentSubstringPlayerName(string.format('%s/%s', currentButtonID, #ApartmentOptions))
     EndTextCommandScaleformString()
 
     ScaleformMovieMethodAddParamInt(0)
 
     for i = startIndex, endIndex do
-        ScaleformMovieMethodAddParamBool(sharedConfig.apartmentOptions[i] ~= nil)
+        ScaleformMovieMethodAddParamBool(ApartmentOptions[i] ~= nil)
     end
 
     -- Had no success with CURRENT_SELECTION nor CURRENT_ROLLOVER, not sure why.
@@ -181,7 +182,7 @@ local function inputConfirm(apartmentIndex)
     DoScreenFadeOut(500)
     while not IsScreenFadedOut() do Wait(0) end
     FreezeEntityPosition(cache.ped, false)
-    SetEntityCoords(cache.ped, sharedConfig.apartmentOptions[apartmentIndex].enter.x, sharedConfig.apartmentOptions[apartmentIndex].enter.y, sharedConfig.apartmentOptions[apartmentIndex].enter.z - 2.0, false, false, false, false)
+    SetEntityCoords(cache.ped, ApartmentOptions[apartmentIndex].enter.x, ApartmentOptions[apartmentIndex].enter.y, ApartmentOptions[apartmentIndex].enter.z - 2.0, false, false, false, false)
     Wait(0)
     TriggerServerEvent('qbx_properties:server:apartmentSelect', apartmentIndex)
     Wait(1000) -- Wait for player to spawn correctly so clothing menu can load in nice
@@ -192,7 +193,7 @@ local function inputConfirm(apartmentIndex)
 end
 
 local function InputHandler()
-    local coords = sharedConfig.apartmentOptions[currentButtonID].enter
+    local coords = ApartmentOptions[currentButtonID].enter
     local blip = AddBlipForCoord(coords.x, coords.y, coords.z)
     SetBlipSprite(blip, 40)
     ShowTickOnBlip(blip, true)
@@ -203,22 +204,22 @@ local function InputHandler()
         SetRadarAsExteriorThisFrame()
         if IsControlJustReleased(0, 188) then
             currentButtonID -= 1
-            if currentButtonID < 1 then currentButtonID = #sharedConfig.apartmentOptions end
-            coords = sharedConfig.apartmentOptions[currentButtonID].enter
+            if currentButtonID < 1 then currentButtonID = #ApartmentOptions end
+            coords = ApartmentOptions[currentButtonID].enter
             SetBlipCoords(blip, coords.x, coords.y, coords.z)
             LockMinimapPosition(coords.x, coords.y)
             SetupScaleform()
         elseif IsControlJustReleased(0, 187) then
             currentButtonID += 1
-            if currentButtonID > #sharedConfig.apartmentOptions then currentButtonID = 1 end
-            coords = sharedConfig.apartmentOptions[currentButtonID].enter
+            if currentButtonID > #ApartmentOptions then currentButtonID = 1 end
+            coords = ApartmentOptions[currentButtonID].enter
             SetBlipCoords(blip, coords.x, coords.y, coords.z)
             LockMinimapPosition(coords.x, coords.y)
             SetupScaleform()
         elseif IsControlJustReleased(0, 191) then
             local alert = lib.alertDialog({
                 header = locale('alert.apartment_selection'),
-                content = string.format(locale('alert.are_you_sure'), sharedConfig.apartmentOptions[currentButtonID].label),
+                content = string.format(locale('alert.are_you_sure'), ApartmentOptions[currentButtonID].label),
                 centered = true,
                 cancel = true
             })
@@ -238,7 +239,7 @@ local function InputHandler()
 end
 
 RegisterNetEvent('apartments:client:setupSpawnUI', function()
-    if #sharedConfig.apartmentOptions == 1 then
+    if #ApartmentOptions == 1 then
         inputConfirm(1)
         return
     end

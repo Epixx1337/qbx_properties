@@ -1,159 +1,347 @@
 local sharedConfig = require 'config.shared'
-local values = {}
-for k in pairs(sharedConfig.interiors) do
-    values[#values + 1] = k
-end
 
-local car = 0
-local shell = 0
 local playerCoords = vec3(0, 0, 0)
-local garageCoords = nil
-local garageHeading = 0.0
-local isPreviewing = false
 
-local function showText()
-    lib.showTextUI('BACKSPACE - Exit  \n ARROW LEFT - Turn left  \n ARROW RIGHT - Turn right  \n ENTER - Confirm Placement')
-end
-
-local function spawnCar()
-    local model = lib.requestModel('sultanrs', 2500)
-    car = CreateVehicle(model, 0.0, 0.0, 0.0, 0.0, false, false)
-    SetEntityCompletelyDisableCollision(car, false, false)
-    SetModelAsNoLongerNeeded(model)
-end
-
-local function previewProperty(propertyIndex)
-    if DoesEntityExist(shell) then DeleteEntity(shell) end
-    if type(propertyIndex) == 'number' then
-        lib.requestModel(propertyIndex, 5000)
-        shell = CreateObject(propertyIndex, playerCoords.x, playerCoords.y, playerCoords.z - sharedConfig.shellUndergroundOffset, false, false, false)
-        FreezeEntityPosition(shell, true)
-        SetModelAsNoLongerNeeded(propertyIndex)
-        local teleportCoords = CalculateOffsetCoords(playerCoords, sharedConfig.interiors[propertyIndex].exit)
-        SetEntityCoords(cache.ped, teleportCoords.x, teleportCoords.y, teleportCoords.z, false, false, false, false)
-    else
-        local teleportCoords = sharedConfig.interiors[propertyIndex].exit
-        SetEntityCoords(cache.ped, teleportCoords.x, teleportCoords.y, teleportCoords.z, false, false, false, false)
+local function buildInteriorList()
+    local interiors = {}
+    for key in pairs(GetInteriorList()) do
+        interiors[#interiors + 1] = {
+            name = tostring(key),
+            isShell = tonumber(key) ~= nil or IsModelValid(joaat(key)),
+        }
     end
+    table.sort(interiors, function(a, b) return a.name < b.name end)
+    return interiors
 end
 
-local function stopPreview()
-    isPreviewing = false
-    if DoesEntityExist(shell) then DeleteEntity(shell) end
-    SetEntityCoords(cache.ped, playerCoords.x, playerCoords.y, playerCoords.z, false, false, false, false)
-    local players = GetActivePlayers()
-    for i = 1, #players do
-        if players[i] ~= cache.playerId then
-            NetworkConcealPlayer(players[i], false, false)
-        end
-    end
+local function buildingList()
+    return lib.callback.await('qbx_properties:callback:getBuildings', false)
 end
 
-local function addGaragePoint()
-    local isAddingGarage = true
-    garageCoords = nil
-
-    showText()
-    spawnCar()
-
-    while isAddingGarage do
-        Wait(0)
-
-        local hit, _, endCoords = lib.raycast.fromCamera(511, 4, 25.0)
-
-        if not hit then
-            SetEntityCoords(car, 0.0, 0.0, 0.0, false, false, false, false)
-        else
-            SetEntityCoords(car, endCoords.x, endCoords.y, endCoords.z + 1.0, false, false, false, false)
-            SetVehicleOnGroundProperly(car)
-        end
-
-        if IsControlJustPressed(0, 202) then
-            if DoesEntityExist(car) then
-                DeleteEntity(car)
-            end
-            isAddingGarage = false
-        end
-
-        if IsControlPressed(0, 190) then
-            garageHeading = (garageHeading + 2.5) % 360.0
-            SetEntityHeading(car, garageHeading)
-            Wait(100)
-        end
-
-        if IsControlPressed(0, 189) then
-            garageHeading = (garageHeading - 2.5) % 360.0
-            SetEntityHeading(car, garageHeading)
-            Wait(100)
-        end
-
-        if IsControlJustPressed(0, 18) then
-            if hit then
-                garageCoords = endCoords
-                garageHeading = GetEntityHeading(car)
-                if DoesEntityExist(car) then
-                    DeleteEntity(car)
-                end
-                isAddingGarage = false
-            else
-                lib.notify({type = 'error', title = 'Error', description = 'Invalid garage location.'})
-            end
-        end
-
-        SetEntityHeading(car, garageHeading) -- Prevent the car from rotating
-    end
-
-    lib.hideTextUI()
+function RealtorProperties()
+    return lib.callback.await('qbx_properties:callback:getRealtorProperties', false)
 end
 
-lib.registerMenu({
-    id = 'qbx_properties_realtor_menu',
-    title = locale('menu.interior_preview'),
-    position = 'top-right',
-    onSideScroll = function(_, scrollIndex, args)
-        previewProperty(args[scrollIndex])
-    end,
-    onClose = function()
-        stopPreview()
-    end,
-    options = {
-        { label = 'Interiors', values = values, args = values, icon = 'house' },
-    }
-}, function(_, scrollIndex, args)
-    stopPreview()
-    local input = lib.inputDialog('Realestate Creator', {
-        {type = 'input', label = locale('alert.property_name'), description = locale('alert.property_name_description'), required = true, min = 4, max = 32, icon = 'home'},
-        {type = 'number', label = locale('alert.price'), description = locale('alert.price_description'), icon = 'dollar-sign', required = true, min = 1},
-        {type = 'number', label = locale('alert.rent_interval'), description = locale('alert.rent_interval_description'), icon = 'clock', min = 1, max = 24, step = 1},
-        {type = 'checkbox', label = locale('alert.add_garage')},
+function SendRealtorData()
+    playerCoords = GetEntityCoords(cache.ped)
+    SendUI('realtor:init', {
+        interiors = buildInteriorList(),
+        buildings = buildingList(),
+        properties = RealtorProperties(),
     })
-    if not input then return end
+end
 
-    local garageData = nil
-    
-    if input[4] then
-        addGaragePoint()
-        if garageCoords then
-            garageData = vec4(garageCoords.x, garageCoords.y, garageCoords.z + 1.0, garageHeading)
-        end
-    end
+RegisterNUICallback('realtor:preview', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
 
-    TriggerServerEvent('qbx_properties:server:createProperty', args[scrollIndex], input, playerCoords, garageData)
+    local interior = tonumber(data.interior) or data.interior
+    if not GetInteriorPoints(interior) then return end
+
+    CloseUI()
+    StartShellPreview(interior)
 end)
 
-RegisterNetEvent('qbx_properties:client:createProperty', function()
-    playerCoords = GetEntityCoords(cache.ped)
-    garageCoords = nil
-    isPreviewing = true
-    previewProperty(values[1])
-    lib.showMenu('qbx_properties_realtor_menu')
-    while isPreviewing do
-        local players = GetActivePlayers()
-        for i = 1, #players do
-            if players[i] ~= cache.playerId then
-                NetworkConcealPlayer(players[i], true, false)
+RegisterNUICallback('realtor:getUnits', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+    SendUI('realtor:units', lib.callback.await('qbx_properties:callback:getBuildingUnits', false, data.building, data.floor))
+end)
+
+RegisterNUICallback('realtor:repossess', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    TriggerServerEvent('qbx_properties:server:repossess', data.propertyId)
+    Wait(400)
+    SendUI('realtor:properties', RealtorProperties())
+end)
+
+RegisterNUICallback('realtor:releaseUnit', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    TriggerServerEvent('qbx_properties:server:releaseUnit', data.propertyId)
+    Wait(400)
+    SendUI('realtor:units', lib.callback.await('qbx_properties:callback:getBuildingUnits', false, data.building, data.floor))
+end)
+
+RegisterNUICallback('realtor:createUnits', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    TriggerServerEvent('qbx_properties:server:createUnits', data.building, data.floor, data.price, data.rentInterval)
+    Wait(500)
+    SendUI('realtor:units', lib.callback.await('qbx_properties:callback:getBuildingUnits', false, data.building, data.floor))
+    SendUI('realtor:properties', RealtorProperties())
+end)
+
+RegisterNUICallback('realtor:createListing', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local created = lib.callback.await('qbx_properties:callback:createListing', false, data)
+    lib.notify({
+        type = created and 'success' or 'error',
+        description = created and 'Listing created.' or 'Could not create the listing.',
+    })
+
+    SendUI('realtor:properties', RealtorProperties())
+    SendUI('market:listings', lib.callback.await('qbx_properties:callback:getListings', false))
+end)
+
+RegisterNUICallback('realtor:placeShell', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local propertyId = tonumber(data.propertyId)
+    local model = tonumber(data.interior) or data.interior
+    if not propertyId or not model then return end
+
+    CloseUI()
+    RemoveShellZone(propertyId)
+
+    local coords = PlaceShell(model, GetEntityCoords(cache.ped))
+    if not coords then return end
+
+    if lib.callback.await('qbx_properties:callback:setShellCoords', false, propertyId, coords) then
+        lib.notify({ type = 'success', description = 'Shell placed.' })
+    else
+        lib.notify({ type = 'error', description = 'Could not save the shell position.' })
+    end
+end)
+
+RegisterNUICallback('realtor:details', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+    SendUI('realtor:detailData', lib.callback.await('qbx_properties:callback:getPropertyDetails', false, data.propertyId))
+end)
+
+RegisterNUICallback('realtor:updateProperty', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local ok = lib.callback.await('qbx_properties:callback:updateProperty', false, data.propertyId, data)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Property updated.' or 'Could not update the property.',
+    })
+
+    SendUI('realtor:properties', RealtorProperties())
+    SendUI('realtor:detailData', lib.callback.await('qbx_properties:callback:getPropertyDetails', false, data.propertyId))
+end)
+
+RegisterNUICallback('realtor:editGarage', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    CloseUI()
+    local coords = PlaceVehicleOnGround('sultanrs', 'Aim where cars should exit, scroll to rotate')
+
+    if coords then
+        local ok = lib.callback.await('qbx_properties:callback:updatePropertyZones', false, data.propertyId, {
+            garage = { x = coords.x, y = coords.y, z = coords.z, w = coords.w },
+        })
+        lib.notify({
+            type = ok and 'success' or 'error',
+            description = ok and 'Garage updated.' or 'Could not update the garage.',
+        })
+    end
+
+    OpenUI('housing')
+    SendUI('housing:tab', 'manage')
+end)
+
+RegisterNUICallback('realtor:editGarden', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local sharedConfig = require 'config.shared'
+
+    CloseUI()
+    local points, height = DrawZoneWithLaser('Aim and click to add a corner. Scroll to set the height', sharedConfig.gardens.maxPoints)
+
+    if points then
+        local zone = { points = {}, height = height }
+        for i = 1, #points do
+            zone.points[i] = { x = points[i].x, y = points[i].y, z = points[i].z }
+        end
+
+        local ok = lib.callback.await('qbx_properties:callback:updatePropertyZones', false, data.propertyId, { garden = zone })
+        lib.notify({
+            type = ok and 'success' or 'error',
+            description = ok and 'Garden updated.' or 'Could not update the garden.',
+        })
+    end
+
+    OpenUI('housing')
+    SendUI('housing:tab', 'manage')
+end)
+
+local function framePhoto()
+    SendUI('placement:show', { prompt = 'Frame the shot', photo = true })
+
+    local snap, cancelled = false, false
+
+    while not snap and not cancelled do
+        Wait(0)
+
+        HideHudAndRadarThisFrame()
+        DisableControlAction(0, 200, true)
+        DisableControlAction(0, 199, true)
+
+        if IsControlJustReleased(0, 38) then snap = true end
+        if IsControlJustReleased(0, 202) or IsDisabledControlJustReleased(0, 200) then cancelled = true end
+    end
+
+    return snap
+end
+
+RegisterNUICallback('realtor:addImage', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    CloseUI()
+
+    if not framePhoto() then
+        SendUI('placement:hide')
+        OpenUI('housing')
+        SendUI('housing:tab', 'manage')
+        return
+    end
+
+    SendUI('placement:hide')
+
+    local hiding = true
+    CreateThread(function()
+        while hiding do
+            HideHudAndRadarThisFrame()
+            Wait(0)
+        end
+    end)
+
+    local ok, err = lib.callback.await('qbx_properties:callback:addPropertyImage', false, data.propertyId)
+    hiding = false
+
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Photo added.' or (err or 'Could not take the photo.'),
+    })
+
+    OpenUI('housing')
+    SendUI('housing:tab', 'manage')
+    SendUI('realtor:detailData', lib.callback.await('qbx_properties:callback:getPropertyDetails', false, data.propertyId))
+end)
+
+RegisterNUICallback('realtor:removeImage', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    lib.callback.await('qbx_properties:callback:removePropertyImage', false, data.propertyId, data.index)
+    SendUI('realtor:detailData', lib.callback.await('qbx_properties:callback:getPropertyDetails', false, data.propertyId))
+end)
+
+RegisterNUICallback('realtor:enterProperty', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    if CurrentPropertyId == data.propertyId then
+        lib.notify({ type = 'inform', description = 'You are already inside this property.' })
+        return
+    end
+
+    CloseUI()
+    DoScreenFadeOut(500)
+    while not IsScreenFadedOut() do Wait(0) end
+    TriggerServerEvent('qbx_properties:server:enterProperty', { id = data.propertyId, remote = true })
+
+    SetTimeout(6000, function()
+        if IsScreenFadedOut() then
+            DoScreenFadeIn(500)
+            lib.notify({ type = 'error', description = 'Could not enter the property.' })
+        end
+    end)
+end)
+
+RegisterNUICallback('realtor:recaptureInterior', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    CloseUI()
+    SendUI('placement:show', { prompt = 'Walk inside the property, then press E to capture the spawn point', capture = true })
+
+    local captured, cancelled = nil, false
+
+    while not captured and not cancelled do
+        Wait(0)
+
+        DisableControlAction(0, 200, true)
+        DisableControlAction(0, 199, true)
+
+        if IsControlJustReleased(0, 38) then
+            if GetInteriorFromEntity(cache.ped) == 0 then
+                lib.notify({ type = 'error', description = 'Stand inside the MLO first.' })
+            else
+                captured = GetEntityCoords(cache.ped)
             end
         end
-        Wait(3000)
+
+        if IsControlJustReleased(0, 202) or IsDisabledControlJustReleased(0, 200) then cancelled = true end
     end
+
+    SendUI('placement:hide')
+
+    if captured then
+        local ok = lib.callback.await('qbx_properties:callback:recaptureInterior', false, data.propertyId, {
+            x = captured.x, y = captured.y, z = captured.z,
+        })
+        lib.notify({
+            type = ok and 'success' or 'error',
+            description = ok and 'Interior point updated.' or 'Could not update the interior point.',
+        })
+    end
+
+    OpenUI('housing')
+    SendUI('housing:tab', 'manage')
+    SendUI('realtor:detailData', lib.callback.await('qbx_properties:callback:getPropertyDetails', false, data.propertyId))
+end)
+
+RegisterNUICallback('realtor:addDoor', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    CloseUI()
+
+    local double = data.double == true
+    local leaves = {}
+    local count = double and 2 or 1
+
+    for i = 1, count do
+        local prompt = double
+            and string.format('Aim at door leaf %d of 2 and click', i)
+            or 'Aim at the door and click'
+
+        local coords, entity = PickWithLaser(prompt)
+        if not coords or not entity or entity == 0 then break end
+
+        leaves[#leaves + 1] = {
+            model = GetEntityModel(entity),
+            coords = { x = coords.x, y = coords.y, z = coords.z },
+            heading = GetEntityHeading(entity),
+        }
+    end
+
+    if #leaves == count then
+        local ok = lib.callback.await('qbx_properties:callback:addPropertyDoor', false, data.propertyId, {
+            double = double,
+            leaves = leaves,
+        })
+        lib.notify({
+            type = ok and 'success' or 'error',
+            description = ok and 'Door added and locked.' or 'Could not add the door.',
+        })
+    end
+
+    OpenUI('housing')
+    SendUI('housing:tab', 'manage')
 end)

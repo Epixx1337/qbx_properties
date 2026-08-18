@@ -1,6 +1,18 @@
-local sharedConfig = require 'config.shared'
 local clientConfig = require 'config.client'
+local sharedConfig = require 'config.shared'
 local interiorShell
+CurrentPropertyId = nil
+PropertyAccess = { door = false, stash = false, furniture = false, garage = false }
+
+---@param flags table?
+function SetPropertyAccess(flags)
+    PropertyAccess = flags or { door = false, stash = false, furniture = false, garage = false }
+end
+
+RegisterNetEvent('qbx_properties:client:accessFlags', function(flags)
+    SetPropertyAccess(flags)
+end)
+
 DecorationObjects = {}
 local properties = {}
 local insideProperty = false
@@ -174,6 +186,7 @@ end
 local function checkInteractions()
     local interactOptions = {
         ['stash'] = function(coords)
+            if not PropertyAccess.stash and not (IsPropertyBreached and IsPropertyBreached(CurrentPropertyId)) then return end
             qbx.drawText3d({ coords = coords, text = locale('drawtext.stash') })
             if IsControlJustPressed(0, 38) then
                 TriggerServerEvent('qbx_properties:server:openStash')
@@ -208,6 +221,7 @@ local function checkInteractions()
             end
         end,
         ['logout'] = function(coords)
+            if not sharedConfig.logoutEnabled then return end
             qbx.drawText3d({ coords = coords, text = locale('drawtext.logout') })
             if IsControlJustPressed(0, 38) then
                 DoScreenFadeOut(1000)
@@ -244,60 +258,97 @@ local function hideExterior(name)
     end)
 end
 
-RegisterNetEvent('qbx_properties:client:updateInteractions', function(interactionsData, interiorString, isRental)
+RegisterNetEvent('qbx_properties:client:refreshInteractions', function(interactionsData)
+    if not insideProperty then return end
+    interactions = interactionsData
+end)
+
+RegisterNetEvent('qbx_properties:client:updateInteractions', function(interactionsData, interiorString, isRental, propertyId)
+    if propertyId then CurrentPropertyId = propertyId end
+
+    if IsRealtor(QBX.PlayerData.job) and CurrentPropertyId then
+        AddPropertyRadial('qbx_properties_points', {
+            label = 'Interaction points',
+            icon = 'location-dot',
+            onSelect = function() StartPropertyPointEditor() end
+        })
+    end
+
     DoScreenFadeIn(1000)
     interactions = interactionsData
     insideProperty = true
     isPropertyRental = isRental
     checkInteractions()
     hideExterior(interiorString)
+
+    if lib.callback.await('qbx_properties:callback:checkAccess', false) then
+        AddDecorateRadial()
+    end
 end)
 
 RegisterNetEvent('qbx_properties:client:createInterior', function(interiorHash, interiorCoords)
-    lib.requestModel(interiorHash, 2000)
+    lib.requestModel(interiorHash, 60000)
     interiorShell = CreateObjectNoOffset(interiorHash, interiorCoords.x, interiorCoords.y, interiorCoords.z, false, false, false)
     FreezeEntityPosition(interiorShell, true)
     SetModelAsNoLongerNeeded(interiorHash)
 end)
 
+RegisterNetEvent('qbx_properties:client:finishSpawn', function()
+    DoScreenFadeIn(1000)
+    FreezeEntityPosition(cache.ped, false)
+end)
+
 RegisterNetEvent('qbx_properties:client:loadDecorations', function(decorations)
     for i = 1, #decorations do
-        local decoration = decorations[i]
-        lib.requestModel(decoration.model, 5000)
-        DecorationObjects[decoration.id] = CreateObjectNoOffset(decoration.model, decoration.coords.x, decoration.coords.y, decoration.coords.z, false, false, false)
-        SetEntityCollision(DecorationObjects[decoration.id], true, true)
-        FreezeEntityPosition(DecorationObjects[decoration.id], true)
-        SetEntityRotation(DecorationObjects[decoration.id], decoration.rotation.x, decoration.rotation.y, decoration.rotation.z, 2, false)
-        SetModelAsNoLongerNeeded(decoration.model)
+        SpawnDecoration(decorations[i])
     end
 end)
 
-RegisterNetEvent('qbx_properties:client:addDecoration', function(id, hash, coords, rotation)
-    lib.requestModel(hash, 5000)
-    DecorationObjects[id] = CreateObjectNoOffset(hash, coords.x, coords.y, coords.z, false, false, false)
-    FreezeEntityPosition(DecorationObjects[id], true)
-    SetEntityRotation(DecorationObjects[id], rotation.x, rotation.y, rotation.z, 2, false)
-    SetModelAsNoLongerNeeded(hash)
+RegisterNetEvent('qbx_properties:client:addDecoration', function(id, hash, coords, rotation, interaction, stashIndex, tint)
+    SpawnDecoration({
+        id = id,
+        model = hash,
+        coords = coords,
+        rotation = rotation,
+        interaction = interaction,
+        stashIndex = stashIndex,
+        tint = tint,
+    })
 end)
 
 RegisterNetEvent('qbx_properties:client:removeDecoration', function(objectId)
-    if DoesEntityExist(DecorationObjects[objectId]) then DeleteEntity(DecorationObjects[objectId]) end
-    DecorationObjects[objectId] = nil
+    DespawnDecoration(objectId)
 end)
 
 RegisterNetEvent('qbx_properties:client:unloadProperty', function()
+    RemovePropertyRadial('qbx_properties_points')
+
     DoScreenFadeIn(1000)
     insideProperty = false
     if DoesEntityExist(interiorShell) then DeleteEntity(interiorShell) end
-    for _, v in pairs(DecorationObjects) do
-        if DoesEntityExist(v) then DeleteEntity(v) end
-    end
+    UnloadRoomFurniture()
     interiorShell = nil
-    DecorationObjects = {}
+    RemoveDecorateRadial()
 end)
 
 local function singlePropertyMenu(property, noBackMenu)
     local options = {}
+
+    if IsRealtor(QBX.PlayerData.job) then
+        options[#options + 1] = {
+            title = 'Enter (realtor)',
+            description = 'Inspect the property and adjust its interaction points',
+            icon = 'briefcase',
+            arrow = true,
+            onSelect = function()
+                DoScreenFadeOut(1000)
+                while not IsScreenFadedOut() do Wait(0) end
+            end,
+            serverEvent = 'qbx_properties:server:enterProperty',
+            args = { id = property.id }
+        }
+    end
+
     if QBX.PlayerData.citizenid == property.owner or lib.table.contains(json.decode(property.keyholders), QBX.PlayerData.citizenid) then
         options[#options + 1] = {
             title = locale('menu.enter'),
@@ -417,8 +468,9 @@ function PreparePropertyMenu(propertyCoords)
 end
 
 CreateThread(function()
-    for i = 1, #sharedConfig.apartmentOptions do
-        local data = sharedConfig.apartmentOptions[i]
+    local apartmentOptions = GetApartmentOptions()
+    for i = 1, #apartmentOptions do
+        local data = apartmentOptions[i]
 
         if not blips[data.enter] then
             blips[data.enter] = createBlip(data.enter, data.label)
@@ -440,6 +492,45 @@ CreateThread(function()
         end
         Wait(sleep)
     end
+end)
+
+local ownedBlips = {}
+
+local function refreshOwnedBlips()
+    for i = 1, #ownedBlips do
+        RemoveBlip(ownedBlips[i])
+    end
+    table.wipe(ownedBlips)
+
+    local owned = lib.callback.await('qbx_properties:callback:getMyBlips', false) or {}
+
+    for i = 1, #owned do
+        local entry = owned[i]
+        ownedBlips[#ownedBlips + 1] = createBlip(entry.coords, entry.name)
+
+        if entry.garage then
+            local blip = AddBlipForCoord(entry.garage.x, entry.garage.y, entry.garage.z)
+            SetBlipSprite(blip, 357)
+            SetBlipAsShortRange(blip, true)
+            SetBlipScale(blip, 0.7)
+            SetBlipColour(blip, 3)
+            BeginTextCommandSetBlipName('STRING')
+            AddTextComponentString(entry.name .. ' Garage')
+            EndTextCommandSetBlipName(blip)
+            ownedBlips[#ownedBlips + 1] = blip
+        end
+    end
+end
+
+RegisterNetEvent('qbx_properties:client:refreshBlips', refreshOwnedBlips)
+
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
+    SetTimeout(3000, refreshOwnedBlips)
+end)
+
+CreateThread(function()
+    Wait(4000)
+    if LocalPlayer.state.isLoggedIn then refreshOwnedBlips() end
 end)
 
 RegisterNetEvent('qbx_properties:client:concealPlayers', function(playerIds)

@@ -1,7 +1,10 @@
 IsDecorating = false
+local sharedConfig = require 'config.shared'
+CurrentPropertyName = ''
 local config = require 'config.client'
 local camera
 local previewObject
+local pendingObject
 local cursorMode = false
 local currentlySelected
 local IsDisabledControlPressed = IsDisabledControlPressed
@@ -11,69 +14,453 @@ local GetCamCoord = GetCamCoord
 local GetCamRot = GetCamRot
 local GetHashKey = GetHashKey
 
-local function freeCam()
-    local cameraPosition = GetGameplayCamCoord()
-    local cameraRotation = GetGameplayCamRot(2)
-    local cameraFov = GetGameplayCamFov()
-    camera = CreateCameraWithParams('DEFAULT_SCRIPTED_CAMERA', cameraPosition.x, cameraPosition.y, cameraPosition.z, cameraRotation.x, cameraRotation.y, cameraRotation.z, cameraFov, true, 2)
-    CreateThread(function()
-        local multiplier = 0.1
-        while IsDecorating do
-            cameraPosition = GetCamCoord(camera)
-            cameraRotation = GetCamRot(camera, 2)
-            local forwardX = -math.sin(math.rad(cameraRotation.z))
-            local forwardY = math.cos(math.rad(cameraRotation.z))
-            local rightX = math.cos(math.rad(cameraRotation.z))
-            local rightY = math.sin(math.rad(cameraRotation.z))
-            local upwardZ = math.sin(math.rad(cameraRotation.x))
-            if IsDisabledControlPressed(0, 241) then
-                multiplier = multiplier + 0.01
-            end
-            if IsDisabledControlPressed(0, 242) then
-                multiplier = multiplier - 0.01
-            end
-            if multiplier < 0.01 then multiplier = 0.001 end
-            if multiplier > 1.0 then multiplier = 1.0 end
-            if IsDisabledControlPressed(0, 32) then
-                cameraPosition = cameraPosition + vector3(forwardX * multiplier, forwardY * multiplier, upwardZ * multiplier)
-            end
-            if IsDisabledControlPressed(0, 33) then
-                cameraPosition = cameraPosition - vector3(forwardX * multiplier, forwardY * multiplier, upwardZ * multiplier)
-            end
-            if IsDisabledControlPressed(0, 34) then
-                cameraPosition = cameraPosition - vector3(rightX * multiplier, rightY * multiplier, 0)
-            end
-            if IsDisabledControlPressed(0, 35) then
-                cameraPosition = cameraPosition + vector3(rightX * multiplier, rightY * multiplier, 0)
-            end
-            if IsDisabledControlPressed(0, 36) then
-                cameraPosition = cameraPosition - vector3(0, 0, multiplier)
-            end
-            if IsDisabledControlPressed(0, 203) then
-                cameraPosition = cameraPosition + vector3(0, 0, multiplier)
-            end
-            cameraRotation = cameraRotation - vector3(GetDisabledControlNormal(0, 272) * 5, 0, GetDisabledControlNormal(0, 270) * 5)
-            SetCamCoord(camera, cameraPosition.x, cameraPosition.y, cameraPosition.z)
-            SetCamRot(camera, math.min(math.max(cameraRotation.x, -89), 89), cameraRotation.y, cameraRotation.z, 2)
-            Wait(0)
-        end
-        DestroyCam(camera, false)
-    end)
-    SetPlayerControl(cache.playerId, not IsDecorating, 0)
-    RenderScriptCams(IsDecorating, true, 1000, true, true)
+local freecamMoving = false
+
+function IsFreecamActive()
+    return camera ~= nil
 end
 
-local function showText()
-    if cursorMode then
-        lib.showTextUI('BACKSPACE - Exit  \n LALT - Toggle Cursor Mode  \n T - Move Object  \n R - Rotate Object  \n G - Snap To Ground  \n L - Relative to World/Object  \n ENTER - Confirm Placement')
+function IsFreecamMoving()
+    return freecamMoving
+end
+
+function GetDecoratingCam()
+    if camera then
+        return GetCamCoord(camera), GetCamRot(camera, 2)
+    end
+    return GetGameplayCamCoord(), GetGameplayCamRot(2)
+end
+
+local function ensureFreecam()
+    if camera then return end
+
+    local cameraPosition = GetGameplayCamCoord()
+    local cameraRotation = GetGameplayCamRot(2)
+    camera = CreateCameraWithParams('DEFAULT_SCRIPTED_CAMERA', cameraPosition.x, cameraPosition.y, cameraPosition.z, cameraRotation.x, cameraRotation.y, cameraRotation.z, GetGameplayCamFov(), true, 2)
+    RenderScriptCams(true, true, 500, true, true)
+
+    CreateThread(function()
+        local multiplier = 0.1
+        while camera and IsDecorating do
+            if freecamMoving and not IsUIFocused() then
+                cameraPosition = GetCamCoord(camera)
+                cameraRotation = GetCamRot(camera, 2)
+                local forwardX = -math.sin(math.rad(cameraRotation.z))
+                local forwardY = math.cos(math.rad(cameraRotation.z))
+                local rightX = math.cos(math.rad(cameraRotation.z))
+                local rightY = math.sin(math.rad(cameraRotation.z))
+                local upwardZ = math.sin(math.rad(cameraRotation.x))
+                if IsDisabledControlPressed(0, 241) then multiplier = multiplier + 0.01 end
+                if IsDisabledControlPressed(0, 242) then multiplier = multiplier - 0.01 end
+                if multiplier < 0.01 then multiplier = 0.001 end
+                if multiplier > 1.0 then multiplier = 1.0 end
+                if IsDisabledControlPressed(0, 32) then
+                    cameraPosition = cameraPosition + vector3(forwardX * multiplier, forwardY * multiplier, upwardZ * multiplier)
+                end
+                if IsDisabledControlPressed(0, 33) then
+                    cameraPosition = cameraPosition - vector3(forwardX * multiplier, forwardY * multiplier, upwardZ * multiplier)
+                end
+                if IsDisabledControlPressed(0, 34) then
+                    cameraPosition = cameraPosition - vector3(rightX * multiplier, rightY * multiplier, 0)
+                end
+                if IsDisabledControlPressed(0, 35) then
+                    cameraPosition = cameraPosition + vector3(rightX * multiplier, rightY * multiplier, 0)
+                end
+                if IsDisabledControlPressed(0, 36) then
+                    cameraPosition = cameraPosition - vector3(0, 0, multiplier)
+                end
+                if IsDisabledControlPressed(0, 203) then
+                    cameraPosition = cameraPosition + vector3(0, 0, multiplier)
+                end
+                cameraRotation = cameraRotation - vector3(GetDisabledControlNormal(0, 272) * 5, 0, GetDisabledControlNormal(0, 270) * 5)
+
+                local anchor = GetEntityCoords(cache.ped)
+                local offset = cameraPosition - anchor
+                local range = sharedConfig.freecamRange
+                if #(offset) > range then
+                    cameraPosition = anchor + offset / #(offset) * range
+                end
+
+                SetCamCoord(camera, cameraPosition.x, cameraPosition.y, cameraPosition.z)
+                SetCamRot(camera, math.min(math.max(cameraRotation.x, -89), 89), cameraRotation.y, cameraRotation.z, 2)
+            end
+            Wait(0)
+        end
+    end)
+end
+
+local function destroyFreecam()
+    freecamMoving = false
+    if not camera then return end
+    RenderScriptCams(false, true, 500, true, true)
+    DestroyCam(camera, false)
+    camera = nil
+end
+
+function ToggleFreecam()
+    if not IsDecorating then return end
+
+    ensureFreecam()
+    freecamMoving = not freecamMoving
+    if freecamMoving then
+        SetCursorMode(false)
+        SetUIFocus(false)
     else
-        lib.showTextUI('BACKSPACE - Exit  \n SPACE - Up  \n LCTRL - Down  \n WHEELUP - Speedup  \n WHEELDOWN - Slowdown  \n E - Add Object  \n DEL - Delete Object  \n LALT - Toggle Cursor Mode')
+        SetCursorMode(previewObject ~= nil)
+        SetUIFocus(true, previewObject ~= nil)
+    end
+    PushDecoratingState()
+end
+
+local lastMatrix
+local furnitureLabels
+local currentTint = 0
+local lastTransformPush = 0
+
+---@param value boolean
+function SetCursorMode(value)
+    if cursorMode == value then return end
+    cursorMode = value
+
+    if value then
+        EnterCursorMode()
+    else
+        LeaveCursorMode()
     end
 end
 
-local function makeEntityMatrix(entity)
+function HasPreviewObject()
+    return previewObject ~= nil
+end
+
+function IsCursorMode()
+    return cursorMode
+end
+
+local function discardPending()
+    if pendingObject and DoesEntityExist(pendingObject) then
+        DeleteEntity(pendingObject)
+    end
+    pendingObject = nil
+end
+
+local function labelFor(model)
+    if not furnitureLabels then
+        furnitureLabels = {}
+        for _, category in pairs(config.furniture) do
+            for i = 1, #category do
+                furnitureLabels[category[i].object] = category[i].label
+            end
+        end
+    end
+    return furnitureLabels[model] or model
+end
+
+CreateThread(function()
+    Wait(2000)
+
+    local invalid = {}
+    for _, category in pairs(config.furniture) do
+        for i = 1, #category do
+            if not IsModelValid(GetHashKey(category[i].object)) then
+                invalid[#invalid + 1] = category[i].object
+            end
+        end
+    end
+
+    if #invalid > 0 then
+        lib.print.warn(('%d furniture model(s) do not exist and will be skipped: %s'):format(#invalid, table.concat(invalid, ', ')))
+    end
+end)
+
+function PushPlacedDecorations()
+    local placed = {}
+    for id, model in pairs(PlacedDecorations) do
+        placed[#placed + 1] = { id = id, model = model, label = labelFor(model) }
+    end
+    table.sort(placed, function(a, b) return a.label < b.label end)
+    SendUI('furniture:placed', placed)
+end
+
+local function currentObjectId()
+    if not previewObject or not DoesEntityExist(previewObject) then return end
+    for id, entity in pairs(DecorationObjects) do
+        if entity == previewObject then return id end
+    end
+end
+
+---@param id integer
+function SelectPlacedDecoration(id)
+    local entity = DecorationObjects[id]
+    if not IsDecorating or not entity or not DoesEntityExist(entity) then return end
+
+    discardPending()
+    previewObject = entity
+    lastMatrix = MakeGizmoMatrix(entity)
+    currentlySelected = nil
+    currentTint = DecorationTints[id] or 0
+    SetEntityDrawOutline(entity, true)
+    SetCursorMode(true)
+    SetUIFocus(true, true)
+    PushDecoratingState()
+end
+
+---@param id integer
+function ClonePlacedDecoration(id)
+    local entity = DecorationObjects[id]
+    if not IsDecorating or not entity or not DoesEntityExist(entity) then return end
+
+    local model = PlacedDecorations[id]
+    if not IsModelValid(GetHashKey(model)) then return end
+    local hash = lib.requestModel(model, 60000)
+    if not hash then return end
+
+    discardPending()
+
+    local coords = GetEntityCoords(entity)
+    local rotation = GetEntityRotation(entity, 2)
+
+    previewObject = CreateObjectNoOffset(hash, coords.x, coords.y, coords.z, false, false, false)
+    SetEntityRotation(previewObject, rotation.x, rotation.y, rotation.z, 2, false)
+    FreezeEntityPosition(previewObject, true)
+    SetEntityCollision(previewObject, false, false)
+    SetEntityDrawOutline(previewObject, true)
+    SetModelAsNoLongerNeeded(hash)
+
+    pendingObject = previewObject
+    lastMatrix = nil
+    currentlySelected = { object = model, label = labelFor(model) }
+    currentTint = DecorationTints[id] or 0
+    if currentTint > 0 then SetObjectTextureVariation(previewObject, currentTint) end
+    SetCursorMode(true)
+    SetUIFocus(true, true)
+    PushDecoratingState()
+end
+
+
+---@return number
+function DecorationAtCursor()
+    local _, _, endCoords = lib.raycast.fromCamera(1 + 16, 4, 30.0)
+    if not endCoords then return 0 end
+
+    local best, bestDist = 0, 1.2
+    for _, entity in pairs(DecorationObjects) do
+        if DoesEntityExist(entity) then
+            local dist = #(GetEntityCoords(entity) - endCoords)
+            if dist < bestDist then best, bestDist = entity, dist end
+        end
+    end
+
+    return best
+end
+
+function SnapToWall()
+    if not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local coords = GetEntityCoords(previewObject)
+    local forward = GetEntityForwardVector(previewObject)
+    local right = vec3(forward.y, -forward.x, 0.0)
+    local min, max = GetModelDimensions(GetEntityModel(previewObject))
+    local halfDepth = (max.y - min.y) / 2
+    local halfWidth = (max.x - min.x) / 2
+
+    local probes = {
+        { dir = forward, offset = halfDepth },
+        { dir = -forward, offset = halfDepth },
+        { dir = right, offset = halfWidth },
+        { dir = -right, offset = halfWidth },
+    }
+
+    local best
+    for i = 1, #probes do
+        local dir = probes[i].dir
+        local handle = StartExpensiveSynchronousShapeTestLosProbe(coords.x, coords.y, coords.z, coords.x + dir.x * 6.0, coords.y + dir.y * 6.0, coords.z + dir.z * 6.0, 1 + 16, previewObject, 4)
+        local _, hit, endCoords = GetShapeTestResult(handle)
+        if hit == 1 then
+            local dist = #(endCoords - coords)
+            if not best or dist < best.dist then
+                best = { dist = dist, dir = dir, offset = probes[i].offset, endCoords = endCoords }
+            end
+        end
+    end
+
+    if not best then
+        lib.notify({ type = 'error', description = 'No wall near this object.' })
+        return
+    end
+
+    SetEntityCoords(previewObject, best.endCoords.x - best.dir.x * best.offset, best.endCoords.y - best.dir.y * best.offset, coords.z, false, false, false, false)
+end
+
+function ConfirmDecoration()
+    if not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local objectId = currentObjectId()
+    local model = objectId and GetEntityArchetypeName(previewObject) or currentlySelected and currentlySelected.object
+    if not model then return end
+
+    local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:addGardenDecoration' or 'qbx_properties:server:addDecoration'
+    TriggerServerEvent(event, model, GetEntityCoords(previewObject), GetEntityRotation(previewObject, 2), objectId, currentTint > 0 and currentTint or nil)
+    DeleteEntity(previewObject)
+    pendingObject = nil
+    previewObject = nil
+    currentlySelected = nil
+    lastMatrix = nil
+    SetCursorMode(false)
+    SetUIFocus(true)
+    PushDecoratingState()
+end
+
+function RemoveSelectedDecoration()
+    local objectId = currentObjectId()
+    if not objectId then return end
+
+    local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:removeGardenDecoration' or 'qbx_properties:server:removeDecoration'
+    TriggerServerEvent(event, objectId)
+    discardPending()
+    previewObject = nil
+    currentlySelected = nil
+    lastMatrix = nil
+    PushDecoratingState()
+end
+
+function CancelDecoration()
+    if previewObject and previewObject ~= pendingObject and DoesEntityExist(previewObject) and lastMatrix then
+        ApplyGizmoMatrix(previewObject, lastMatrix)
+        local objectId = currentObjectId()
+        SetObjectTextureVariation(previewObject, objectId and DecorationTints[objectId] or 0)
+        if objectId then
+            TriggerServerEvent('qbx_properties:server:decorationMoving', objectId, GetEntityCoords(previewObject), GetEntityRotation(previewObject, 2))
+        end
+    end
+
+    discardPending()
+    previewObject = nil
+    currentlySelected = nil
+    lastMatrix = nil
+    SetCursorMode(false)
+    SetUIFocus(true)
+    PushDecoratingState()
+end
+
+local function snapAxis(value, step)
+    if step < 0.05 then return 0.0 end
+    return math.floor(value / step + 0.5) * step
+end
+
+function SnapToNeighbor()
+    if not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local specs = GetFurnitureSpecs()
+    local myModel = GetEntityModel(previewObject)
+    local myName = GetEntityArchetypeName(previewObject)
+    local mySpec = specs[myName] or {}
+    local myPos = GetEntityCoords(previewObject)
+
+    -- doors seat into the nearest arch and stay freely movable afterwards
+    local wantsArch = mySpec.type == 'door'
+
+    local best, bestDist, bestSame
+    for _, entity in pairs(DecorationObjects) do
+        if entity ~= previewObject and DoesEntityExist(entity) then
+            local theirName = GetEntityArchetypeName(entity)
+            local theirSpec = specs[theirName] or {}
+            local sameModel = GetEntityModel(entity) == myModel
+
+            local eligible
+            if wantsArch then
+                eligible = theirSpec.snapGroup == 'arch'
+            elseif mySpec.snapGroup then
+                eligible = sameModel or theirSpec.snapGroup ~= nil
+            else
+                eligible = sameModel
+            end
+
+            if eligible then
+                local dist = #(GetEntityCoords(entity) - myPos)
+                if dist < 8.0 and (not bestDist or dist < bestDist) then
+                    best, bestDist, bestSame = entity, dist, sameModel
+                end
+            end
+        end
+    end
+
+    if not best then
+        lib.notify({ type = 'error', description = 'No matching piece nearby to snap to.' })
+        return
+    end
+
+    local rotation = GetEntityRotation(best, 2)
+
+    if wantsArch then
+        local archPos = GetEntityCoords(best)
+        SetEntityCoordsNoOffset(previewObject, archPos.x, archPos.y, archPos.z, false, false, false)
+        SetEntityRotation(previewObject, rotation.x, rotation.y, rotation.z, 2, false)
+        return
+    end
+
+    local myMin, myMax = GetModelDimensions(myModel)
+    local mySize = myMax - myMin
+    local theirMin, theirMax = GetModelDimensions(GetEntityModel(best))
+    local theirSize = theirMax - theirMin
+    local off = GetOffsetFromEntityGivenWorldCoords(best, myPos.x, myPos.y, myPos.z)
+
+    local sx, sy, sz
+
+    if bestSame then
+        sx = snapAxis(off.x, theirSize.x)
+        sy = snapAxis(off.y, theirSize.y)
+        sz = snapAxis(off.z, theirSize.z)
+
+        if sx == 0.0 and sy == 0.0 and sz == 0.0 then
+            if math.abs(off.x) >= math.abs(off.y) then
+                sx = (off.x >= 0 and 1 or -1) * theirSize.x
+            else
+                sy = (off.y >= 0 and 1 or -1) * theirSize.y
+            end
+        end
+    else
+        -- different pieces butt edge to edge along the dominant axis
+        if math.abs(off.x) >= math.abs(off.y) then
+            sx = (off.x >= 0 and 1 or -1) * (theirSize.x + mySize.x) / 2
+            sy = snapAxis(off.y, theirSize.y)
+        else
+            sy = (off.y >= 0 and 1 or -1) * (theirSize.y + mySize.y) / 2
+            sx = snapAxis(off.x, theirSize.x)
+        end
+        sz = snapAxis(off.z, theirSize.z)
+    end
+
+    local target = GetOffsetFromEntityInWorldCoords(best, sx, sy, sz)
+    SetEntityCoordsNoOffset(previewObject, target.x, target.y, target.z, false, false, false)
+    SetEntityRotation(previewObject, rotation.x, rotation.y, rotation.z, 2, false)
+end
+
+function PushDecoratingState()
+    local objectId = currentObjectId()
+    local placing = previewObject ~= nil and DoesEntityExist(previewObject)
+
+    if not placing then SendUI('gizmo:sync', nil) end
+
+    SendUI('furniture:state', {
+        placing = placing,
+        worldInput = not IsUIFocused(),
+        freecam = freecamMoving,
+        mode = 'move',
+        selected = placing and {
+            label = currentlySelected and currentlySelected.label or 'Placed object',
+            objectId = objectId,
+        } or nil,
+        tint = currentTint,
+        tintSupported = placing and (GetFurnitureSpecs()[
+            objectId and GetEntityArchetypeName(previewObject) or currentlySelected and currentlySelected.object or 0
+        ] or {}).tint or false,
+    })
+end
+
+function MakeGizmoMatrix(entity)
     local f, r, u, a = GetEntityMatrix(entity)
-    local view = DataView.ArrayBuffer(60)
+    local view = DataView.ArrayBuffer(64)
     view:SetFloat32(0, r[1]):SetFloat32(4, r[2]):SetFloat32(8, r[3]):SetFloat32(12, 0)
         :SetFloat32(16, f[1]):SetFloat32(20, f[2]):SetFloat32(24, f[3]):SetFloat32(28, 0)
         :SetFloat32(32, u[1]):SetFloat32(36, u[2]):SetFloat32(40, u[3]):SetFloat32(44, 0)
@@ -81,118 +468,162 @@ local function makeEntityMatrix(entity)
     return view
 end
 
-local function applyEntityMatrix(entity, view)
+local function normalizeAxis(x, y, z)
+    local length = math.sqrt(x * x + y * y + z * z)
+    if length == 0 then return 0, 0, 0 end
+    return x / length, y / length, z / length
+end
+
+function ApplyGizmoMatrix(entity, view)
+    local fx, fy, fz = normalizeAxis(view:GetFloat32(16), view:GetFloat32(20), view:GetFloat32(24))
+    local rx, ry, rz = normalizeAxis(view:GetFloat32(0), view:GetFloat32(4), view:GetFloat32(8))
+    local ux, uy, uz = normalizeAxis(view:GetFloat32(32), view:GetFloat32(36), view:GetFloat32(40))
+
     SetEntityMatrix(entity,
-        view:GetFloat32(16), view:GetFloat32(20), view:GetFloat32(24),
-        view:GetFloat32(0), view:GetFloat32(4), view:GetFloat32(8),
-        view:GetFloat32(32), view:GetFloat32(36), view:GetFloat32(40),
+        fx, fy, fz,
+        rx, ry, rz,
+        ux, uy, uz,
         view:GetFloat32(48), view:GetFloat32(52), view:GetFloat32(56)
     )
 end
 
+local SCENARIO_PROPS = { `p_amb_clipboard_01`, `prop_notepad_01`, `prop_pencil_01` }
+
+local function clearScenarioProps()
+    local coords = GetEntityCoords(cache.ped)
+
+    for i = 1, #SCENARIO_PROPS do
+        local model = SCENARIO_PROPS[i]
+
+        for _ = 1, 4 do
+            local object = GetClosestObjectOfType(coords.x, coords.y, coords.z, 2.5, model, false, false, false)
+            if object == 0 or not DoesEntityExist(object) then break end
+
+            if not NetworkGetEntityIsNetworked(object) then
+                SetEntityAsMissionEntity(object, true, true)
+            end
+            DeleteObject(object)
+            if DoesEntityExist(object) then DeleteEntity(object) end
+        end
+
+        SetModelAsNoLongerNeeded(model)
+    end
+end
+
+local function setDecoratingPose(active)
+    if active then
+        FreezeEntityPosition(cache.ped, true)
+        SetEntityInvincible(cache.ped, true)
+        TaskStartScenarioInPlace(cache.ped, 'WORLD_HUMAN_CLIPBOARD', 0, true)
+    else
+        ClearPedTasksImmediately(cache.ped)
+        ClearPedSecondaryTask(cache.ped)
+        SetEntityInvincible(cache.ped, false)
+        FreezeEntityPosition(cache.ped, false)
+        clearScenarioProps()
+    end
+end
+
 function ToggleDecorating()
     IsDecorating = not IsDecorating
-    freeCam()
-    showText()
-    local last, lastMatrix
+    setDecoratingPose(IsDecorating)
+    SetPlayerControl(cache.playerId, not IsDecorating, 0)
+
+    -- emote keybinds (hands up etc.) fire through RegisterKeyMapping and ignore disabled controls
+    if GetResourceState('scully_emotemenu') == 'started' then
+        exports.scully_emotemenu:setLimitation(IsDecorating)
+    end
+
+    if IsDecorating then
+        OpenUI('furniture')
+        SendUI('furniture:init', {
+            categories = config.furniture,
+            propertyName = CurrentPropertyName or '',
+            palette = sharedConfig.wallColors.enabled and sharedConfig.wallColors.palette or {},
+        })
+        PushPlacedDecorations()
+        PushDecoratingState()
+    else
+        discardPending()
+        previewObject = nil
+        currentlySelected = nil
+        lastMatrix = nil
+        SetCursorMode(false)
+        destroyFreecam()
+        CloseUI()
+    end
+
     while IsDecorating do
         Wait(0)
-        if cursorMode then
-            local entity = SelectEntityAtCursor((1 << 5), true)
-            if entity ~= last then
-                if lib.table.contains(DecorationObjects, entity) then
-                    SetEntityDrawOutline(entity, true)
-                end
-                SetEntityDrawOutline(last, false)
-                last = entity
-            end
-            if IsDisabledControlJustReleased(0, 24) and previewObject ~= entity and entity ~= 0 then
-                if lastMatrix then
-                    applyEntityMatrix(previewObject, lastMatrix)
-                end
-                lastMatrix = makeEntityMatrix(entity)
-                previewObject = entity
-            end
-        end
+        while IsUIFocused() and IsDecorating do Wait(0) end
+        if not IsDecorating then break end
         if IsDisabledControlJustReleased(0, 202) then
-            if DoesEntityExist(previewObject) then
-                if lib.table.contains(DecorationObjects, previewObject) then
-                    applyEntityMatrix(previewObject, lastMatrix)
-                else
-                    DeleteEntity(previewObject)
+            if previewObject and previewObject ~= pendingObject and DoesEntityExist(previewObject) and lastMatrix then
+                ApplyGizmoMatrix(previewObject, lastMatrix)
+                local objectId = currentObjectId()
+                if objectId then
+                    TriggerServerEvent('qbx_properties:server:decorationMoving', objectId, GetEntityCoords(previewObject), GetEntityRotation(previewObject, 2))
                 end
             end
-            SetEntityDrawOutline(last, false)
             ToggleDecorating()
         end
         if IsDisabledControlJustReleased(0, 38) then
-            lib.showContext('qbx_properties_decoratingMenu')
+            SetUIFocus(true)
+            PushDecoratingState()
         end
-        if IsDisabledControlJustReleased(0, 19) then
-            cursorMode = not cursorMode
-            showText()
-            if cursorMode then
-                EnterCursorMode()
-            else
-                SetEntityDrawOutline(last, false)
-                LeaveCursorMode()
-            end
+
+        if IsDisabledControlJustReleased(0, 23) then
+            ToggleFreecam()
         end
-        if IsDisabledControlJustReleased(0, 214) and DoesEntityExist(previewObject) and lib.table.contains(DecorationObjects, previewObject) then
-            local alert = lib.alertDialog({
-                header = 'Confirm Deletion',
-                content = 'Are you sure that you want to remove this object',
-                centered = true,
-                cancel = true
-            })
-            if alert == 'confirm' then
-                local objectId = false
-                if lib.table.contains(DecorationObjects, previewObject) then
-                    for k, v in pairs(DecorationObjects) do
-                        if v == previewObject then
-                            objectId = k
-                            break
-                        end
-                    end
-                end
-                TriggerServerEvent('qbx_properties:server:removeDecoration', objectId)
-            end
+        if IsDisabledControlJustReleased(0, 214) then
+            RemoveSelectedDecoration()
         end
-        if IsDisabledControlJustReleased(0, 47) and DoesEntityExist(previewObject) then
+        if IsDisabledControlJustReleased(0, 47) and previewObject and DoesEntityExist(previewObject) then
             PlaceObjectOnGroundProperly(previewObject)
         end
-        if IsDisabledControlJustReleased(0, 191) and DoesEntityExist(previewObject) then
-            local objectId = false
-            if lib.table.contains(DecorationObjects, previewObject) then
-                for k, v in pairs(DecorationObjects) do
-                    if v == previewObject then
-                        objectId = k
-                        break
-                    end
+        if IsDisabledControlJustReleased(0, 191) then
+            ConfirmDecoration()
+        end
+        if previewObject and DoesEntityExist(previewObject) then
+            if GetGameTimer() - lastTransformPush > 150 then
+                lastTransformPush = GetGameTimer()
+                local pos = GetEntityCoords(previewObject)
+                local rot = GetEntityRotation(previewObject, 2)
+                SendUI('furniture:transform', { x = pos.x, y = pos.y, z = pos.z, rx = rot.x, ry = rot.y, rz = rot.z })
+
+                local objectId = currentObjectId()
+                if objectId then
+                    TriggerServerEvent('qbx_properties:server:decorationMoving', objectId, pos, rot)
                 end
             end
-            local alert = lib.alertDialog({
-                header = 'Confirm Placement',
-                content = string.format('Are you sure that you want to place %s here?', objectId and GetEntityArchetypeName(previewObject) or currentlySelected.label),
-                centered = true,
-                cancel = true
-            })
-            if alert == 'confirm' then
-                TriggerServerEvent('qbx_properties:server:addDecoration', objectId and GetEntityArchetypeName(previewObject) or currentlySelected.object, GetEntityCoords(previewObject), GetEntityRotation(previewObject), objectId)
-                DeleteEntity(previewObject)
-            end
-        end
-        if DoesEntityExist(previewObject) then
-            local matrixBuffer = makeEntityMatrix(previewObject)
-            local changed = Citizen.InvokeNative(0xEB2EDCA2, matrixBuffer:Buffer(), 'Editor1', Citizen.ReturnResultAnyway())
-            if changed then
-                applyEntityMatrix(previewObject, matrixBuffer)
+
+            DisableControlAction(0, 24, true)
+            DisableControlAction(0, 25, true)
+            DisableControlAction(0, 140, true)
+            DisableControlAction(0, 141, true)
+            DisableControlAction(0, 142, true)
+            DisableControlAction(0, 74, true) -- H stays with the NUI wall snap
+            DisablePlayerFiring(cache.playerId, true)
+
+            if sharedConfig.nuiGizmo then
+                local pos = GetEntityCoords(previewObject)
+                local rot = GetEntityRotation(previewObject, 2)
+                local camRot = GetFinalRenderedCamRot(2)
+                local camPos = GetFinalRenderedCamCoord()
+
+                SendUI('gizmo:sync', {
+                    cam = { x = camPos.x, y = camPos.y, z = camPos.z, rx = camRot.x, rz = camRot.z, fov = GetFinalRenderedCamFov() },
+                    obj = { x = pos.x, y = pos.y, z = pos.z, rx = rot.x, ry = rot.y, rz = rot.z },
+                })
+            else
+                local matrixBuffer = MakeGizmoMatrix(previewObject)
+                local changed = Citizen.InvokeNative(0xEB2EDCA2, matrixBuffer:Buffer(), 'Editor1', Citizen.ReturnResultAnyway())
+                if changed then
+                    ApplyGizmoMatrix(previewObject, matrixBuffer)
+                end
             end
         end
     end
-    lib.hideTextUI()
-    if cursorMode then LeaveCursorMode() end
-    cursorMode = false
 end
 
 RegisterKeyMapping('+gizmoTranslation', locale('keyMappings.gizmo_translation'), 'keyboard', 'T')
@@ -200,97 +631,243 @@ RegisterKeyMapping('+gizmoRotation', locale('keyMappings.gizmo_rotation'), 'keyb
 RegisterKeyMapping("+gizmoSelect", locale('keyMappings.gizmo_select'), "MOUSE_BUTTON", "MOUSE_LEFT")
 RegisterKeyMapping("+gizmoLocal", locale('keyMappings.gizmo_local'), "keyboard", "L")
 
-local decoratingOptions = {}
-for k, v in pairs(config.furniture) do
-    local menuId = string.format('qbx_properties_decoratingMenu_%s', k)
-    decoratingOptions[#decoratingOptions + 1] = {
-        title = k,
-        menu = menuId
-    }
+function StartDecorating()
+    if IsDecorating then return end
 
-    local furnitureOptions = {}
-    for i = 1, #v do
-        local furniture = v[i]
-        furnitureOptions[#furnitureOptions + 1] = {
-            title = furniture.label,
-            onSelect = function(args)
-                currentlySelected = args
-                if DoesEntityExist(previewObject) then
-                    DeleteEntity(previewObject)
-                end
-                local modelHash = GetHashKey(args.object)
-                lib.requestModel(modelHash, 5000)
-                local camCoords = GetCamCoord(camera)
-                local camRotation = GetCamRot(camera, 2)
-                local forwardCoords = camCoords + vector3(-math.sin(math.rad(camRotation.z)), math.cos(math.rad(camRotation.z)), math.sin(math.rad(camRotation.x)) * 1.2) * 2
-                previewObject = CreateObjectNoOffset(modelHash, forwardCoords.x, forwardCoords.y, forwardCoords.z, false, false, false)
-                SetModelAsNoLongerNeeded(modelHash)
-                FreezeEntityPosition(previewObject, true)
-                SetEntityCollision(previewObject, false, false)
-                SetEntityDrawOutline(previewObject, true)
-            end,
-            image = string.format('nui://qbx_properties/screenshots/%s.webp', furniture.object),
-            args = {
-                object = furniture.object,
-                label = furniture.label
-            }
-        }
+    if ResolveCurrentUnit then
+        local buildingKey, floor, room = ResolveCurrentUnit()
+        if buildingKey and floor and room then
+            if not lib.callback.await('qbx_properties:callback:canDecorateUnit', false, buildingKey, floor, room) then
+                lib.notify({ type = 'error', description = 'You do not hold the keys to this unit.' })
+                return
+            end
+
+            CurrentPropertyName = GetUnitName(buildingKey, floor, room) or ''
+            ToggleDecorating()
+            return
+        end
     end
-    lib.registerContext({
-        id = menuId,
-        title = k,
-        menu = 'qbx_properties_decoratingMenu',
-        options = furnitureOptions
-    })
+
+    if CurrentGardenId and not CurrentPropertyId then
+        if not lib.callback.await('qbx_properties:callback:canDecorateGarden', false, CurrentGardenId) then
+            lib.notify({ type = 'error', description = 'You do not own this property.' })
+            return
+        end
+
+        ToggleDecorating()
+        return
+    end
+
+    if not lib.callback.await('qbx_properties:callback:checkAccess', false) then
+        lib.notify({ type = 'error', description = 'You do not own this property.' })
+        return
+    end
+
+    ToggleDecorating()
 end
 
-lib.registerContext({
-    id = 'qbx_properties_decoratingMenu',
-    title = locale('menu.decorating_categories'),
-    options = decoratingOptions
-})
+RegisterNetEvent('qbx_properties:client:startDecorating', StartDecorating)
 
--- this command should not be used in production. Dev command only to create images of the objects put into the Furniture table.
--- RegisterCommand('screenshotfurniture', function()
---     local modelHash = GetHashKey('prop_ld_greenscreen_01')
---     lib.requestModel(modelHash, 5000)
---     local greenScreen = CreateObject(modelHash, -1894.99, -3357.08, 145.35, false, false, false)
---     SetModelAsNoLongerNeeded(modelHash)
---     FreezeEntityPosition(greenScreen, true)
---     CreateThread(function()
---         while DoesEntityExist(greenScreen) do
---             local forward, right, upVector, position = GetEntityMatrix(greenScreen)
---             SetEntityMatrix(greenScreen, forward.x, 20.0, forward.z, 20.0, right.y, right.z, upVector.x, upVector.y, 20.0, position.x, position.y, position.z)
---             Wait(0)
---         end
---     end)
---     DisableIdleCamera(true)
---     local cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
---     RenderScriptCams(true, false, 0, false, false)
---     for _, v in pairs(config.furniture) do
---         for i = 1, #v do
---             modelHash = GetHashKey(v[i].object)
---             lib.requestModel(modelHash, 5000)
---             local object = CreateObjectNoOffset(modelHash, -1899.83, -3340.52, 150.24, false, false, false)
---             SetModelAsNoLongerNeeded(modelHash)
---             FreezeEntityPosition(object, true)
---             local minDimension, maxDimension = GetModelDimensions(modelHash)
---             local modelSize = maxDimension - minDimension
---             local fov = math.min(math.max(modelSize.x, modelSize.y) / 0.35 * 10, 60)
---             local objectCoords = GetEntityCoords(object)
---             local objectForward = -GetEntityForwardVector(object) * 2
---             local center = vector3(objectCoords.x + (minDimension.x + maxDimension.x) / 2, objectCoords.y + (minDimension.y + maxDimension.y) / 2, objectCoords.z + (minDimension.z + maxDimension.z) / 2)
---             local cameraPosition = center + objectForward * 2 + vector3(1.5, -1, 1.5 * modelSize.z)
---             SetCamFov(cam, fov)
---             SetCamCoord(cam, cameraPosition.x, cameraPosition.y, cameraPosition.z)
---             PointCamAtCoord(cam, center.x, center.y, center.z)
---             TriggerServerEvent('screenshotFurniture', v[i].object)
---             Wait(1000)
---             DeleteEntity(object)
---         end
---     end
---     DestroyCam(cam, false)
---     RenderScriptCams(false, false, 0, false, false)
---     DisableIdleCamera(false)
---     DeleteEntity(greenScreen)
--- end)
+RegisterNUICallback('furniture:place', function(data, cb)
+    cb(1)
+    if not IsDecorating or type(data) ~= 'table' or type(data.object) ~= 'string' then return end
+
+    currentlySelected = { object = data.object, label = data.label }
+
+    if previewObject and DoesEntityExist(previewObject) and not currentObjectId() then
+        DeleteEntity(previewObject)
+    end
+
+    local modelHash = GetHashKey(data.object)
+    if not IsModelValid(modelHash) or not lib.requestModel(modelHash, 60000) then
+        currentlySelected = nil
+        lib.notify({ type = 'error', description = ('%s is not a valid model.'):format(data.label or data.object) })
+        return
+    end
+
+    local camCoords, camRotation = GetDecoratingCam()
+    local forwardCoords = camCoords + vector3(-math.sin(math.rad(camRotation.z)), math.cos(math.rad(camRotation.z)), math.sin(math.rad(camRotation.x)) * 1.2) * 2
+
+    previewObject = CreateObjectNoOffset(modelHash, forwardCoords.x, forwardCoords.y, forwardCoords.z, false, false, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    FreezeEntityPosition(previewObject, true)
+    SetEntityCollision(previewObject, false, false)
+    SetEntityDrawOutline(previewObject, true)
+
+    pendingObject = previewObject
+    lastMatrix = nil
+    SetCursorMode(true)
+    SetUIFocus(true, true)
+    PushDecoratingState()
+end)
+
+RegisterNUICallback('furniture:select', function(data, cb)
+    cb(1)
+    if type(data) == 'table' then SelectPlacedDecoration(data.id) end
+end)
+
+RegisterNUICallback('furniture:clone', function(data, cb)
+    cb(1)
+    if type(data) == 'table' then ClonePlacedDecoration(data.id) end
+end)
+
+RegisterNUICallback('furniture:confirm', function(_, cb)
+    cb(1)
+    ConfirmDecoration()
+end)
+
+RegisterNUICallback('furniture:cancel', function(_, cb)
+    cb(1)
+    CancelDecoration()
+end)
+
+RegisterNUICallback('furniture:remove', function(_, cb)
+    cb(1)
+    RemoveSelectedDecoration()
+end)
+
+-- dev tool that regenerates the catalog images, see the readme before enabling
+--[[
+RegisterCommand('screenshotfurniture', function()
+    local modelHash = GetHashKey('prop_ld_greenscreen_01')
+    lib.requestModel(modelHash, 60000)
+    local greenScreen = CreateObject(modelHash, -1894.99, -3357.08, 145.35, false, false, false)
+    SetModelAsNoLongerNeeded(modelHash)
+    FreezeEntityPosition(greenScreen, true)
+    CreateThread(function()
+        while DoesEntityExist(greenScreen) do
+            local forward, right, upVector, position = GetEntityMatrix(greenScreen)
+            SetEntityMatrix(greenScreen, forward.x, 20.0, forward.z, 20.0, right.y, right.z, upVector.x, upVector.y, 20.0, position.x, position.y, position.z)
+            Wait(0)
+        end
+    end)
+    DisableIdleCamera(true)
+    local cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
+    RenderScriptCams(true, false, 0, false, false)
+    for _, v in pairs(config.furniture) do
+        for i = 1, #v do
+            modelHash = GetHashKey(v[i].object)
+            if not IsModelValid(modelHash) then
+                lib.print.warn(("skipping invalid furniture model '%s'"):format(v[i].object))
+                goto continue
+            end
+            lib.requestModel(modelHash, 60000)
+            local object = CreateObjectNoOffset(modelHash, -1899.83, -3340.52, 150.24, false, false, false)
+            SetModelAsNoLongerNeeded(modelHash)
+            FreezeEntityPosition(object, true)
+
+            local spin = v[i].screenshotRotation
+            if spin then SetEntityRotation(object, spin.x, spin.y, spin.z, 2, false) end
+            local minDimension, maxDimension = GetModelDimensions(modelHash)
+            local modelSize = maxDimension - minDimension
+            local fov = v[i].screenshotFov or math.min(math.max(modelSize.x, modelSize.y) / 0.35 * 10, 60)
+            local objectCoords = GetEntityCoords(object)
+            local objectForward = -GetEntityForwardVector(object) * 2
+            local center = vector3(objectCoords.x + (minDimension.x + maxDimension.x) / 2, objectCoords.y + (minDimension.y + maxDimension.y) / 2, objectCoords.z + (minDimension.z + maxDimension.z) / 2)
+            local camOffset = v[i].screenshotCameraOffset
+            local cameraPosition
+            if camOffset then
+                cameraPosition = center + camOffset
+            else
+                cameraPosition = center + objectForward * 2 + vector3(1.5, -1, 1.5 * modelSize.z)
+            end
+            SetCamFov(cam, fov)
+            SetCamCoord(cam, cameraPosition.x, cameraPosition.y, cameraPosition.z)
+            PointCamAtCoord(cam, center.x, center.y, center.z)
+            TriggerServerEvent('screenshotFurniture', v[i].object)
+            Wait(1000)
+            DeleteEntity(object)
+            ::continue::
+        end
+    end
+    DestroyCam(cam, false)
+    RenderScriptCams(false, false, 0, false, false)
+    DisableIdleCamera(false)
+    DeleteEntity(greenScreen)
+end)
+--]]
+
+AddEventHandler('onResourceStop', function(resource)
+    if resource ~= cache.resource then return end
+    if not IsDecorating then return end
+
+    IsDecorating = false
+    discardPending()
+    setDecoratingPose(false)
+    destroyFreecam()
+    if GetResourceState('scully_emotemenu') == 'started' then
+        exports.scully_emotemenu:setLimitation(false)
+    end
+    SetPlayerControl(cache.playerId, true, 0)
+end)
+
+RegisterNUICallback('furniture:setTint', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local tint = tonumber(data.tint)
+    if not tint or tint < 0 or tint > 31 then return end
+
+    currentTint = tint
+    SetObjectTextureVariation(previewObject, tint)
+    PushDecoratingState()
+end)
+
+RegisterNUICallback('furniture:setTransform', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local x, y, z = tonumber(data.x), tonumber(data.y), tonumber(data.z)
+    local rx, ry, rz = tonumber(data.rx), tonumber(data.ry), tonumber(data.rz)
+    if not x or not y or not z then return end
+
+    SetEntityCoordsNoOffset(previewObject, x, y, z, false, false, false)
+    if rx and ry and rz then
+        SetEntityRotation(previewObject, rx, ry, rz, 2, false)
+    end
+end)
+
+RegisterNUICallback('furniture:nudge', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local delta = tonumber(data.delta)
+    if not delta then return end
+
+    if data.axis == 'rz' then
+        local rot = GetEntityRotation(previewObject, 2)
+        SetEntityRotation(previewObject, rot.x, rot.y, (rot.z + delta) % 360.0, 2, false)
+    elseif data.axis == 'camx' or data.axis == 'camy' then
+        local heading = math.rad(GetGameplayCamRot(2).z)
+        local forward = vec2(-math.sin(heading), math.cos(heading))
+        local dir = data.axis == 'camy' and forward or vec2(forward.y, -forward.x)
+        local pos = GetEntityCoords(previewObject)
+        SetEntityCoordsNoOffset(previewObject, pos.x + dir.x * delta, pos.y + dir.y * delta, pos.z, false, false, false)
+    elseif data.axis == 'x' or data.axis == 'y' or data.axis == 'z' then
+        local pos = GetEntityCoords(previewObject)
+        local moved = { x = pos.x, y = pos.y, z = pos.z }
+        moved[data.axis] = moved[data.axis] + delta
+        SetEntityCoordsNoOffset(previewObject, moved.x, moved.y, moved.z, false, false, false)
+    end
+end)
+
+RegisterNUICallback('furniture:snap', function(_, cb)
+    cb(1)
+    SnapToNeighbor()
+end)
+
+RegisterNUICallback('gizmo:apply', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local x, y, z = tonumber(data.x), tonumber(data.y), tonumber(data.z)
+    if x and y and z then
+        SetEntityCoordsNoOffset(previewObject, x, y, z, false, false, false)
+    end
+
+    local rx, ry, rz = tonumber(data.rx), tonumber(data.ry), tonumber(data.rz)
+    if rx or ry or rz then
+        local rot = GetEntityRotation(previewObject, 2)
+        SetEntityRotation(previewObject, (rx or rot.x) % 360.0, (ry or rot.y) % 360.0, (rz or rot.z) % 360.0, 2, false)
+    end
+end)

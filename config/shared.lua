@@ -1,99 +1,202 @@
 return {
     shellUndergroundOffset = 50.0,
 
-    apartmentOptions = {
-        {
-            interior = 'DellPerroHeightsApt4',
-            label = 'Del Perro Heights Apt',
-            description = 'Enjoy ocean views far away from tourists and bums on Del Perro Beach.',
-            enter = vec3(-1447.35, -537.84, 34.74)
+    realtorJobs = { -- job name mapped to the minimum grade level allowed to manage properties
+        realestate = 0,
+    },
+    realtorRequiresDuty = true,
+
+    dynamicApartments = true,
+    logoutEnabled = true, -- beds and logout points let players switch character, false hides them everywhere
+    shellStreamDistance = 60.0,
+    targetInteractions = true, -- MLO furniture uses ox_target labels instead of floating interaction points
+    freecamRange = 10.0, -- how far the decorating freecam may drift from the player
+    nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
+
+    market = {
+        minPrice = 1000,
+        maxPrice = 100000000,
+        minIncrement = 1000,
+        auctionHours = 72,
+        maxAuctionHours = 72,
+        auctionDurations = { 24, 48, 72 },
+        antiSnipeMinutes = 5,
+        agentBidRange = 6.0,
+        anonymousBids = true,
+        sellRange = 5.0,
+    },
+
+    gardens = {
+        enabled = true,
+        furnitureLimit = 40,
+        streamDistance = 80.0,
+        maxPoints = 20,
+        height = 2.0, -- maximum build height inside the zone
+    },
+
+    propertySizes = {
+        small = { label = 'Small', power = 5000, cost = 750 },
+        medium = { label = 'Medium', power = 10000, cost = 1500 },
+        large = { label = 'Large', power = 20000, cost = 3000 },
+        mansion = { label = 'Mansion', power = 40000, cost = 6000 },
+    },
+    propertySizeOrder = { 'small', 'medium', 'large', 'mansion' },
+    defaultPropertySize = 'medium',
+
+    utilities = {
+        enabled = true,
+        billingDays = 30,
+        gracePeriodDays = 3,
+
+        apartment = {
+            power = 4000,
+            cost = 0,
         },
-        {
-            interior = 'DellPerroHeightsApt7',
-            label = 'Del Perro Heights Apt',
-            description = 'Luxury Del Perro Heights apartment complex! For all you voyeurs out there!',
-            enter = vec3(-1447.35, -537.84, 34.74)
-        },
-        {
-            interior = '4IntegrityWayApt28',
-            label = '4 Integrity Way Apt',
-            description = 'This is such an promosing neighborhood, you can literally see the construction from your window!',
-            enter = vec3(-59.4, -616.29, 37.36)
-        },
-        {
-            interior = '4IntegrityWayApt30',
-            label = '4 Integrity Way Apt',
-            description = 'An apartment so expansive, all your friends will immediately know how much you paid for it.',
-            enter = vec3(-47.52, -585.86, 37.95)
-        },
-        {
-            interior = 'RichardMajesticApt2',
-            label = 'Richard Majestic Apt',
-            description = 'This breathtaking luxury condo is a stone\'s throw from AKAN Records and a Sperm Donor Clinic.',
-            enter = vec3(-936.15, -378.91, 38.96)
-        },
-        {
-            interior = 'TinselTowersApt42',
-            label = 'Tinsel Towers Apt',
-            description = 'A picture-perfect lateral living experience in one of Los Santos most sought-after tower blocks.',
-            enter = vec3(-614.58, 46.52, 43.59)
+
+        humidity = {
+            base = 40,
+            perKilowatt = 0.004,
+            max = 100,
+            comfortable = 60,
         },
     },
 
-    interiors = {
-        [`furnitured_midapart`] = {
-            exit = vec3(1.46, -10.33, 0.0),
-            clothing = vec3(6.03, 9.3, 0.0),
-            stash = vec3(6.91, 3.94, 0.0),
-            logout = vec3(4.07, 7.89, 0.0)
+    commission = {
+        sale = 0.05,
+        rent = 0.10,
+    },
+
+
+    wallColors = {
+        enabled = true,
+        entitySet = 'wall_tint',
+        probeLength = 50.0, -- keeps taller interiors loaded when high up inside them
+        palette = {
+            { index = 0, label = 'White', hex = 'F1F1F1' },
+            { index = 1, label = 'Light Beige', hex = 'DFD7CD' },
+            { index = 2, label = 'Dark Beige', hex = 'E1BE8E' },
+            { index = 3, label = 'Orange', hex = 'EBAB69' },
+            { index = 4, label = 'Baby Blue', hex = '7E9AB1' },
+            { index = 5, label = 'Satin Blue', hex = '736DD2' },
+            { index = 6, label = 'Navy Blue', hex = '38356E' },
+            { index = 7, label = 'Maroon Red', hex = 'A85E53' },
+            { index = 8, label = 'Red', hex = 'F13B59' },
+            { index = 9, label = 'Burgundy Red', hex = '8E4D58' },
+            { index = 10, label = 'Earthy Green', hex = '96A08A' },
+            { index = 11, label = 'Dull Green', hex = '646F69' },
+            { index = 12, label = 'Purple', hex = '473C5B' },
+            { index = 13, label = 'Light Pink', hex = 'D5A6DE' },
+            { index = 14, label = 'Grey', hex = '6B6A6C' },
+            { index = 15, label = 'Dark Grey', hex = '343435' },
+            { index = 16, label = 'Light Blue', hex = 'C1CDE0' },
+            { index = 17, label = 'Dark Green', hex = '023020' },
+            { index = 18, label = 'Aqua Blue', hex = '4FEDE5' },
+            { index = 19, label = 'Blue', hex = '62C1E5' },
+            { index = 20, label = 'Geraldine Red', hex = 'FF7B7B' },
+            { index = 21, label = 'Black', hex = '000000' },
+            { index = 22, label = 'Yellow', hex = 'FFEE8C' },
+            { index = 23, label = 'Light Grey', hex = 'C0C0C0' },
+            { index = 24, label = 'Forest Green', hex = '012D21' },
+            { index = 25, label = 'Pink', hex = 'E190B7' },
+            { index = 26, label = 'Lime Green', hex = 'A2E783' },
+            { index = 27, label = 'Green', hex = '49862E' },
+            { index = 28, label = 'Deep Red', hex = '5E0606' },
+            { index = 29, label = 'Brown', hex = '653E21' },
+            { index = 30, label = 'Tea Green', hex = 'D5F3C6' },
+            { index = 31, label = 'Light Purple', hex = 'AE4BFF' },
         },
-        ['4IntegrityWayApt28'] = {
-            exit = vec4(-30.58, -595.4, 80.03, 246.95),
-            clothing = vec3(-38.25, -589.71, 78.83),
-            stash = vec3(-12.1, -598.26, 79.43),
-            logout = vec3(-37.14, -583.65, 78.83)
+    },
+
+
+    apartmentGarageBlip = { sprite = 357, color = 3 },
+    apartmentGarageUseRadius = 1.5, -- each bay doubles as the menu and the park point; keep under half the tightest bay spacing (3.41m at Wiwang)
+
+    apartmentGarages = { -- one garage per complex, every bay is an access point so tenants never queue for the same spot
+        -- `name` is stored on every parked vehicle, never change it or those vehicles become unreachable
+        {
+            name = 'apartment_delperro',
+            label = 'Del Perro Heights Parking',
+            interiors = { 'DellPerroHeightsApt4', 'DellPerroHeightsApt7' },
+            spots = {
+                vec4(-1429.4, -581.19, 29.59, 116.41),
+                vec4(-1436.13, -584.84, 29.66, 121.79),
+                vec4(-1410.64, -531.9, 30.41, 211.2),
+                vec4(-1415.44, -525.2, 30.82, 212.39),
+                vec4(-1421.09, -516.8, 31.33, 214.01),
+                vec4(-1426.42, -510.79, 31.69, 213.63),
+                vec4(-1431.84, -502.94, 32.17, 210.48),
+                vec4(-1437.03, -494.75, 32.64, 210.8),
+            },
         },
-        ['4IntegrityWayApt30'] = {
-            exit = vec4(-17.41, -588.17, 90.11, 338.23),
-            clothing = vec3(-38.11, -583.48, 83.92),
-            stash = vec3(-26.95, -588.61, 90.12),
-            logout = vec3(-37.28, -577.89, 83.91)
+        {
+            name = 'apartment_integrityway',
+            label = '4 Integrity Way Parking',
+            interiors = { '4IntegrityWayApt28', '4IntegrityWayApt30' },
+            spots = {
+                vec4(-79.65, -634.43, 35.17, 339.52),
+                vec4(-77.1, -626.82, 35.18, 339.94),
+                vec4(-74.59, -619.9, 35.17, 339.95),
+                vec4(-72.69, -613.05, 35.2, 341.3),
+                vec4(-70.35, -606.28, 35.19, 340.05),
+                vec4(-67.8, -599.39, 35.21, 327.17),
+                vec4(-64.58, -589.79, 35.19, 332.18),
+                vec4(-61.45, -580.69, 35.75, 341.18),
+            },
         },
-        ['DellPerroHeightsApt4'] = {
-            exit = vec4(-1453.02, -539.5, 74.04, 35.33),
-            clothing = vec3(-1449.88, -549.25, 72.84),
-            stash = vec3(-1466.83, -527.03, 73.44),
-            logout = vec3(-1454.08, -553.25, 72.84)
+        {
+            name = 'apartment_richardmajestic',
+            label = 'Richard Majestic Parking',
+            interiors = { 'RichardMajesticApt2' },
+            spots = {
+                vec4(-890.68, -392.56, 37.62, 113.05),
+                vec4(-897.02, -395.26, 37.36, 100.55),
+                vec4(-902.19, -397.65, 37.15, 114.89),
+                vec4(-907.78, -400.29, 36.94, 105.38),
+                vec4(-913.34, -402.99, 36.77, 110.06),
+                vec4(-918.31, -405.44, 36.63, 116.7),
+                vec4(-923.88, -408.26, 36.53, 116.63),
+                vec4(-929.85, -411.38, 36.5, 117.43),
+                vec4(-935.16, -414.18, 36.53, 113.08),
+            },
         },
-        ['DellPerroHeightsApt7'] = {
-            exit = vec3(-1458.5, -520.89, 56.93),
-            clothing = vec3(-1467.46, -537.28, 50.73),
-            stash = vec3(-1457.44, -531.26, 56.94),
-            logout = vec3(-1471.83, -533.47, 50.72)
+        {
+            name = 'apartment_tinseltowers',
+            label = 'Tinsel Towers Parking',
+            interiors = { 'TinselTowersApt42' },
+            spots = {
+                vec4(-571.37, 10.75, 43.03, 97.58),
+                vec4(-577.8, 9.2, 42.88, 83.91),
+                vec4(-583.34, 8.42, 42.85, 96.07),
+                vec4(-589.54, 7.64, 42.59, 85.34),
+                vec4(-595.77, 6.82, 42.24, 89.16),
+                vec4(-601.82, 5.96, 41.86, 93.91),
+                vec4(-608.16, 5.21, 41.42, 89.11),
+                vec4(-614.94, 4.36, 40.96, 97.39),
+            },
         },
-        ['RichardMajesticApt2'] = {
-            exit = vec4(-913.99, -365.81, 114.27, 115.17),
-            clothing = vec3(-903.79, -363.99, 113.07),
-            stash = vec3(-928.04, -377.22, 113.67),
-            logout = vec3(-900.27, -368.65, 113.07)
+        {
+            name = 'apartment_wiwang',
+            label = 'Wiwang Hotel Parking',
+            buildings = { 'wiwang' },
+            spots = {
+                vec4(-809.85, -768.2, 20.31, 86.68),
+                vec4(-809.86, -764.19, 20.66, 85.88),
+                vec4(-810.11, -760.65, 20.99, 88.6),
+                vec4(-810.58, -756.85, 21.35, 86.36),
+                vec4(-810.75, -753.46, 21.67, 86.49),
+                vec4(-822.29, -768.11, 20.32, 267.87),
+                vec4(-821.85, -764.36, 20.65, 268.75),
+                vec4(-821.71, -760.57, 21.02, 271.75),
+                vec4(-821.36, -757.16, 21.34, 264.34),
+                vec4(-829.65, -756.89, 21.37, 77.65),
+                vec4(-829.86, -760.76, 21.02, 91.05),
+                vec4(-829.53, -764.31, 20.66, 87.34),
+                vec4(-829.76, -768.21, 20.32, 85.77),
+                vec4(-841.53, -771.99, 20.0, 264.08),
+                vec4(-841.32, -768.12, 20.33, 266.91),
+                vec4(-841.8, -764.24, 20.67, 268.53),
+                vec4(-841.0, -760.44, 21.07, 269.47),
+            },
         },
-        ['TinselTowersApt42'] = {
-            exit = vec4(-604.06, 58.99, 98.2, 91.45),
-            clothing = vec3(-594.63, 56.15, 97.0),
-            stash = vec3(-622.36, 55.09, 97.6),
-            logout = vec3(-593.71, 50.18, 97.0)
-        },
-        ['GTAOHouseMid1'] = {
-            exit = vec4(346.76, -1011.52, -99.2, 358.57),
-            clothing = vec3(350.84, -993.9, -99.2),
-            stash = vec3(351.98, -998.8, -99.2),
-            logout = vec3(349.24, -995.09, -99.2)
-        },
-        ['GTAOHouseLow1'] = {
-            exit = vec4(266.2, -1007.03, -100.92, 6.02),
-            clothing = vec3(260.4, -1003.27, -99.01),
-            stash = vec3(265.96, -999.37, -99.01),
-            logout = vec3(262.91, -1002.92, -99.01)
-        },
-    }
+    },
 }

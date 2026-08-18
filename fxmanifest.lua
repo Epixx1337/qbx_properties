@@ -14,13 +14,33 @@ shared_scripts {
     'shared/main.lua',
 }
 
+ui_page 'web/build/index.html'
+
 client_scripts {
     '@qbx_core/modules/playerdata.lua',
+    'client/nui.lua',
+    'client/radial.lua',
     'client/apartmentselect.lua',
     'client/property.lua',
     'client/realtor.lua',
     'client/dataview.lua',
     'client/decorating.lua',
+    'client/apartments.lua',
+    'client/roomfurniture.lua',
+    'client/doorbell.lua',
+    'client/interiors.lua',
+    'client/shells.lua',
+    'client/market.lua',
+    'client/placement.lua',
+    'client/preview.lua',
+    'client/creation.lua',
+    'client/sales.lua',
+    'client/gardens.lua',
+    'client/raids.lua',
+    'client/robbery.lua',
+    'client/wallcolor.lua',
+    'client/tablet.lua',
+    'client/creator.lua',
 }
 
 server_scripts {
@@ -28,15 +48,54 @@ server_scripts {
     'server/apartmentselect.lua',
     'server/property.lua',
     'server/realtor.lua',
-    --'server/decorating.js' only used for taking screenshots of furniture
+    'server/access.lua',
+    'server/doors.lua',
+    'server/apartments.lua',
+    'server/garages.lua',
+    'server/market.lua',
+    'server/shells.lua',
+    'server/shelldefaults.lua',
+    'server/creation.lua',
+    'server/sales.lua',
+    'server/gardens.lua',
+    'server/raids.lua',
+    'server/robbery.lua',
+    'server/wallcolor.lua',
+    'server/utilities.lua',
+    'server/creator.lua',
+    -- 'server/decorating.js', -- dev tool for /screenshotfurniture, see the readme
 }
 
 files {
     'config/client.lua',
     'config/shared.lua',
+    'config/dispatch.lua',
+    'config/crime.lua',
+    'config/shell_defaults.lua',
+    'config/buildings.lua',
     'locales/*.json',
-    'screenshots/*.webp'
+    'screenshots/*.webp',
+    'web/build/index.html',
+    'web/build/**/*',
+}
+
+dependencies {
+    'ox_lib',
+    'oxmysql',
+    'qbx_core',
+    'ox_inventory',
+    'ox_target',
 }
 
 lua54 'yes'
 use_experimental_fxv2_oal 'true'
+
+files {
+    'stream/audiodirectory/qbx_properties_sounds.awc',
+    'stream/data/qbx_properties_sounds.dat54.rel',
+    'stream/props/qbx_props.ytyp',
+}
+
+data_file 'AUDIO_WAVEPACK' 'stream/audiodirectory'
+data_file 'AUDIO_SOUNDDATA' 'stream/data/qbx_properties_sounds.dat'
+data_file 'DLC_ITYP_REQUEST' 'stream/props/qbx_props.ytyp'

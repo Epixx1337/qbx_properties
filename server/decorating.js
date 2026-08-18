@@ -1,64 +1,89 @@
-const imagejs = require("image-js");
+const { PNG } = require("pngjs");
 const fs = require("fs");
-const webp = require('webp-converter');
-const path = require('path');
+const webp = require("webp-converter");
+const path = require("path");
 
-// Constants
 const RESOURCE_NAME = GetCurrentResourceName();
 const SCREENSHOTS_DIR = GetResourcePath(RESOURCE_NAME) + "/screenshots";
 const IMAGE_CROP_FACTOR = 4.5;
 const WEBP_QUALITY = 100;
 
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_END = Buffer.from("IEND");
+
 /**
- * Processes a single image by cropping and removing green screen
- * @param {Buffer} imageBuffer - Raw image data buffer
- * @param {string} outputPath - Path to save the processed image
+ * screencapture hands back a data URI, and some builds pad the tail. Trim to the
+ * exact PNG stream so the decoder does not choke on trailing bytes.
+ * @param {string} data
+ * @returns {Buffer}
  */
-async function processImage(imageBuffer, outputPath) {
-  const image = await imagejs.Image.load(imageBuffer);
+function toPngBuffer(data) {
+  const base64 = typeof data === "string" ? data.replace(/^data:image\/\w+;base64,/, "") : data;
+  const buffer = Buffer.isBuffer(base64) ? base64 : Buffer.from(base64, "base64");
 
-  // Crop image
-  const croppedImage = image.crop({
-    x: image.width / IMAGE_CROP_FACTOR,
-    width: image.height,
-  });
+  const start = buffer.indexOf(PNG_SIGNATURE);
+  if (start < 0) throw new Error("capture did not contain a PNG stream");
 
-  image.data = croppedImage.data;
-  image.width = croppedImage.width;
-  image.height = croppedImage.height;
+  const endMarker = buffer.lastIndexOf(PNG_END);
+  const end = endMarker < 0 ? buffer.length : endMarker + 8;
 
-  // Remove green screen
-  const processedImage = image.rgba8();
-  for (let x = 0; x < processedImage.width; x++) {
-    for (let y = 0; y < processedImage.height; y++) {
-      const [r, g, b] = processedImage.getPixelXY(x, y);
+  return buffer.subarray(start, end);
+}
+
+/**
+ * Crops a centred square out of the capture and turns green-screen pixels transparent.
+ * @param {Buffer} imageBuffer - Raw PNG data
+ * @param {string} outputPath - Where to write the processed PNG
+ */
+function processImage(imageBuffer, outputPath) {
+  const source = PNG.sync.read(imageBuffer);
+
+  const size = Math.min(source.height, source.width);
+  const offsetX = Math.min(
+    Math.max(Math.round(source.width / IMAGE_CROP_FACTOR), 0),
+    source.width - size
+  );
+
+  const output = new PNG({ width: size, height: size });
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const from = (source.width * y + (x + offsetX)) << 2;
+      const to = (size * y + x) << 2;
+
+      const r = source.data[from];
+      const g = source.data[from + 1];
+      const b = source.data[from + 2];
+
       if (g > r + b) {
-        processedImage.setPixelXY(x, y, [255, 255, 255, 0]);
+        output.data[to] = 255;
+        output.data[to + 1] = 255;
+        output.data[to + 2] = 255;
+        output.data[to + 3] = 0;
+      } else {
+        output.data[to] = r;
+        output.data[to + 1] = g;
+        output.data[to + 2] = b;
+        output.data[to + 3] = source.data[from + 3];
       }
     }
   }
 
-  await processedImage.save(outputPath);
+  fs.writeFileSync(outputPath, PNG.sync.write(output));
 }
 
 /**
- * Converts PNG files to WebP format and deletes original PNGs
- * @param {string} directoryPath - Directory containing the images
+ * Converts a single PNG to WebP and removes the original.
+ * @param {string} pngPath
  */
-async function convertToWebP(directoryPath) {
-  const files = await fs.promises.readdir(directoryPath);
+async function convertToWebP(pngPath) {
+  const outputPath = pngPath.replace(/\.png$/, ".webp");
 
-  for (const file of files.filter(file => path.extname(file) === '.png')) {
-    const outputFileName = file.replace('.png', '.webp');
-    const inputPath = path.join(directoryPath, file);
-    const outputPath = path.join(directoryPath, outputFileName);
-
-    try {
-      await webp.cwebp(inputPath, outputPath, `-q ${WEBP_QUALITY}`);
-      await fs.promises.unlink(inputPath);
-    } catch (error) {
-      console.error(`Error converting ${file} to WebP:`, error);
-    }
+  try {
+    await webp.cwebp(pngPath, outputPath, `-q ${WEBP_QUALITY}`);
+    await fs.promises.unlink(pngPath);
+  } catch (error) {
+    console.error(`Error converting ${path.basename(pngPath)} to WebP:`, error);
   }
 }
 
@@ -68,19 +93,25 @@ try {
   }
 
   onNet("screenshotFurniture", async (filename) => {
+    const src = source;
+
+    if (typeof filename !== "string" || !/^[\w]+$/.test(filename)) {
+      console.error("screenshotFurniture: refusing unsafe filename", filename);
+      return;
+    }
+
     try {
       exports.screencapture.serverCapture(
-        source,
+        src,
         { encoding: "png" },
         async (data) => {
           try {
             const imagePath = path.join(SCREENSHOTS_DIR, `${filename}.png`);
-            const buffer = Buffer.from(data, "base64");
-
-            await processImage(buffer, imagePath);
-            await convertToWebP(SCREENSHOTS_DIR);
+            processImage(toPngBuffer(data), imagePath);
+            await convertToWebP(imagePath);
+            console.log(`screenshotFurniture: wrote ${filename}.webp`);
           } catch (error) {
-            console.error("Error processing image:", error);
+            console.error(`Error processing ${filename}:`, error);
           }
         },
         "base64"

@@ -1,43 +1,37 @@
 local config = require 'config.server'
 local sharedConfig = require 'config.shared'
 
-lib.addCommand('createproperty', {
-    help = 'Create a property at your current location',
-}, function(source)
-    local player = exports.qbx_core:GetPlayer(source)
-
-    if player.PlayerData.job.name ~= 'realestate' then exports.qbx_core:Notify(source, 'Not a realtor', 'error') return end
-
-    TriggerClientEvent('qbx_properties:client:createProperty', source)
-end)
-
 RegisterNetEvent('qbx_properties:server:createProperty', function(interiorIndex, data, propertyCoords, garageCoords)
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)
     local playerCoords = GetEntityCoords(GetPlayerPed(playerSource))
 
-    if player.PlayerData.job.name ~= 'realestate' then return end
-    if not garageCoords and #(playerCoords - propertyCoords) > 5.0 then return end
-    if garageCoords and #(playerCoords - garageCoords.xyz) > 5.0 then return end
+    if not player or not IsRealtor(player.PlayerData.job) then return end
+    if not GetInteriorPoints(interiorIndex) or type(data) ~= 'table' or type(propertyCoords) ~= 'vector3' then return end
+    if type(data[1]) ~= 'string' or #data[1] < 4 or #data[1] > 32 or data[1]:find('[^%w%s]') then return end
+    if math.type(data[2]) ~= 'integer' or data[2] < 1 or data[2] > 100000000 then return end
+    if data[3] ~= nil and (math.type(data[3]) ~= 'integer' or data[3] < 1 or data[3] > 24) then return end
+    if #(playerCoords - propertyCoords) > 5.0 then return end
+    if garageCoords ~= nil and (type(garageCoords) ~= 'vector4' or #(propertyCoords - garageCoords.xyz) > 50.0) then return end
 
     local interactData = {
         {
             type = 'logout',
-            coords = sharedConfig.interiors[interiorIndex].logout
+            coords = GetInteriorPoints(interiorIndex).logout
         },
         {
             type = 'clothing',
-            coords = sharedConfig.interiors[interiorIndex].clothing
+            coords = GetInteriorPoints(interiorIndex).clothing
         },
         {
             type = 'exit',
-            coords = sharedConfig.interiors[interiorIndex].exit
+            coords = GetInteriorPoints(interiorIndex).exit
         }
     }
 
     local stashData = {
         {
-            coords = sharedConfig.interiors[interiorIndex].stash,
+            coords = GetInteriorPoints(interiorIndex).stash,
             slots = config.apartmentStash.slots,
             maxWeight = config.apartmentStash.maxWeight,
         }
@@ -45,7 +39,12 @@ RegisterNetEvent('qbx_properties:server:createProperty', function(interiorIndex,
 
     local result = MySQL.single.await('SELECT id FROM properties ORDER BY id DESC', {})
     local propertyNumber = result?.id or 0
-    local propertyName = string.format('%s %s', data[1], propertyNumber)
+    local propertyName
+
+    repeat
+        propertyNumber += 1
+        propertyName = string.format('%s %s', data[1], propertyNumber)
+    until not MySQL.single.await('SELECT id FROM properties WHERE property_name = ?', {propertyName})
 
     MySQL.insert('INSERT INTO `properties` (`coords`, `property_name`, `price`, `interior`, `interact_options`, `stash_options`, `rent_interval`, `garage`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', {
         json.encode(propertyCoords),

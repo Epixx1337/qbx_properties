@@ -1,33 +1,84 @@
 local config = require 'config.server'
 local sharedConfig = require 'config.shared'
-local logger = require '@qbx_core.modules.logger'
+
+local selecting = {}
+
+---@param playerSource integer
+function ClearApartmentLock(playerSource)
+    selecting[playerSource] = nil
+end
+
+local apartmentOptions = GetApartmentOptions()
+
+---@param playerSource integer
+---@param player table
+---@param buildingKey string
+local function selectBuildingUnit(playerSource, player, buildingKey)
+    local building = Buildings[buildingKey]
+
+    player.Functions.SetMetaData('apartmentBuilding', buildingKey)
+
+    local id = AssignRoom(player, buildingKey)
+    if not id then
+        player.Functions.SetMetaData('apartmentBuilding', nil)
+        exports.qbx_core:Notify(playerSource, 'That building is full.', 'error')
+        return false
+    end
+
+    lib.logger(playerSource, 'qbx_properties:server:apartmentSelect', locale('logs.apartment_selected', player.PlayerData.citizenid, building.label, id))
+
+    TriggerClientEvent('qbx_properties:client:addProperty', -1, building.entrance)
+    EnterProperty(playerSource, id, true)
+    return true
+end
 
 RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentIndex)
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)
-    if not sharedConfig.apartmentOptions[apartmentIndex] then return end
+    if not player or selecting[playerSource] then return end
+    apartmentIndex = ToId(apartmentIndex)
 
-    local hasApartment = MySQL.single.await('SELECT * FROM properties WHERE owner = ?', {player.PlayerData.citizenid})
-    if hasApartment then return end
+    local option = apartmentIndex and apartmentOptions[apartmentIndex]
+    if not option then return end
 
-    local interior = sharedConfig.apartmentOptions[apartmentIndex].interior
+    selecting[playerSource] = true
+
+    local hasApartment = MySQL.single.await('SELECT id FROM properties WHERE owner = ?', {player.PlayerData.citizenid})
+    if hasApartment then
+        selecting[playerSource] = nil
+        EnterProperty(playerSource, hasApartment.id, true)
+        TriggerClientEvent('qbx_properties:client:finishSpawn', playerSource)
+        return
+    end
+
+    if option.building then
+        if Buildings[option.building] then
+            selectBuildingUnit(playerSource, player, option.building)
+        end
+        selecting[playerSource] = nil
+        Wait(200)
+        TriggerClientEvent('qb-clothes:client:CreateFirstCharacter', playerSource)
+        return
+    end
+
+    local interior = option.interior
     local interactData = {
         {
             type = 'logout',
-            coords = sharedConfig.interiors[interior].logout
+            coords = GetInteriorPoints(interior).logout
         },
         {
             type = 'clothing',
-            coords = sharedConfig.interiors[interior].clothing
+            coords = GetInteriorPoints(interior).clothing
         },
         {
             type = 'exit',
-            coords = sharedConfig.interiors[interior].exit
+            coords = GetInteriorPoints(interior).exit
         }
     }
     local stashData = {
         {
-            coords = sharedConfig.interiors[interior].stash,
+            coords = GetInteriorPoints(interior).stash,
             slots = config.apartmentStash.slots,
             maxWeight = config.apartmentStash.maxWeight,
         }
@@ -39,27 +90,23 @@ RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentInde
     ::again::
 
     apartmentNumber += 1
-    local numberExists = MySQL.single.await('SELECT * FROM properties WHERE property_name = ?', {string.format('%s %s', sharedConfig.apartmentOptions[apartmentIndex].label, apartmentNumber)})
+    local numberExists = MySQL.single.await('SELECT * FROM properties WHERE property_name = ?', {string.format('%s %s', option.label, apartmentNumber)})
     if numberExists then goto again end
 
     local id = MySQL.insert.await('INSERT INTO `properties` (`coords`, `property_name`, `owner`, `interior`, `interact_options`, `stash_options`) VALUES (?, ?, ?, ?, ?, ?)', {
-        json.encode(sharedConfig.apartmentOptions[apartmentIndex].enter),
-        string.format('%s %s', sharedConfig.apartmentOptions[apartmentIndex].label, apartmentNumber),
+        json.encode(option.enter),
+        string.format('%s %s', option.label, apartmentNumber),
         player.PlayerData.citizenid,
         interior,
         json.encode(interactData),
         json.encode(stashData),
     })
 
-    logger.log({
-        source = playerSource,
-        event = 'qbx_properties:server:apartmentSelect',
-        message = locale('logs.apartment_selected', player.PlayerData.citizenid, sharedConfig.apartmentOptions[apartmentIndex].label, apartmentNumber),
-        webhook = config.discordWebhook
-    })
+    lib.logger(playerSource, 'qbx_properties:server:apartmentSelect', locale('logs.apartment_selected', player.PlayerData.citizenid, option.label, apartmentNumber))
 
-    TriggerClientEvent('qbx_properties:client:addProperty', -1, sharedConfig.apartmentOptions[apartmentIndex].enter)
+    TriggerClientEvent('qbx_properties:client:addProperty', -1, option.enter)
     EnterProperty(playerSource, id, true)
+    selecting[playerSource] = nil
     Wait(200)
     TriggerClientEvent('qb-clothes:client:CreateFirstCharacter', playerSource)
 end)
@@ -71,7 +118,11 @@ if not startingApartment then return end
 RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)
-    local hasApartment = MySQL.single.await('SELECT * FROM properties WHERE owner = ?', {player.PlayerData.citizenid})
+    if not player then return end
+
+    if player.PlayerData.metadata.apartmentBuilding then return end
+
+    local hasApartment = MySQL.single.await('SELECT id FROM properties WHERE owner = ?', {player.PlayerData.citizenid})
     if not hasApartment then
         TriggerClientEvent('apartments:client:setupSpawnUI', playerSource)
     end
