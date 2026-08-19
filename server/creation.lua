@@ -425,11 +425,54 @@ local function urlEncode(value)
     return value:gsub('([^%w%-%_%.%~])', function(c) return string.format('%%%02X', string.byte(c)) end)
 end
 
+local imageProviders = {
+    qbox = {
+        url = 'https://api.qbox.re/v1/file',
+        field = 'file',
+        responsePath = 'data.url',
+        storagePath = 'data.path',
+        deleteUrl = 'https://api.qbox.re/v1/file/%s',
+    },
+    fivemanage = {
+        url = 'https://api.fivemanage.com/api/v3/file',
+        field = 'file',
+        responsePath = 'data.url',
+        storagePath = 'data.id',
+        deleteUrl = 'https://api.fivemanage.com/api/v3/file/%s',
+    },
+    fivemerr = {
+        url = 'https://api.fivemerr.com/v1/media/images',
+        field = 'file',
+        responsePath = 'url',
+    },
+}
+
+local function imageProvider()
+    local cfg = config.imageUpload
+    if not cfg or not cfg.apiKey or cfg.apiKey == '' then return end
+
+    local provider = cfg.provider == 'custom' and cfg.custom or imageProviders[cfg.provider]
+    if not provider or not provider.url or provider.url == '' then return end
+
+    return provider
+end
+
+local function responseField(result, path)
+    local value = result
+    for key in path:gmatch('[^%.]+') do
+        if type(value) ~= 'table' then return end
+        value = value[key]
+    end
+    return type(value) == 'string' and value or nil
+end
+
 lib.callback.register('qbx_properties:callback:addPropertyImage', function(source, propertyId)
     local player = exports.qbx_core:GetPlayer(source)
     propertyId = ToId(propertyId)
     if not player or not propertyId or not IsRealtor(player.PlayerData.job) then return false end
-    if not config.imageUpload or not config.imageUpload.url or config.imageUpload.headers.Authorization == '' then return false, 'Image uploads are not configured.' end
+
+    local provider = imageProvider()
+    if not provider then return false, 'Image uploads are not configured.' end
 
     if GetResourceState('screencapture') ~= 'started' then
         return false, 'The screencapture resource is not running.'
@@ -443,10 +486,10 @@ lib.callback.register('qbx_properties:callback:addPropertyImage', function(sourc
 
     local result
 
-    exports.screencapture:remoteUpload(source, config.imageUpload.url, {
+    exports.screencapture:remoteUpload(source, provider.url, {
         encoding = 'webp',
-        headers = config.imageUpload.headers or {},
-        formField = config.imageUpload.field or 'file',
+        headers = { Authorization = config.imageUpload.apiKey },
+        formField = provider.field or 'file',
         filename = string.format('property_%d_%d', propertyId, os.time()),
     }, function(responseData)
         result = responseData or false
@@ -458,10 +501,10 @@ lib.callback.register('qbx_properties:callback:addPropertyImage', function(sourc
         end, 'upload timed out', 15000)
     end)
 
-    local url = ok and type(result) == 'table' and result.data and result.data.url or nil
+    local url = ok and type(result) == 'table' and responseField(result, provider.responsePath or 'url') or nil
     if not url then return false, 'The upload failed.' end
 
-    local storagePath = result.data.path or result.data.key or result.data.storageKey or nil
+    local storagePath = provider.storagePath and responseField(result, provider.storagePath) or nil
     images[#images + 1] = { url = url, path = storagePath }
     MySQL.update.await('UPDATE properties SET images = ? WHERE id = ?', {json.encode(images), propertyId})
 
@@ -483,11 +526,11 @@ lib.callback.register('qbx_properties:callback:removePropertyImage', function(so
     if not images[index] then return false end
 
     local removed = images[index]
-    if type(removed) == 'table' and removed.path and config.imageUpload and config.imageUpload.url then
-        local base = config.imageUpload.url:gsub('/v1/file/?$', '')
-        PerformHttpRequest(string.format('%s/v1/file/%s', base, urlEncode(removed.path)), function(status)
+    local provider = imageProvider()
+    if type(removed) == 'table' and removed.path and provider and provider.deleteUrl then
+        PerformHttpRequest(provider.deleteUrl:format(urlEncode(removed.path)), function(status)
             if status ~= 200 then lib.print.warn(('CDN delete returned %s for %s'):format(status, removed.path)) end
-        end, 'DELETE', '', config.imageUpload.headers or {})
+        end, 'DELETE', '', { Authorization = config.imageUpload.apiKey })
     end
 
     table.remove(images, index)

@@ -1,13 +1,17 @@
 return {
-    -- Qbox CDN (https://docs.qbox.re/dashboard/cdn). Set your own API key or photos stay disabled.
+    -- Property photo uploads. Without an apiKey the Take photo button stays disabled.
     imageUpload = {
-        url = 'https://api.qbox.re/v1/file',
-        field = 'file',
-        headers = {
-            Authorization = '', -- your Qbox CDN API key
-        },
-        responsePath = 'data.url',
+        provider = 'qbox', -- 'qbox', 'fivemanage', 'fivemerr' or 'custom'
+        apiKey = '',
         maxImages = 5,
+
+        custom = { -- only used with provider = 'custom'
+            url = '',
+            field = 'file',
+            responsePath = 'data.url', -- where the image url lives in the json response
+            storagePath = nil, -- response field holding the id/path needed for deletion
+            deleteUrl = nil, -- delete endpoint, %s is replaced with the stored id/path
+        },
     },
 
     apartmentStash = {

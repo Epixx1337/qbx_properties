@@ -211,23 +211,25 @@ end)
 
 `createDoorProgrammatic` inserts the door into the `ox_doorlock` table, registers it live and syncs it to every client, defaulting to locked. `removeDoorByName` deletes every door whose name starts with the given prefix, which is how a property's furniture and extra doors are cleaned up before re-syncing. qbx_properties uses them for apartment unit doors, MLO property doors and placeable door furniture, and only creates a door when no door with that name exists yet.
 
-## CDN key for property photos
+## Property photos (CDN)
 
-Realtor photos are uploaded to the [Qbox CDN](https://docs.qbox.re/dashboard/cdn). Create an API key in your Qbox dashboard and put it in `config/server.lua`:
+Realtor photos are uploaded to an image CDN. Three providers are supported out of the box — pick one, create an API key on their dashboard, and set it in `config/server.lua`:
 
 ```lua
 imageUpload = {
-    url = 'https://api.qbox.re/v1/file',
-    field = 'file',
-    headers = {
-        Authorization = 'YOUR_API_KEY',
-    },
-    responsePath = 'data.url',
+    provider = 'qbox', -- 'qbox', 'fivemanage', 'fivemerr' or 'custom'
+    apiKey = 'YOUR_API_KEY',
     maxImages = 5,
 },
 ```
 
-With the key left empty, the Take photo button reports that uploads are not configured and everything else keeps working. Any other upload endpoint that accepts multipart uploads and returns a URL in its JSON response works too — point `url`, `field` and `responsePath` at it.
+| Provider | Get a key | Deletes on photo removal |
+| --- | --- | --- |
+| `qbox` | [Qbox CDN dashboard](https://docs.qbox.re/dashboard/cdn) | yes |
+| `fivemanage` | [Fivemanage dashboard](https://docs.fivemanage.com) | yes |
+| `fivemerr` | [Fivemerr dashboard](https://docs.fivemerr.com) | no delete API |
+
+With the key left empty, the Take photo button reports that uploads are not configured and everything else keeps working. Any other host that accepts multipart uploads and returns a URL in its JSON response works too — set `provider = 'custom'` and fill in the `custom` block (`url`, `field`, `responsePath`, and optionally `storagePath`/`deleteUrl` if the host supports deletion).
 
 ## Configuration
 
