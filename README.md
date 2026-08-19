@@ -148,6 +148,19 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 The NUI is prebuilt in `web/build`. To rebuild after changing it: `cd web && bun i && bun run build`.
 
+## Using a different multicharacter or spawn system
+
+Nothing here depends on a specific multicharacter UI. Apartment assignment hooks `QBCore:Server:OnPlayerLoaded`, which qbx_core fires every time a character loads — so any multicharacter that logs characters in through qbx_core triggers it unchanged.
+
+**First-login apartments** need `characters.startingApartment = true` in qbx_core's `config/client.lua`. When a character loads with no property and no assigned unit, the apartment picker opens automatically; choosing a building grabs a free unit through the dynamic assignment (or creates an owned IPL apartment). There is no export to assign a unit because none is needed — it all happens on login. If you ever want to reopen the picker manually (say from your own intro flow), trigger the client event `apartments:client:setupSpawnUI` for that player.
+
+**Spawn selectors** are equally swappable. Without qbx_spawn, qbx_core spawns characters at their last location and everything still works — players who logged out inside an MLO wake up where they stood, and players who logged out inside a shell or IPL interior are re-entered through their property automatically. A custom spawn selector only needs two integration points:
+
+- To spawn a player into a property they own, trigger the server event `qbx_properties:server:enterProperty` with `{ id = propertyId }` shortly after `QBCore:Server:OnPlayerLoaded` — within the first minute after loading it is treated as a spawn, so the distance check is skipped and the screen fades in once they are inside.
+- For a "last location inside their home" option, read the character's `metadata.currentPropertyId`; when it is set, pass that id through the same event instead of teleporting to raw coordinates. MLO properties don't need this — their saved position is a real-world coordinate.
+
+The list of properties a character owns is a plain query on the `properties` table by `owner` citizenid, which is how qbx_spawn builds its spawn list.
+
 ## ox_doorlock additions
 
 Stock ox_doorlock only manages doors through its admin UI and has no access hooks, so it needs three small additions. Without them the resource prints a warning on start and property doors are skipped.
