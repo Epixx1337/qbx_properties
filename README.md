@@ -102,6 +102,8 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - Snapping: to the ground, to the nearest wall, and modular pieces (walls, floors, stairs, arches) snap to each other; doors seat into arches
 - 32 tint colours on the bundled structural props, matching the wall colour palette
 - Fine-tune panel for exact coordinates and small nudges, including screen-relative movement
+- Furniture can carry a `price` — priced pieces land in a shopping cart and get paid for in one go, and an unpaid cart is set aside when you leave the editor and offered back next time
+- Inventory items can become furniture: scripts register their item and the player places it inside their property, metadata intact, with a pickup button in the editor to take it back. The crafting bench uses this — see [docs/placeable-items.md](docs/placeable-items.md)
 - Garden zones are decoratable too — walk into your garden and the same editor opens from the radial menu
 - Other players inside the property (or garden) see furniture being moved live while you edit
 - Stash furniture registers real ox_inventory stashes with persistent slots, so removing and replacing a stash reconnects its contents

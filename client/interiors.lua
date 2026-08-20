@@ -55,6 +55,8 @@ CreateThread(function()
         else
             if currentKey then
                 currentKey = nil
+                CurrentPropertyId = nil
+                if SetPropertyAccess then SetPropertyAccess(nil) end
                 RemoveDecorateRadial()
                 UnloadRoomFurniture()
                 if ClearUnitWallColors then ClearUnitWallColors() end

@@ -252,6 +252,8 @@ lib.callback.register('qbx_properties:callback:getRoomDecorations', function(sou
             interaction = types[decorations[i].model],
             stashIndex = stashIndexes[decorations[i].id],
             tint = decorations[i].tint,
+            item = decorations[i].item,
+            metadata = decorations[i].item_metadata and json.decode(decorations[i].item_metadata) or nil,
         }
     end
 

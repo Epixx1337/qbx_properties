@@ -153,7 +153,7 @@ local function labelFor(model)
             end
         end
     end
-    return furnitureLabels[model] or model
+    return furnitureLabels[model] or (GetFurnitureSpecs()[model] or {}).label or model
 end
 
 CreateThread(function()
@@ -172,6 +172,101 @@ CreateThread(function()
         lib.print.warn(('%d furniture model(s) do not exist and will be skipped: %s'):format(#invalid, table.concat(invalid, ', ')))
     end
 end)
+
+local cart = {}
+
+local function pushCart()
+    local items, total = {}, 0
+    for i = 1, #cart do
+        items[i] = { label = cart[i].label, price = cart[i].price, model = cart[i].model }
+        total += cart[i].price
+    end
+    SendUI('furniture:cart', { items = items, total = total })
+end
+
+local function effectivePrice(model, spec)
+    if not spec or (spec.price or 0) <= 0 then return 0 end
+
+    if spec.firstFree then
+        for _, placedModel in pairs(PlacedDecorations) do
+            if placedModel == model then return spec.price end
+        end
+        for i = 1, #cart do
+            if cart[i].model == model then return spec.price end
+        end
+        return 0
+    end
+
+    return spec.price
+end
+
+local savedCarts = {}
+
+local function cartContextKey()
+    if CurrentPropertyId then return 'p' .. tostring(CurrentPropertyId) end
+    if CurrentGardenId then return 'g' .. tostring(CurrentGardenId) end
+end
+
+local function saveCartSnapshot()
+    local key = cartContextKey()
+    if not key or #cart == 0 then return end
+
+    local snapshot = {}
+    for i = 1, #cart do
+        local entry = cart[i]
+        if DoesEntityExist(entry.entity) then
+            local coords = GetEntityCoords(entry.entity)
+            local rotation = GetEntityRotation(entry.entity, 2)
+            snapshot[#snapshot + 1] = {
+                model = entry.model,
+                label = entry.label,
+                price = entry.price,
+                tint = entry.tint,
+                coords = coords,
+                rotation = rotation,
+            }
+            DeleteEntity(entry.entity)
+        end
+    end
+
+    cart = {}
+    savedCarts[key] = #snapshot > 0 and snapshot or nil
+    lib.notify({ type = 'info', description = 'Your cart was set aside for next time.' })
+end
+
+local function restoreCartSnapshot(snapshot)
+    for i = 1, #snapshot do
+        local entry = snapshot[i]
+        local hash = lib.requestModel(entry.model, 60000)
+        if hash then
+            local entity = CreateObjectNoOffset(hash, entry.coords.x, entry.coords.y, entry.coords.z, false, false, false)
+            SetEntityRotation(entity, entry.rotation.x, entry.rotation.y, entry.rotation.z, 2, false)
+            FreezeEntityPosition(entity, true)
+            SetEntityCollision(entity, false, false)
+            SetModelAsNoLongerNeeded(hash)
+            if entry.tint then SetObjectTextureVariation(entity, entry.tint) end
+
+            cart[#cart + 1] = {
+                entity = entity,
+                model = entry.model,
+                label = entry.label,
+                price = entry.price,
+                tint = entry.tint,
+            }
+        end
+    end
+end
+
+local function discardCart(silent)
+    for i = 1, #cart do
+        if DoesEntityExist(cart[i].entity) then DeleteEntity(cart[i].entity) end
+    end
+    if #cart > 0 and not silent then
+        lib.notify({ type = 'info', description = 'Unpurchased furniture was discarded.' })
+    end
+    cart = {}
+    pushCart()
+end
 
 function PushPlacedDecorations()
     local placed = {}
@@ -298,6 +393,30 @@ function ConfirmDecoration()
     local objectId = currentObjectId()
     local model = objectId and GetEntityArchetypeName(previewObject) or currentlySelected and currentlySelected.object
     if not model then return end
+
+    if not objectId then
+        local spec = GetFurnitureSpecs()[model]
+        local price = effectivePrice(model, spec)
+        if price > 0 then
+            cart[#cart + 1] = {
+                entity = previewObject,
+                model = model,
+                label = spec.label or model,
+                price = price,
+                tint = currentTint > 0 and currentTint or nil,
+            }
+            SetEntityDrawOutline(previewObject, false)
+            pendingObject = nil
+            previewObject = nil
+            currentlySelected = nil
+            lastMatrix = nil
+            SetCursorMode(false)
+            SetUIFocus(true)
+            PushDecoratingState()
+            pushCart()
+            return
+        end
+    end
 
     local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:addGardenDecoration' or 'qbx_properties:server:addDecoration'
     TriggerServerEvent(event, model, GetEntityCoords(previewObject), GetEntityRotation(previewObject, 2), objectId, currentTint > 0 and currentTint or nil)
@@ -452,6 +571,7 @@ function PushDecoratingState()
             objectId = objectId,
         } or nil,
         tint = currentTint,
+        pickup = objectId ~= nil and DecorationItems[objectId] ~= nil,
         tintSupported = placing and (GetFurnitureSpecs()[
             objectId and GetEntityArchetypeName(previewObject) or currentlySelected and currentlySelected.object or 0
         ] or {}).tint or false,
@@ -543,8 +663,17 @@ function ToggleDecorating()
         })
         PushPlacedDecorations()
         PushDecoratingState()
+        pushCart()
+
+        local saved = savedCarts[cartContextKey()]
+        if saved then
+            local total = 0
+            for i = 1, #saved do total += saved[i].price end
+            SendUI('furniture:restorePrompt', { count = #saved, total = total })
+        end
     else
         discardPending()
+        saveCartSnapshot()
         previewObject = nil
         currentlySelected = nil
         lastMatrix = nil
@@ -565,7 +694,7 @@ function ToggleDecorating()
                     TriggerServerEvent('qbx_properties:server:decorationMoving', objectId, GetEntityCoords(previewObject), GetEntityRotation(previewObject, 2))
                 end
             end
-            ToggleDecorating()
+            RequestStopDecorating()
         end
         if IsDisabledControlJustReleased(0, 38) then
             SetUIFocus(true)
@@ -793,6 +922,7 @@ AddEventHandler('onResourceStop', function(resource)
 
     IsDecorating = false
     discardPending()
+    discardCart(true)
     setDecoratingPose(false)
     destroyFreecam()
     if GetResourceState('scully_emotemenu') == 'started' then
@@ -869,5 +999,108 @@ RegisterNUICallback('gizmo:apply', function(data, cb)
     if rx or ry or rz then
         local rot = GetEntityRotation(previewObject, 2)
         SetEntityRotation(previewObject, (rx or rot.x) % 360.0, (ry or rot.y) % 360.0, (rz or rot.z) % 360.0, 2, false)
+    end
+end)
+
+RegisterNUICallback('cart:remove', function(data, cb)
+    cb(1)
+    local index = tonumber(type(data) == 'table' and data.index or nil)
+    local entry = index and cart[index]
+    if not entry then return end
+
+    if DoesEntityExist(entry.entity) then DeleteEntity(entry.entity) end
+    table.remove(cart, index)
+    pushCart()
+end)
+
+RegisterNUICallback('cart:edit', function(data, cb)
+    cb(1)
+    if previewObject then return end
+    local index = tonumber(type(data) == 'table' and data.index or nil)
+    local entry = index and cart[index]
+    if not entry or not DoesEntityExist(entry.entity) then return end
+
+    table.remove(cart, index)
+    previewObject = entry.entity
+    pendingObject = entry.entity
+    currentlySelected = { object = entry.model, label = entry.label }
+    currentTint = entry.tint or 0
+    lastMatrix = nil
+    SetEntityDrawOutline(previewObject, true)
+    SetCursorMode(true)
+    SetUIFocus(true, true)
+    PushDecoratingState()
+    pushCart()
+end)
+
+RegisterNUICallback('cart:checkout', function(_, cb)
+    cb(1)
+    if #cart == 0 then return end
+
+    local manifest = {}
+    for i = 1, #cart do
+        manifest[cart[i].model] = (manifest[cart[i].model] or 0) + 1
+    end
+
+    if not lib.callback.await('qbx_properties:callback:payFurniture', false, manifest) then return end
+
+    local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:addGardenDecoration' or 'qbx_properties:server:addDecoration'
+    for i = 1, #cart do
+        local entry = cart[i]
+        if DoesEntityExist(entry.entity) then
+            TriggerServerEvent(event, entry.model, GetEntityCoords(entry.entity), GetEntityRotation(entry.entity, 2), nil, entry.tint)
+            DeleteEntity(entry.entity)
+        end
+    end
+
+    cart = {}
+    pushCart()
+end)
+
+RegisterNUICallback('furniture:pickup', function(_, cb)
+    cb(1)
+    local objectId = currentObjectId()
+    if not objectId or not DecorationItems[objectId] then return end
+
+    TriggerServerEvent('qbx_properties:server:pickupDecoration', objectId)
+    discardPending()
+    previewObject = nil
+    currentlySelected = nil
+    lastMatrix = nil
+    SetCursorMode(false)
+    SetUIFocus(true)
+    PushDecoratingState()
+end)
+
+function RequestStopDecorating()
+    if not IsDecorating then return end
+
+    if #cart > 0 then
+        SetUIFocus(true)
+        SendUI('furniture:confirmExit', true)
+        return
+    end
+
+    ToggleDecorating()
+end
+
+RegisterNUICallback('furniture:exitChoice', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+    if data.exit == true and IsDecorating then ToggleDecorating() end
+end)
+
+RegisterNUICallback('furniture:restoreChoice', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local key = cartContextKey()
+    local saved = key and savedCarts[key]
+    if not saved then return end
+
+    savedCarts[key] = nil
+    if data.restore == true and IsDecorating then
+        restoreCartSnapshot(saved)
+        pushCart()
     end
 end)

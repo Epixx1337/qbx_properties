@@ -25,7 +25,7 @@ lib.callback.register('qbx_properties:callback:getGardenDecorations', function(_
     local property = MySQL.single.await('SELECT id, owner, building, garden_zone FROM properties WHERE id = ?', {propertyId})
     if not property or not property.garden_zone then return end
 
-    local rows = MySQL.query.await('SELECT id, model, coords, rotation, tint FROM properties_decorations WHERE property_id = ? AND garden = 1', {propertyId})
+    local rows = MySQL.query.await('SELECT id, model, coords, rotation, tint, item, item_metadata FROM properties_decorations WHERE property_id = ? AND garden = 1', {propertyId})
     local result = {}
 
     for i = 1, #rows do
@@ -37,6 +37,8 @@ lib.callback.register('qbx_properties:callback:getGardenDecorations', function(_
             coords = vec3(coords.x, coords.y, coords.z),
             rotation = vec3(rotation.x, rotation.y, rotation.z),
             tint = rows[i].tint,
+            item = rows[i].item,
+            metadata = rows[i].item_metadata and json.decode(rows[i].item_metadata) or nil,
         }
     end
 
@@ -69,6 +71,12 @@ end)
 RegisterNetEvent('qbx_properties:server:leaveGarden', function()
     inGarden[source] = nil
 end)
+
+---@param playerSource integer
+---@return integer?
+function GetPlayerGarden(playerSource)
+    return inGarden[playerSource]
+end
 
 ---@param playerSource integer
 ---@return integer?, integer[]?
@@ -106,7 +114,19 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
 
     local property = MySQL.single.await('SELECT owner FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
     if not property or player.PlayerData.citizenid ~= property.owner then return end
-    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
+
+    local paid = false
+    if not ToId(objectId) then
+        local existing
+        if IsFirstFreeFurniture(hash) then
+            existing = MySQL.scalar.await('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model = ? AND garden = 1', {propertyId, hash})
+        end
+
+        local ok, usedCredit = ConsumeFurnitureCredit(playerSource, hash, existing)
+        if not ok then return end
+        paid = usedCredit
+    end
+    if not paid and #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
 
     tint = ToId(tint)
     if tint and (tint < 1 or tint > 31 or not (GetFurnitureSpecs()[hash] or {}).tint) then tint = nil end
@@ -116,6 +136,14 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
         local updated = MySQL.update.await('UPDATE properties_decorations SET coords = ?, rotation = ?, tint = ? WHERE id = ? AND property_id = ? AND garden = 1',
             {json.encode(coords), json.encode(rotation), tint, objectId, propertyId})
         if updated ~= 1 then return end
+
+        local movedSpec = GetFurnitureSpecs()[hash]
+        local moveHooks = movedSpec and movedSpec.item and movedSpec.serverHooks
+        if moveHooks and moveHooks.onMove then
+            local metaRow = MySQL.scalar.await('SELECT item_metadata FROM properties_decorations WHERE id = ?', {objectId})
+            local resource = exports[moveHooks.resource]
+            pcall(resource[moveHooks.onMove], resource, { metadata = metaRow and json.decode(metaRow) or nil, coords = coords })
+        end
     else
         if not CanPlaceGardenFurniture(propertyId) then
             exports.qbx_core:Notify(playerSource, 'The garden furniture limit is reached.', 'error')
@@ -148,7 +176,7 @@ RegisterNetEvent('qbx_properties:server:removeGardenDecoration', function(object
     local owner = MySQL.scalar.await('SELECT owner FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
     if owner ~= player.PlayerData.citizenid then return end
 
-    local deleted = MySQL.update.await('DELETE FROM properties_decorations WHERE id = ? AND property_id = ? AND garden = 1', {objectId, propertyId})
+    local deleted = MySQL.update.await('DELETE FROM properties_decorations WHERE id = ? AND property_id = ? AND garden = 1 AND item IS NULL', {objectId, propertyId})
     if deleted ~= 1 then return end
 
     TriggerClientEvent('qbx_properties:client:gardenDecoration', -1, propertyId, { id = objectId, removed = true })

@@ -47,6 +47,12 @@
     fetchNui('furniture:place', { object: item.object, label: item.label })
   }
 
+  function isFirstFree(item) {
+    if (!item.firstFree || !item.price) return false
+    if (furniture.placed.some((p) => p.model === item.object)) return false
+    return !furniture.cart.some((c) => c.model === item.object)
+  }
+
   function backToWorld() {
     fetchNui('setFocus', { focus: false })
   }
@@ -92,7 +98,16 @@
       <div class="grid scroll">
         {#each items as item (item.object)}
           <button class="card" onclick={() => place(item)}>
-            <img src={`nui://qbx_properties/screenshots/${item.object}.webp`} alt={item.label} loading="lazy" />
+            <div class="thumb">
+              <img src={`nui://qbx_properties/screenshots/${item.object}.webp`} alt={item.label} loading="lazy" />
+              {#if item.price}
+                {#if isFirstFree(item)}
+                  <span class="price-tag free">Free · then ${item.price.toLocaleString()}</span>
+                {:else}
+                  <span class="price-tag">${item.price.toLocaleString()}</span>
+                {/if}
+              {/if}
+            </div>
             <span>{item.label}</span>
           </button>
         {:else}
@@ -208,7 +223,11 @@
           </div>
         {/if}
 
-        {#if furniture.selected?.objectId}
+        {#if furniture.pickup}
+          <button class="btn subtle wide" onclick={() => fetchNui('furniture:pickup')}>Pick up into inventory</button>
+        {/if}
+
+        {#if furniture.selected?.objectId && !furniture.pickup}
           <button class="btn danger wide" onclick={() => fetchNui('furniture:remove')}>Remove object</button>
         {/if}
       </div>
@@ -224,6 +243,23 @@
           <div><kbd>E</kbd> Back to catalog</div>
           <div><kbd>Backspace</kbd> Exit</div>
         </div>
+      </div>
+    {/if}
+
+    {#if furniture.cart.length}
+      <div class="cart">
+        <div class="section-title">Cart · {furniture.cart.length}</div>
+        {#each furniture.cart as entry, i (i)}
+          <div class="cart-row">
+            <span class="cart-label">{entry.label}</span>
+            <span class="cart-price">${entry.price.toLocaleString()}</span>
+            <button class="mini" title="Pick it back up to move it" onclick={() => fetchNui('cart:edit', { index: i + 1 })}>Move</button>
+            <button class="mini remove" title="Remove from cart" onclick={() => fetchNui('cart:remove', { index: i + 1 })}>✕</button>
+          </div>
+        {/each}
+        <button class="btn success wide" onclick={() => fetchNui('cart:checkout')}>
+          Pay ${furniture.cartTotal.toLocaleString()}
+        </button>
       </div>
     {/if}
   </section>
@@ -255,6 +291,62 @@
     </footer>
   {/if}
 </div>
+
+{#if furniture.exitConfirm}
+  <div class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-title">Leave the editor?</div>
+      <p class="modal-text">
+        You have {furniture.cart.length} unpaid item{furniture.cart.length === 1 ? '' : 's'} in your cart
+        (${furniture.cartTotal.toLocaleString()}). They will be set aside and offered back next time you decorate here.
+      </p>
+      <div class="modal-actions">
+        <button class="btn subtle" onclick={() => (furniture.exitConfirm = false)}>Keep decorating</button>
+        <button
+          class="btn danger"
+          onclick={() => {
+            furniture.exitConfirm = false
+            fetchNui('furniture:exitChoice', { exit: true })
+          }}
+        >
+          Exit
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if furniture.restorePrompt}
+  <div class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-title">Restore your cart?</div>
+      <p class="modal-text">
+        You set aside {furniture.restorePrompt.count} item{furniture.restorePrompt.count === 1 ? '' : 's'}
+        (${(furniture.restorePrompt.total ?? 0).toLocaleString()}) last time. Restore them exactly where they were, or discard them?
+      </p>
+      <div class="modal-actions">
+        <button
+          class="btn danger"
+          onclick={() => {
+            furniture.restorePrompt = null
+            fetchNui('furniture:restoreChoice', { restore: false })
+          }}
+        >
+          Discard
+        </button>
+        <button
+          class="btn success"
+          onclick={() => {
+            furniture.restorePrompt = null
+            fetchNui('furniture:restoreChoice', { restore: true })
+          }}
+        >
+          Restore
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <Gizmo />
 
@@ -562,6 +654,102 @@
     object-fit: contain;
     background: var(--dark-7);
     border-radius: var(--radius-sm);
+  }
+
+  .thumb {
+    position: relative;
+    width: 100%;
+  }
+
+  .price-tag {
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.65);
+    border-radius: var(--radius-sm);
+  }
+
+  .price-tag.free {
+    color: #6fe38f;
+  }
+
+  .cart {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--dark-4);
+  }
+
+  .cart-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    font-size: 12px;
+    background: var(--dark-6);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-sm);
+  }
+
+  .cart-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cart-price {
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .mini.remove:hover {
+    background: var(--red);
+    color: #fff;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+    z-index: 20;
+  }
+
+  .modal {
+    width: 340px;
+    padding: 18px;
+    background: var(--dark-7);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+  }
+
+  .modal-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .modal-text {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--dark-1);
+    margin-bottom: 14px;
+  }
+
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
   }
 
   .card span {

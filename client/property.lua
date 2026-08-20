@@ -304,7 +304,7 @@ RegisterNetEvent('qbx_properties:client:loadDecorations', function(decorations)
     end
 end)
 
-RegisterNetEvent('qbx_properties:client:addDecoration', function(id, hash, coords, rotation, interaction, stashIndex, tint)
+RegisterNetEvent('qbx_properties:client:addDecoration', function(id, hash, coords, rotation, interaction, stashIndex, tint, item, metadata)
     SpawnDecoration({
         id = id,
         model = hash,
@@ -313,6 +313,8 @@ RegisterNetEvent('qbx_properties:client:addDecoration', function(id, hash, coord
         interaction = interaction,
         stashIndex = stashIndex,
         tint = tint,
+        item = item,
+        metadata = metadata,
     })
 end)
 
@@ -324,6 +326,7 @@ RegisterNetEvent('qbx_properties:client:unloadProperty', function()
     RemovePropertyRadial('qbx_properties_points')
 
     DoScreenFadeIn(1000)
+    if insideProperty then CurrentPropertyId = nil end
     insideProperty = false
     if DoesEntityExist(interiorShell) then DeleteEntity(interiorShell) end
     UnloadRoomFurniture()

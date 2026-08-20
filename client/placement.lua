@@ -286,6 +286,12 @@ function PlaceModelWithGizmo(model, origin, prompt)
 
         DisableControlAction(0, 200, true)
         DisableControlAction(0, 199, true)
+        DisableControlAction(0, 24, true)
+        DisableControlAction(0, 25, true)
+        DisableControlAction(0, 140, true)
+        DisableControlAction(0, 141, true)
+        DisableControlAction(0, 142, true)
+        DisablePlayerFiring(cache.playerId, true)
 
         if IsControlJustReleased(0, 47) or IsDisabledControlJustReleased(0, 47) then
             cursorOn = not cursorOn

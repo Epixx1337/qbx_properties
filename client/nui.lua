@@ -55,7 +55,7 @@ end
 
 function DismissUI()
     if currentView == 'furniture' and IsDecorating then
-        ToggleDecorating()
+        RequestStopDecorating()
         return
     end
 

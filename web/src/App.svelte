@@ -37,6 +37,20 @@
     furniture.selected = data.selected ?? null
     furniture.tint = data.tint ?? 0
     furniture.tintSupported = data.tintSupported ?? false
+    furniture.pickup = data.pickup ?? false
+  })
+
+  onMessage('furniture:cart', (data) => {
+    furniture.cart = data?.items ?? []
+    furniture.cartTotal = data?.total ?? 0
+  })
+
+  onMessage('furniture:confirmExit', () => {
+    furniture.exitConfirm = true
+  })
+
+  onMessage('furniture:restorePrompt', (data) => {
+    furniture.restorePrompt = data ?? null
   })
 
   onMessage('furniture:transform', (data) => {

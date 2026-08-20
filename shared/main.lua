@@ -142,10 +142,42 @@ local function buildFurnitureIndex()
                 light = entry.light or false,
                 slots = entry.slots,
                 maxWeight = entry.maxWeight,
+                price = tonumber(entry.price),
+                firstFree = entry.firstFree == true,
             }
         end
     end
 end
+
+---@param entry table
+---@return boolean
+function RegisterFurniture(entry)
+    if type(entry) ~= 'table' or type(entry.object) ~= 'string' then return false end
+    buildFurnitureIndex()
+
+    if entry.type then furnitureTypes[entry.object] = entry.type end
+    furnitureSpecs[entry.object] = {
+        label = entry.label or entry.object,
+        type = entry.type,
+        tint = entry.tint == true,
+        snapGroup = entry.snapGroup,
+        power = entry.power or 0,
+        humidity = entry.humidity or 0,
+        light = entry.light or false,
+        slots = entry.slots,
+        maxWeight = entry.maxWeight,
+        price = tonumber(entry.price),
+        firstFree = entry.firstFree == true,
+        item = entry.item,
+        durability = tonumber(entry.durability),
+        durabilityKey = entry.durabilityKey,
+        durabilityMax = tonumber(entry.durabilityMax),
+        serverHooks = type(entry.serverHooks) == 'table' and entry.serverHooks or nil,
+    }
+    return true
+end
+
+exports('registerFurniture', RegisterFurniture)
 
 ---@return table<string, string>
 function GetFurnitureTypes()

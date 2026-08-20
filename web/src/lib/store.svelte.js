@@ -22,6 +22,11 @@ export const furniture = $state({
   gizmo: null,
   gizmoMode: 'translate',
   gizmoSpace: 'camera',
+  cart: [],
+  cartTotal: 0,
+  pickup: false,
+  exitConfirm: false,
+  restorePrompt: null,
 })
 
 export const market = $state({

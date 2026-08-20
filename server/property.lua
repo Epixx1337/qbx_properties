@@ -83,9 +83,9 @@ end
 ---@return table
 function GetPropertyDecorations(property)
     if property.building then
-        return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint` FROM `properties_apartment_decorations` WHERE `citizenid` = ? ORDER BY `id`', {property.owner})
+        return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_apartment_decorations` WHERE `citizenid` = ? ORDER BY `id`', {property.owner})
     end
-    return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint` FROM `properties_decorations` WHERE `property_id` = ? ORDER BY `id`', {property.id})
+    return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_decorations` WHERE `property_id` = ? ORDER BY `id`', {property.id})
 end
 
 ---@param property table
@@ -883,7 +883,21 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
     local property = MySQL.single.await('SELECT owner, property_name, building, floor, room FROM properties WHERE id = ?', {propertyId})
     if not property or player.PlayerData.citizenid ~= property.owner then return end
     if (type(hash) ~= 'string' and type(hash) ~= 'number') or type(coords) ~= 'vector3' or type(rotation) ~= 'vector3' then return end
-    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
+
+    local paid = false
+    if not objectId then
+        local existing
+        if IsFirstFreeFurniture(hash) then
+            existing = property.building
+                and MySQL.scalar.await('SELECT COUNT(*) FROM properties_apartment_decorations WHERE citizenid = ? AND model = ?', {property.owner, hash})
+                or MySQL.scalar.await('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model = ? AND IFNULL(garden, 0) = 0', {propertyId, hash})
+        end
+
+        local ok, usedCredit = ConsumeFurnitureCredit(playerSource, hash, existing)
+        if not ok then return end
+        paid = usedCredit
+    end
+    if not paid and #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
 
     local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
     local storedCoords = anchor and UnrotateOffset(anchor, coords) or coords
@@ -919,8 +933,20 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
         local stashIndex = interaction == 'stash'
             and RegisterPropertyStashes(property, GetPropertyDecorations(property))[objectId] or nil
 
+        local movedSpec = GetFurnitureSpecs()[hash]
+        local moveHooks = movedSpec and movedSpec.item and movedSpec.serverHooks
+        local movedMeta
+        if moveHooks and moveHooks.onMove then
+            local metaRow = anchor
+                and MySQL.scalar.await('SELECT item_metadata FROM properties_apartment_decorations WHERE id = ?', {objectId})
+                or MySQL.scalar.await('SELECT item_metadata FROM properties_decorations WHERE id = ?', {objectId})
+            movedMeta = metaRow and json.decode(metaRow) or nil
+            local resource = exports[moveHooks.resource]
+            pcall(resource[moveHooks.onMove], resource, { metadata = movedMeta, coords = coords })
+        end
+
         lib.triggerClientEvent('qbx_properties:client:removeDecoration', insideProperty[propertyId], objectId)
-        lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], objectId, hash, coords, rotation, interaction, stashIndex, tint)
+        lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], objectId, hash, coords, rotation, interaction, stashIndex, tint, movedSpec and movedSpec.item or nil, movedMeta)
     else
         local id = anchor
             and MySQL.insert.await('INSERT INTO `properties_apartment_decorations` (citizenid, model, coords, rotation, stash_slot, tint) VALUES (?, ?, ?, ?, ?, ?)', {property.owner, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint})
@@ -939,6 +965,63 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
 
     lib.logger(player.PlayerData.source, 'qbx_properties:server:addDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, hash, propertyId))
 end)
+
+local furnitureCredits = {}
+
+lib.callback.register('qbx_properties:callback:payFurniture', function(source, manifest)
+    if type(manifest) ~= 'table' then return false end
+
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player then return false end
+
+    local specs = GetFurnitureSpecs()
+    local total = 0
+    for model, count in pairs(manifest) do
+        count = ToId(count)
+        local spec = type(model) == 'string' and specs[model]
+        if not count or count > 100 or not spec or (spec.price or 0) <= 0 then return false end
+        total += spec.price * count
+    end
+    if total <= 0 then return false end
+
+    if not player.Functions.RemoveMoney('bank', total, 'furniture-purchase') and not player.Functions.RemoveMoney('cash', total, 'furniture-purchase') then
+        exports.qbx_core:Notify(source, 'You cannot afford this furniture.', 'error')
+        return false
+    end
+
+    local credits = furnitureCredits[source] or {}
+    for model, count in pairs(manifest) do
+        credits[model] = (credits[model] or 0) + count
+    end
+    furnitureCredits[source] = credits
+
+    lib.logger(source, 'qbx_properties:server:payFurniture', string.format('%s paid $%d for furniture', player.PlayerData.citizenid, total))
+
+    return true
+end)
+
+---@param playerSource integer
+---@param model string
+---@param existingCount integer?
+---@return boolean ok, boolean paid
+function ConsumeFurnitureCredit(playerSource, model, existingCount)
+    local spec = GetFurnitureSpecs()[model]
+    if not spec or (spec.price or 0) <= 0 then return true, false end
+    if spec.firstFree and (existingCount or 0) == 0 then return true, false end
+
+    local credits = furnitureCredits[playerSource]
+    if not credits or (credits[model] or 0) < 1 then return false, false end
+
+    credits[model] -= 1
+    return true, true
+end
+
+---@param model string
+---@return boolean
+function IsFirstFreeFurniture(model)
+    local spec = GetFurnitureSpecs()[model]
+    return spec ~= nil and (spec.price or 0) > 0 and spec.firstFree == true
+end
 
 local movingAuth = {}
 
@@ -976,6 +1059,7 @@ end)
 
 AddEventHandler('playerDropped', function()
     movingAuth[source] = nil
+    furnitureCredits[source] = nil
 end)
 
 RegisterNetEvent('qbx_properties:server:removeDecoration', function(objectId)
@@ -988,8 +1072,8 @@ RegisterNetEvent('qbx_properties:server:removeDecoration', function(objectId)
     if not property or player.PlayerData.citizenid ~= property.owner then return end
 
     local deleted = property.building
-        and MySQL.update.await('DELETE FROM properties_apartment_decorations WHERE id = ? AND citizenid = ?', {objectId, property.owner})
-        or MySQL.update.await('DELETE FROM properties_decorations WHERE id = ? AND property_id = ?', {objectId, propertyId})
+        and MySQL.update.await('DELETE FROM properties_apartment_decorations WHERE id = ? AND citizenid = ? AND item IS NULL', {objectId, property.owner})
+        or MySQL.update.await('DELETE FROM properties_decorations WHERE id = ? AND property_id = ? AND item IS NULL', {objectId, propertyId})
     if deleted ~= 1 then return end
     lib.triggerClientEvent('qbx_properties:client:removeDecoration', insideProperty[propertyId], objectId)
 
@@ -1018,4 +1102,185 @@ lib.callback.register('qbx_properties:callback:getMyBlips', function(source)
     end
 
     return result
+end)
+
+RegisterNetEvent('qbx_properties:server:placeItemDecoration', function(item, slot, model, coords, heading)
+    local playerSource = source --[[@as number]]
+    local player = exports.qbx_core:GetPlayer(playerSource)
+    slot = ToId(slot)
+    if not player or type(item) ~= 'string' or type(model) ~= 'string' or type(coords) ~= 'vector3' or not slot then return end
+
+    local spec = GetFurnitureSpecs()[model]
+    if not spec or spec.item ~= item then return end
+
+    local propertyId = enteredProperty[playerSource]
+    local gardenId = not propertyId and GetPlayerGarden and GetPlayerGarden(playerSource) or nil
+    if not propertyId and not gardenId then return end
+
+    local property = MySQL.single.await('SELECT id, owner, building, floor, room FROM properties WHERE id = ?', {propertyId or gardenId})
+    if not property or player.PlayerData.citizenid ~= property.owner then return end
+    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
+
+    local slotData = exports.ox_inventory:GetSlot(playerSource, slot)
+    if not slotData or slotData.name ~= item then return end
+
+    local metadata = slotData.metadata
+    local rotation = vec3(0.0, 0.0, (tonumber(heading) or 0.0) % 360.0)
+
+    if not exports.ox_inventory:RemoveItem(playerSource, item, 1, nil, slot) then return end
+
+    local hooks = spec.serverHooks
+    if hooks and hooks.onPlace then
+        local resource = exports[hooks.resource]
+        local ok, result = pcall(resource[hooks.onPlace], resource, {
+            source = playerSource,
+            item = item,
+            metadata = metadata,
+            coords = coords,
+            rotation = rotation.z,
+        })
+
+        if not ok or result == false then
+            exports.ox_inventory:AddItem(playerSource, item, 1, metadata)
+            return
+        end
+        if type(result) == 'table' then metadata = result end
+    end
+
+    local encodedMeta = type(metadata) == 'table' and next(metadata) and json.encode(metadata) or nil
+
+    if gardenId then
+        local id = MySQL.insert.await('INSERT INTO properties_decorations (property_id, model, coords, rotation, garden, item, item_metadata) VALUES (?, ?, ?, ?, 1, ?, ?)',
+            {gardenId, model, json.encode(coords), json.encode(rotation), item, encodedMeta})
+        if id then
+            TriggerClientEvent('qbx_properties:client:gardenDecoration', -1, gardenId, {
+                id = id, model = model, coords = coords, rotation = rotation, item = item, metadata = metadata,
+            })
+        end
+        return
+    end
+
+    local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
+    local storedCoords = anchor and UnrotateOffset(anchor, coords) or coords
+    local storedRotation = anchor and vec3(rotation.x, rotation.y, (rotation.z - anchor.w) % 360.0) or rotation
+
+    local id = anchor
+        and MySQL.insert.await('INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, item, item_metadata) VALUES (?, ?, ?, ?, ?, ?)',
+            {property.owner, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta})
+        or MySQL.insert.await('INSERT INTO properties_decorations (property_id, model, coords, rotation, item, item_metadata) VALUES (?, ?, ?, ?, ?, ?)',
+            {propertyId, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta})
+    if not id then return end
+
+    lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], id, model, coords, rotation, GetFurnitureTypes()[model], nil, nil, item, metadata)
+
+    lib.logger(playerSource, 'qbx_properties:server:placeItemDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, model, propertyId))
+end)
+
+RegisterNetEvent('qbx_properties:server:pickupDecoration', function(objectId)
+    local playerSource = source --[[@as number]]
+    local player = exports.qbx_core:GetPlayer(playerSource)
+    objectId = ToId(objectId)
+    if not player or not objectId then return end
+
+    local propertyId = enteredProperty[playerSource]
+    local gardenId = not propertyId and GetPlayerGarden and GetPlayerGarden(playerSource) or nil
+    if not propertyId and not gardenId then return end
+
+    local property = MySQL.single.await('SELECT id, owner, building FROM properties WHERE id = ?', {propertyId or gardenId})
+    if not property or player.PlayerData.citizenid ~= property.owner then return end
+
+    local row
+    if gardenId then
+        row = MySQL.single.await('SELECT id, model, item, item_metadata FROM properties_decorations WHERE id = ? AND property_id = ? AND garden = 1', {objectId, gardenId})
+    elseif property.building then
+        row = MySQL.single.await('SELECT id, model, item, item_metadata FROM properties_apartment_decorations WHERE id = ? AND citizenid = ?', {objectId, property.owner})
+    else
+        row = MySQL.single.await('SELECT id, model, item, item_metadata FROM properties_decorations WHERE id = ? AND property_id = ?', {objectId, propertyId})
+    end
+    if not row or not row.item then return end
+
+    local function deleteDecoration()
+        if gardenId then
+            MySQL.update.await('DELETE FROM properties_decorations WHERE id = ?', {objectId})
+            TriggerClientEvent('qbx_properties:client:gardenDecoration', -1, gardenId, { id = objectId, removed = true })
+        else
+            if property.building then
+                MySQL.update.await('DELETE FROM properties_apartment_decorations WHERE id = ?', {objectId})
+            else
+                MySQL.update.await('DELETE FROM properties_decorations WHERE id = ?', {objectId})
+            end
+            lib.triggerClientEvent('qbx_properties:client:removeDecoration', insideProperty[propertyId], objectId)
+        end
+    end
+
+    if not exports.ox_inventory:CanCarryItem(playerSource, row.item, 1) then
+        exports.qbx_core:Notify(playerSource, 'You cannot carry this.', 'error')
+        return
+    end
+
+    local metadata = row.item_metadata and json.decode(row.item_metadata) or nil
+    local spec = GetFurnitureSpecs()[row.model]
+    local hooks = spec and spec.serverHooks
+
+    if hooks and hooks.onPickup then
+        local resource = exports[hooks.resource]
+        local ok, result = pcall(resource[hooks.onPickup], resource, {
+            source = playerSource,
+            item = row.item,
+            metadata = metadata,
+        })
+
+        if not ok or result == false then
+            exports.qbx_core:Notify(playerSource, 'You cannot pick this up right now.', 'error')
+            return
+        end
+        if result == 'destroy' then
+            deleteDecoration()
+            exports.qbx_core:Notify(playerSource, 'It fell apart as you picked it up.', 'error')
+            return
+        end
+        if type(result) == 'table' then metadata = result end
+    elseif spec and spec.durability then
+        local key = spec.durabilityKey or 'durability'
+        metadata = metadata or {}
+        local current = tonumber(metadata[key]) or spec.durabilityMax
+        if current then metadata[key] = math.max(0, current - spec.durability) end
+    end
+
+    if not exports.ox_inventory:AddItem(playerSource, row.item, 1, metadata) then
+        exports.qbx_core:Notify(playerSource, 'You cannot carry this.', 'error')
+        return
+    end
+
+    deleteDecoration()
+
+    lib.logger(playerSource, 'qbx_properties:server:pickupDecoration', locale('logs.remove_decoration', player.PlayerData.citizenid, objectId, propertyId or gardenId))
+end)
+
+exports('removeItemDecoration', function(decorationId)
+    decorationId = ToId(decorationId)
+    if not decorationId then return false end
+
+    local row = MySQL.single.await('SELECT id, property_id, garden FROM properties_decorations WHERE id = ? AND item IS NOT NULL', {decorationId})
+    if row then
+        MySQL.update.await('DELETE FROM properties_decorations WHERE id = ?', {decorationId})
+        if row.garden == 1 then
+            TriggerClientEvent('qbx_properties:client:gardenDecoration', -1, row.property_id, { id = decorationId, removed = true })
+        else
+            lib.triggerClientEvent('qbx_properties:client:removeDecoration', insideProperty[row.property_id] or {}, decorationId)
+        end
+        return true
+    end
+
+    local apartment = MySQL.single.await('SELECT id, citizenid FROM properties_apartment_decorations WHERE id = ? AND item IS NOT NULL', {decorationId})
+    if apartment then
+        MySQL.update.await('DELETE FROM properties_apartment_decorations WHERE id = ?', {decorationId})
+        local propertyId = MySQL.scalar.await('SELECT id FROM properties WHERE owner = ? AND building IS NOT NULL', {apartment.citizenid})
+        if propertyId then
+            lib.triggerClientEvent('qbx_properties:client:removeDecoration', insideProperty[propertyId] or {}, decorationId)
+        end
+        return true
+    end
+
+    return false
 end)

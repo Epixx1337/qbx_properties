@@ -1,6 +1,7 @@
 local sharedConfig = require 'config.shared'
 
 DecorationTints = {}
+DecorationItems = {}
 
 local targeted = {}
 local lightEntities = {}
@@ -130,6 +131,12 @@ function SpawnDecoration(decoration)
 
     DecorationObjects[decoration.id] = entity
     PlacedDecorations[decoration.id] = decoration.model
+    DecorationItems[decoration.id] = decoration.item
+
+    if decoration.item then
+        local meta = decoration.metadata or (type(decoration.item_metadata) == 'string' and json.decode(decoration.item_metadata)) or nil
+        TriggerEvent('qbx_properties:client:itemFurniture', 'spawn', decoration.id, entity, decoration.item, meta)
+    end
     addInteraction(entity, decoration)
     applyPower(entity, decoration.model)
 
@@ -143,6 +150,10 @@ function DespawnDecoration(id)
     local entity = DecorationObjects[id]
     if not entity then return end
 
+    if DecorationItems[id] then
+        TriggerEvent('qbx_properties:client:itemFurniture', 'remove', id, entity)
+    end
+
     if DoesEntityExist(entity) then
         if targeted[id] then exports.ox_target:removeLocalEntity(entity) end
         DeleteEntity(entity)
@@ -152,6 +163,7 @@ function DespawnDecoration(id)
     lightEntities[entity] = nil
     DecorationObjects[id] = nil
     PlacedDecorations[id] = nil
+    DecorationItems[id] = nil
 
     if IsDecorating then PushPlacedDecorations() end
 end
