@@ -142,7 +142,7 @@ local function buildFurnitureIndex()
                 light = entry.light or false,
                 slots = entry.slots,
                 maxWeight = entry.maxWeight,
-                price = tonumber(entry.price),
+                price = sharedConfig.furnitureShop ~= false and tonumber(entry.price) or nil,
                 firstFree = entry.firstFree == true,
             }
         end
@@ -166,7 +166,7 @@ function RegisterFurniture(entry)
         light = entry.light or false,
         slots = entry.slots,
         maxWeight = entry.maxWeight,
-        price = tonumber(entry.price),
+        price = sharedConfig.furnitureShop ~= false and tonumber(entry.price) or nil,
         firstFree = entry.firstFree == true,
         item = entry.item,
         durability = tonumber(entry.durability),

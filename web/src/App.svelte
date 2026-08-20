@@ -19,6 +19,7 @@
     furniture.category = Object.keys(furniture.categories)[0] ?? null
     furniture.propertyName = data.propertyName ?? ''
     furniture.palette = data.palette ?? []
+    furniture.shopEnabled = data.shopEnabled ?? true
     furniture.selected = null
     furniture.placing = false
     furniture.search = ''

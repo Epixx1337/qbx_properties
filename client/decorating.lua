@@ -414,6 +414,7 @@ function ConfirmDecoration()
             SetUIFocus(true)
             PushDecoratingState()
             pushCart()
+            lib.notify({ type = 'info', description = 'Added to the cart. Pay in the furniture menu to keep it.' })
             return
         end
     end
@@ -660,6 +661,7 @@ function ToggleDecorating()
             categories = config.furniture,
             propertyName = CurrentPropertyName or '',
             palette = sharedConfig.wallColors.enabled and sharedConfig.wallColors.palette or {},
+            shopEnabled = sharedConfig.furnitureShop ~= false,
         })
         PushPlacedDecorations()
         PushDecoratingState()

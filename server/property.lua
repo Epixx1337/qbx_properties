@@ -513,9 +513,9 @@ end)
 lib.callback.register('qbx_properties:callback:checkAccess', function(source)
     local propertyId = enteredProperty[source]
     if not propertyId then return false end
-    local result = MySQL.single.await('SELECT owner FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ?', {propertyId})
     local player = exports.qbx_core:GetPlayer(source)
-    return result ~= nil and player ~= nil and result.owner == player.PlayerData.citizenid
+    return property ~= nil and player ~= nil and CanEditFurniture(player, property)
 end)
 
 RegisterNetEvent('qbx_properties:server:letRingerIn', function(visitorCid)
@@ -880,8 +880,8 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
     local player = exports.qbx_core:GetPlayer(playerSource)
     local propertyId = enteredProperty[playerSource]
     if not player or not propertyId then return end
-    local property = MySQL.single.await('SELECT owner, property_name, building, floor, room FROM properties WHERE id = ?', {propertyId})
-    if not property or player.PlayerData.citizenid ~= property.owner then return end
+    local property = MySQL.single.await('SELECT id, owner, keyholders, property_name, building, floor, room FROM properties WHERE id = ?', {propertyId})
+    if not property or not CanEditFurniture(player, property) then return end
     if (type(hash) ~= 'string' and type(hash) ~= 'number') or type(coords) ~= 'vector3' or type(rotation) ~= 'vector3' then return end
 
     local paid = false
@@ -966,10 +966,17 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
     lib.logger(player.PlayerData.source, 'qbx_properties:server:addDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, hash, propertyId))
 end)
 
+---@param player table
+---@param property table
+---@return boolean
+function CanEditFurniture(player, property)
+    return IsRealtor(player.PlayerData.job) or HasPropertyAccess(player.PlayerData.citizenid, property, 'furniture')
+end
+
 local furnitureCredits = {}
 
 lib.callback.register('qbx_properties:callback:payFurniture', function(source, manifest)
-    if type(manifest) ~= 'table' then return false end
+    if type(manifest) ~= 'table' or sharedConfig.furnitureShop == false then return false end
 
     local player = exports.qbx_core:GetPlayer(source)
     if not player then return false end
@@ -1044,8 +1051,8 @@ RegisterNetEvent('qbx_properties:server:decorationMoving', function(objectId, co
     local auth = movingAuth[playerSource]
     if not auth or auth.propertyId ~= propertyId then
         local player = exports.qbx_core:GetPlayer(playerSource)
-        local owner = MySQL.scalar.await('SELECT owner FROM properties WHERE id = ?', {propertyId})
-        auth = { propertyId = propertyId, allowed = player ~= nil and owner == player.PlayerData.citizenid }
+        local row = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ?', {propertyId})
+        auth = { propertyId = propertyId, allowed = player ~= nil and row ~= nil and CanEditFurniture(player, row) }
         movingAuth[playerSource] = auth
     end
     if not auth.allowed then return end
@@ -1068,8 +1075,8 @@ RegisterNetEvent('qbx_properties:server:removeDecoration', function(objectId)
     local propertyId = enteredProperty[playerSource]
     objectId = ToId(objectId)
     if not player or not propertyId or not objectId then return end
-    local property = MySQL.single.await('SELECT owner, building FROM properties WHERE id = ?', {propertyId})
-    if not property or player.PlayerData.citizenid ~= property.owner then return end
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ?', {propertyId})
+    if not property or not CanEditFurniture(player, property) then return end
 
     local deleted = property.building
         and MySQL.update.await('DELETE FROM properties_apartment_decorations WHERE id = ? AND citizenid = ? AND item IS NULL', {objectId, property.owner})
@@ -1117,8 +1124,8 @@ RegisterNetEvent('qbx_properties:server:placeItemDecoration', function(item, slo
     local gardenId = not propertyId and GetPlayerGarden and GetPlayerGarden(playerSource) or nil
     if not propertyId and not gardenId then return end
 
-    local property = MySQL.single.await('SELECT id, owner, building, floor, room FROM properties WHERE id = ?', {propertyId or gardenId})
-    if not property or player.PlayerData.citizenid ~= property.owner then return end
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building, floor, room FROM properties WHERE id = ?', {propertyId or gardenId})
+    if not property or not CanEditFurniture(player, property) then return end
     if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
 
     local slotData = exports.ox_inventory:GetSlot(playerSource, slot)
@@ -1186,8 +1193,8 @@ RegisterNetEvent('qbx_properties:server:pickupDecoration', function(objectId)
     local gardenId = not propertyId and GetPlayerGarden and GetPlayerGarden(playerSource) or nil
     if not propertyId and not gardenId then return end
 
-    local property = MySQL.single.await('SELECT id, owner, building FROM properties WHERE id = ?', {propertyId or gardenId})
-    if not property or player.PlayerData.citizenid ~= property.owner then return end
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ?', {propertyId or gardenId})
+    if not property or not CanEditFurniture(player, property) then return end
 
     local row
     if gardenId then

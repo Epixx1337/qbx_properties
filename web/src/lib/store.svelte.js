@@ -25,6 +25,7 @@ export const furniture = $state({
   cart: [],
   cartTotal: 0,
   pickup: false,
+  shopEnabled: true,
   exitConfirm: false,
   restorePrompt: null,
 })

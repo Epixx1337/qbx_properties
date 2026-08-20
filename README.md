@@ -144,7 +144,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 1. Remove `qbx_apartments` and `qbx_houses`
 2. Either use no spawn system (the core defaults to last location) or [qbx_spawn](https://github.com/Qbox-project/qbx_spawn)
-3. Run every `.sql` file in the resource root against your database
+3. Start the resource once — it creates and migrates its database tables automatically. The `.sql` files in the resource root can also be run by hand if you prefer.
 4. Set your Qbox CDN API key (see below) if you want realtor photos
 5. Ensure the resource starts after its dependencies
 
@@ -262,6 +262,7 @@ Options worth knowing about:
 
 - `realtorJobs` / `realtorRequiresDuty` (shared) — which jobs and grades get the realtor tabs, and whether they must be on duty.
 - `logoutEnabled` (shared) — beds and logout points let players switch character; `false` hides them everywhere.
+- `furnitureShop` (shared) — `false` ignores all furniture prices, so everything places instantly for free and the cart never appears.
 - `targetInteractions` (shared) — MLO furniture uses ox_target labels instead of floating interaction points.
 - `propertySizes` (shared) — each size sets the power allowance (W) and the monthly utility cost; realtors pick the size on creation.
 - `utilities` (shared) — billing period, grace period, and the humidity model (base level, effect per kilowatt, comfort threshold).

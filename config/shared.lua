@@ -12,6 +12,7 @@ return {
     targetInteractions = true, -- MLO furniture uses ox_target labels instead of floating interaction points
     freecamRange = 10.0, -- how far the decorating freecam may drift from the player
     nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
+    furnitureShop = true, -- false ignores furniture prices, everything places instantly for free
 
     market = {
         minPrice = 1000,

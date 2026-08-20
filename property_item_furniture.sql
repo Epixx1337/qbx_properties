@@ -1,7 +1,7 @@
 ALTER TABLE `properties_decorations`
-    ADD COLUMN `item` VARCHAR(100) NULL,
-    ADD COLUMN `item_metadata` LONGTEXT NULL;
+    ADD COLUMN IF NOT EXISTS `item` VARCHAR(100) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS `item_metadata` LONGTEXT DEFAULT NULL;
 
 ALTER TABLE `properties_apartment_decorations`
-    ADD COLUMN `item` VARCHAR(100) NULL,
-    ADD COLUMN `item_metadata` LONGTEXT NULL;
+    ADD COLUMN IF NOT EXISTS `item` VARCHAR(100) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS `item_metadata` LONGTEXT DEFAULT NULL;

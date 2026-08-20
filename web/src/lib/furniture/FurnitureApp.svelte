@@ -100,7 +100,7 @@
           <button class="card" onclick={() => place(item)}>
             <div class="thumb">
               <img src={`nui://qbx_properties/screenshots/${item.object}.webp`} alt={item.label} loading="lazy" />
-              {#if item.price}
+              {#if item.price && furniture.shopEnabled}
                 {#if isFirstFree(item)}
                   <span class="price-tag free">Free · then ${item.price.toLocaleString()}</span>
                 {:else}

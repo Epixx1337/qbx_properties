@@ -101,8 +101,8 @@ lib.callback.register('qbx_properties:callback:canDecorateGarden', function(sour
     local player = exports.qbx_core:GetPlayer(source)
     if not propertyId or not player then return false end
 
-    local owner = MySQL.scalar.await('SELECT owner FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
-    return owner == player.PlayerData.citizenid
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
+    return property ~= nil and CanEditFurniture(player, property)
 end)
 
 RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coords, rotation, objectId, tint)
@@ -112,8 +112,8 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
     if not player or not propertyId then return end
     if (type(hash) ~= 'string' and type(hash) ~= 'number') or type(coords) ~= 'vector3' or type(rotation) ~= 'vector3' then return end
 
-    local property = MySQL.single.await('SELECT owner FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
-    if not property or player.PlayerData.citizenid ~= property.owner then return end
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
+    if not property or not CanEditFurniture(player, property) then return end
 
     local paid = false
     if not ToId(objectId) then
@@ -173,8 +173,8 @@ RegisterNetEvent('qbx_properties:server:removeGardenDecoration', function(object
     objectId = ToId(objectId)
     if not player or not propertyId or not objectId then return end
 
-    local owner = MySQL.scalar.await('SELECT owner FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
-    if owner ~= player.PlayerData.citizenid then return end
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
+    if not property or not CanEditFurniture(player, property) then return end
 
     local deleted = MySQL.update.await('DELETE FROM properties_decorations WHERE id = ? AND property_id = ? AND garden = 1 AND item IS NULL', {objectId, propertyId})
     if deleted ~= 1 then return end
