@@ -169,6 +169,7 @@ function RegisterFurniture(entry)
         price = sharedConfig.furnitureShop ~= false and tonumber(entry.price) or nil,
         firstFree = entry.firstFree == true,
         item = entry.item,
+        image = entry.image,
         durability = tonumber(entry.durability),
         durabilityKey = entry.durabilityKey,
         durabilityMax = tonumber(entry.durabilityMax),

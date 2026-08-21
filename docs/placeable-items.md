@@ -22,6 +22,7 @@ exports.qbx_properties:registerFurniture({
     item = 'bench',              -- the ox_inventory item name
     power = 0,                   -- watts drawn while placed, counts toward the property's utilities
     humidity = 0,
+    image = 'nui://ox_inventory/web/images/bench.png', -- shown in the furniture menu, defaults to the item's inventory image
     durability = 10,             -- subtracted from the durability metadata on every pickup, omit to disable
     durabilityKey = 'durability', -- which metadata field tracks it (e.g. 'uses'), defaults to 'durability'
     durabilityMax = nil,         -- starting value when the item has no such metadata yet

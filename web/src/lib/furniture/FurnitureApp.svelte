@@ -122,7 +122,7 @@
       <div class="placed scroll">
         {#each placedItems as item (item.id)}
           <div class="placed-row" class:active={furniture.selected?.objectId === item.id}>
-            <img src={`nui://qbx_properties/screenshots/${item.model}.webp`} alt={item.label} loading="lazy" />
+            <img src={item.image ?? `nui://qbx_properties/screenshots/${item.model}.webp`} alt={item.label} loading="lazy" />
             <span class="placed-label">{item.label}</span>
             <button class="mini" title="Edit this piece" onclick={() => fetchNui('furniture:select', { id: item.id })}>Edit</button>
             <button class="mini accent" title="Duplicate in place" onclick={() => fetchNui('furniture:clone', { id: item.id })}>Clone</button>

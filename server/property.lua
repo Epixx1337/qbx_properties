@@ -884,6 +884,8 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
     if not property or not CanEditFurniture(player, property) then return end
     if (type(hash) ~= 'string' and type(hash) ~= 'number') or type(coords) ~= 'vector3' or type(rotation) ~= 'vector3' then return end
 
+    if not objectId and (GetFurnitureSpecs()[hash] or {}).item then return end
+
     local paid = false
     if not objectId then
         local existing

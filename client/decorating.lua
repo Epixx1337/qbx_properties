@@ -144,6 +144,12 @@ local function discardPending()
     pendingObject = nil
 end
 
+local function clearOutline()
+    if previewObject and DoesEntityExist(previewObject) then
+        SetEntityDrawOutline(previewObject, false)
+    end
+end
+
 local function labelFor(model)
     if not furnitureLabels then
         furnitureLabels = {}
@@ -271,7 +277,10 @@ end
 function PushPlacedDecorations()
     local placed = {}
     for id, model in pairs(PlacedDecorations) do
-        placed[#placed + 1] = { id = id, model = model, label = labelFor(model) }
+        local item = DecorationItems[id]
+        local image = (GetFurnitureSpecs()[model] or {}).image
+            or (item and ('nui://ox_inventory/web/images/%s.png'):format(item))
+        placed[#placed + 1] = { id = id, model = model, label = labelFor(model), image = image }
     end
     table.sort(placed, function(a, b) return a.label < b.label end)
     SendUI('furniture:placed', placed)
@@ -289,6 +298,7 @@ function SelectPlacedDecoration(id)
     local entity = DecorationObjects[id]
     if not IsDecorating or not entity or not DoesEntityExist(entity) then return end
 
+    clearOutline()
     discardPending()
     previewObject = entity
     lastMatrix = MakeGizmoMatrix(entity)
@@ -303,13 +313,14 @@ end
 ---@param id integer
 function ClonePlacedDecoration(id)
     local entity = DecorationObjects[id]
-    if not IsDecorating or not entity or not DoesEntityExist(entity) then return end
+    if not IsDecorating or not entity or not DoesEntityExist(entity) or DecorationItems[id] then return end
 
     local model = PlacedDecorations[id]
     if not IsModelValid(GetHashKey(model)) then return end
     local hash = lib.requestModel(model, 60000)
     if not hash then return end
 
+    clearOutline()
     discardPending()
 
     local coords = GetEntityCoords(entity)
@@ -435,6 +446,8 @@ function RemoveSelectedDecoration()
     local objectId = currentObjectId()
     if not objectId then return end
 
+    clearOutline()
+
     local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:removeGardenDecoration' or 'qbx_properties:server:removeDecoration'
     TriggerServerEvent(event, objectId)
     discardPending()
@@ -445,6 +458,7 @@ function RemoveSelectedDecoration()
 end
 
 function CancelDecoration()
+    clearOutline()
     if previewObject and previewObject ~= pendingObject and DoesEntityExist(previewObject) and lastMatrix then
         ApplyGizmoMatrix(previewObject, lastMatrix)
         local objectId = currentObjectId()
@@ -674,6 +688,7 @@ function ToggleDecorating()
             SendUI('furniture:restorePrompt', { count = #saved, total = total })
         end
     else
+        clearOutline()
         discardPending()
         saveCartSnapshot()
         previewObject = nil
@@ -1064,6 +1079,7 @@ RegisterNUICallback('furniture:pickup', function(_, cb)
     local objectId = currentObjectId()
     if not objectId or not DecorationItems[objectId] then return end
 
+    clearOutline()
     TriggerServerEvent('qbx_properties:server:pickupDecoration', objectId)
     discardPending()
     previewObject = nil

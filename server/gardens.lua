@@ -115,6 +115,8 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
     local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
     if not property or not CanEditFurniture(player, property) then return end
 
+    if not ToId(objectId) and (GetFurnitureSpecs()[hash] or {}).item then return end
+
     local paid = false
     if not ToId(objectId) then
         local existing

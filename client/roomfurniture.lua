@@ -121,10 +121,18 @@ function SpawnDecoration(decoration)
     local entity = CreateObjectNoOffset(model, decoration.coords.x, decoration.coords.y, decoration.coords.z, false, false, false)
     SetEntityRotation(entity, decoration.rotation.x, decoration.rotation.y, decoration.rotation.z, 2, false)
     SetEntityCollision(entity, true, true)
+    SetEntityDrawOutline(entity, false)
 
     DecorationTints[decoration.id] = decoration.tint
     if decoration.tint and decoration.tint > 0 then
+        SetEntityVisible(entity, false, false)
         SetObjectTextureVariation(entity, decoration.tint)
+        SetTimeout(100, function()
+            if DoesEntityExist(entity) then
+                SetObjectTextureVariation(entity, decoration.tint)
+                SetEntityVisible(entity, true, false)
+            end
+        end)
     end
     FreezeEntityPosition(entity, true)
     SetModelAsNoLongerNeeded(model)
