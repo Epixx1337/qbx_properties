@@ -432,7 +432,11 @@ function ConfirmDecoration()
 
     local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:addGardenDecoration' or 'qbx_properties:server:addDecoration'
     TriggerServerEvent(event, model, GetEntityCoords(previewObject), GetEntityRotation(previewObject, 2), objectId, currentTint > 0 and currentTint or nil)
-    DeleteEntity(previewObject)
+    if objectId then
+        SetEntityDrawOutline(previewObject, false)
+    else
+        DeleteEntity(previewObject)
+    end
     pendingObject = nil
     previewObject = nil
     currentlySelected = nil

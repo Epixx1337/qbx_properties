@@ -947,8 +947,17 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
             pcall(resource[moveHooks.onMove], resource, { metadata = movedMeta, coords = coords })
         end
 
-        lib.triggerClientEvent('qbx_properties:client:removeDecoration', insideProperty[propertyId], objectId)
-        lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], objectId, hash, coords, rotation, interaction, stashIndex, tint, movedSpec and movedSpec.item or nil, movedMeta)
+        lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], {
+            id = objectId,
+            model = hash,
+            coords = coords,
+            rotation = rotation,
+            interaction = interaction,
+            stashIndex = stashIndex,
+            tint = tint,
+            item = movedSpec and movedSpec.item or nil,
+            metadata = movedMeta,
+        })
     else
         local id = anchor
             and MySQL.insert.await('INSERT INTO `properties_apartment_decorations` (citizenid, model, coords, rotation, stash_slot, tint) VALUES (?, ?, ?, ?, ?, ?)', {property.owner, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint})
@@ -958,7 +967,15 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
         local stashIndex = interaction == 'stash'
             and RegisterPropertyStashes(property, GetPropertyDecorations(property))[id] or nil
 
-        lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], id, hash, coords, rotation, interaction, stashIndex, tint)
+        lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], {
+            id = id,
+            model = hash,
+            coords = coords,
+            rotation = rotation,
+            interaction = interaction,
+            stashIndex = stashIndex,
+            tint = tint,
+        })
     end
 
     if interaction == 'door' and SyncFurnitureDoors then
@@ -1180,7 +1197,15 @@ RegisterNetEvent('qbx_properties:server:placeItemDecoration', function(item, slo
             {propertyId, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta})
     if not id then return end
 
-    lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], id, model, coords, rotation, GetFurnitureTypes()[model], nil, nil, item, metadata)
+    lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], {
+        id = id,
+        model = model,
+        coords = coords,
+        rotation = rotation,
+        interaction = GetFurnitureTypes()[model],
+        item = item,
+        metadata = metadata,
+    })
 
     lib.logger(playerSource, 'qbx_properties:server:placeItemDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, model, propertyId))
 end)

@@ -108,6 +108,20 @@ end
 ---@param decoration table
 ---@return number?
 function SpawnDecoration(decoration)
+    local existing = DecorationObjects[decoration.id]
+    if existing and DoesEntityExist(existing) and GetEntityArchetypeName(existing) == decoration.model then
+        SetEntityCoordsNoOffset(existing, decoration.coords.x, decoration.coords.y, decoration.coords.z, false, false, false)
+        SetEntityRotation(existing, decoration.rotation.x, decoration.rotation.y, decoration.rotation.z, 2, false)
+        SetEntityDrawOutline(existing, false)
+        DecorationTints[decoration.id] = decoration.tint
+        SetObjectTextureVariation(existing, 0)
+        if decoration.tint and decoration.tint > 0 then
+            SetObjectTextureVariation(existing, decoration.tint)
+        end
+        if IsDecorating then PushPlacedDecorations() end
+        return existing
+    end
+
     DespawnDecoration(decoration.id)
 
     if not IsModelValid(GetHashKey(decoration.model)) then
@@ -125,13 +139,14 @@ function SpawnDecoration(decoration)
 
     DecorationTints[decoration.id] = decoration.tint
     if decoration.tint and decoration.tint > 0 then
-        SetEntityVisible(entity, false, false)
+        SetEntityAlpha(entity, 0, false)
+        SetObjectTextureVariation(entity, 0)
         SetObjectTextureVariation(entity, decoration.tint)
         SetTimeout(100, function()
-            if DoesEntityExist(entity) then
-                SetObjectTextureVariation(entity, decoration.tint)
-                SetEntityVisible(entity, true, false)
-            end
+            if not DoesEntityExist(entity) then return end
+            ResetEntityAlpha(entity)
+            SetObjectTextureVariation(entity, 0)
+            SetObjectTextureVariation(entity, decoration.tint)
         end)
     end
     FreezeEntityPosition(entity, true)

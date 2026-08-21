@@ -94,7 +94,7 @@ RegisterNetEvent('qbx_properties:client:gardenDecoration', function(propertyId, 
 
     for i = #ids, 1, -1 do
         if ids[i] == decoration.id then
-            DespawnDecoration(ids[i])
+            if decoration.removed then DespawnDecoration(ids[i]) end
             table.remove(ids, i)
         end
     end

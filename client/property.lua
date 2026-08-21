@@ -304,18 +304,9 @@ RegisterNetEvent('qbx_properties:client:loadDecorations', function(decorations)
     end
 end)
 
-RegisterNetEvent('qbx_properties:client:addDecoration', function(id, hash, coords, rotation, interaction, stashIndex, tint, item, metadata)
-    SpawnDecoration({
-        id = id,
-        model = hash,
-        coords = coords,
-        rotation = rotation,
-        interaction = interaction,
-        stashIndex = stashIndex,
-        tint = tint,
-        item = item,
-        metadata = metadata,
-    })
+RegisterNetEvent('qbx_properties:client:addDecoration', function(decoration)
+    if type(decoration) ~= 'table' then return end
+    SpawnDecoration(decoration)
 end)
 
 RegisterNetEvent('qbx_properties:client:removeDecoration', function(objectId)
