@@ -31,6 +31,15 @@ exports.qbx_properties:registerFurniture({
 
 `power` uses the same utilities logic as built-in furniture: a placed item with `power = 150` adds 150W to the property's load, shows up on the housing tablet, and stops mattering the moment it is picked up.
 
+## The image in the furniture menu
+
+Placed item furniture shows an image in the furniture menu's Placed list, resolved in this order:
+
+1. The `image` from your furniture definition — any `nui://` URL works, so you can point it at your own resource's files too, e.g. `nui://my_benches/images/bench.png`.
+2. When no `image` is set, the item's ox_inventory image is used automatically: `nui://ox_inventory/web/images/<item>.png`.
+
+So if your inventory image is simply named after the item, you don't have to set anything. Set `image` explicitly when the filename differs from the item name — the crafting bench does this because its item is `craftingbench` but its images are `craftingbench_tier1.png` and `craftingbench_tier2.png`, one per registered model.
+
 ## Example: a placeable bench item
 
 ox_inventory item definition:
