@@ -4,7 +4,7 @@ game 'gta5'
 name 'qbx_properties'
 description 'Hopefully one day a feature rich property system'
 repository 'https://github.com/Qbox-project/qbx_properties'
-version '0.0.3'
+version '0.0.4'
 
 ox_lib 'locale'
 

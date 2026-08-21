@@ -24,6 +24,21 @@ function ResolveCurrentUnit()
     local interiorId = GetInteriorFromEntity(cache.ped)
     if interiorId == 0 then return end
 
+    local ix, iy, iz = GetInteriorPosition(interiorId)
+    for key, building in pairs(Buildings) do
+        if building.perRoomInterior and building.rooms then
+            for roomNumber = 1, #building.rooms do
+                local anchor = building.rooms[roomNumber]
+                if math.abs(anchor.x - ix) < 2.0 and math.abs(anchor.y - iy) < 2.0 then
+                    local floor = math.floor((iz - building.floors.baseZ) / building.floors.step + 0.5) + 1
+                    if floor >= 1 and floor <= building.floors.count then
+                        return key, floor, roomNumber
+                    end
+                end
+            end
+        end
+    end
+
     local rooms = getInteriorRooms(interiorId)
     local current = rooms[GetRoomKeyFromEntity(cache.ped)]
     if not current then return end
@@ -31,7 +46,8 @@ function ResolveCurrentUnit()
     local coords = GetEntityCoords(cache.ped)
 
     for key, building in pairs(Buildings) do
-        local roomNumber = current.name:match('^' .. building.roomName:gsub('%%d', '(%%d+)') .. '$')
+        local roomNumber = building.roomName and building.rooms
+            and current.name:match('^' .. building.roomName:gsub('%%d', '(%%d+)') .. '$')
         roomNumber = roomNumber and tonumber(roomNumber)
 
         if roomNumber and building.rooms[roomNumber] then
@@ -67,10 +83,15 @@ local function openReception(buildingKey)
             end
         }
     else
+        local lockedElsewhere = not sharedConfig.freeApartmentMoves
+            and QBX.PlayerData.metadata.apartmentBuilding
+            and QBX.PlayerData.metadata.apartmentBuilding ~= buildingKey
+
         options[#options + 1] = {
             title = 'Move in',
-            description = 'Get an apartment in this building',
+            description = lockedElsewhere and 'You already have a home elsewhere' or 'Get an apartment in this building',
             icon = 'key',
+            disabled = lockedElsewhere or nil,
             onSelect = function() TriggerServerEvent('qbx_properties:server:moveIn', buildingKey) end
         }
     end
@@ -114,4 +135,51 @@ end)
 
 exports('getMyUnit', function()
     return lib.callback.await('qbx_properties:callback:getMyUnit', false)
+end)
+
+RegisterNetEvent('qbx_properties:client:offerMigration', function(options, currentLabel)
+    while IsScreenFadedOut() or not LocalPlayer.state.isLoggedIn do Wait(500) end
+    Wait(3000)
+
+    local menu = {}
+
+    for i = 1, #options do
+        local option = options[i]
+        menu[#menu + 1] = {
+            title = option.label,
+            description = option.description,
+            icon = 'building',
+            arrow = true,
+            onSelect = function()
+                local alert = lib.alertDialog({
+                    header = option.label,
+                    content = ('Move from %s to %s? Your stash follows you, and your furniture is restored whenever you live in a building with the same room layout. This choice is final.'):format(currentLabel, option.label),
+                    centered = true,
+                    cancel = true,
+                })
+                if alert == 'confirm' then
+                    TriggerServerEvent('qbx_properties:server:chooseMigration', option.key)
+                else
+                    lib.showContext('qbx_properties_migration')
+                end
+            end
+        }
+    end
+
+    menu[#menu + 1] = {
+        title = ('Stay at %s'):format(currentLabel),
+        description = 'Keep your current apartment',
+        icon = 'house',
+        onSelect = function()
+            TriggerServerEvent('qbx_properties:server:chooseMigration', 'stay')
+        end
+    }
+
+    lib.registerContext({
+        id = 'qbx_properties_migration',
+        title = 'New apartments available',
+        canClose = false,
+        options = menu,
+    })
+    lib.showContext('qbx_properties_migration')
 end)

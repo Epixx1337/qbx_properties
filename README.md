@@ -87,7 +87,9 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 ## Features
 
 **Properties**
-- Pooled IPL apartments (Del Perro, Integrity Way, Richard Majestic, Tinsel Towers) plus multi-unit apartment buildings with per-floor rooms, doorbells and shared parking garages
+- Pooled IPL apartments (Del Perro, Integrity Way, Richard Majestic, Tinsel Towers) plus multi-unit apartment buildings with per-floor rooms, doorbells and shared parking garages — the Wiwang Hotel and the four Prodigy towers ship preconfigured, see [docs/prp-apartments.md](docs/prp-apartments.md)
+- Tenants can relocate between buildings, gated by config: free moves at the reception, plus a one-time migration offer on login whenever new buildings open with free rooms
+- Admins can furnish a unit and run `/saveroom` to save it as the default loadout for that room layout — every fresh tenant starts with those pieces already placed and fully editable
 - Standalone properties using interior shells, IPL interiors or real MLO houses
 - MLO properties live in the actual world: walk in through the (locked) front door, furniture and stashes load in place, and extra doors can be added at any time
 - Owned properties show house and garage blips, and can be spawned into from the spawn selector
@@ -263,6 +265,8 @@ Options worth knowing about:
 - `realtorJobs` / `realtorRequiresDuty` (shared) — which jobs and grades get the realtor tabs, and whether they must be on duty.
 - `logoutEnabled` (shared) — beds and logout points let players switch character; `false` hides them everywhere.
 - `furnitureShop` (shared) — `false` ignores all furniture prices, so everything places instantly for free and the cart never appears.
+- `freeApartmentMoves` (shared) — `false` locks tenants to their apartment building; the reception refuses switching.
+- `migrationOffer` (shared) — `false` disables the one-time relocation offer shown on login when other buildings have free rooms.
 - `targetInteractions` (shared) — MLO furniture uses ox_target labels instead of floating interaction points.
 - `propertySizes` (shared) — each size sets the power allowance (W) and the monthly utility cost; realtors pick the size on creation.
 - `utilities` (shared) — billing period, grace period, and the humidity model (base level, effect per kilowatt, comfort threshold).

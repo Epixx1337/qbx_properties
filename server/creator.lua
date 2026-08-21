@@ -25,7 +25,19 @@ local function serialise(buildings)
     for _, key in ipairs(keys) do
         local building = buildings[key]
         lines[#lines + 1] = string.format('    [%s] = {', quote(key))
+        lines[#lines + 1] = string.format('        type = %s,', quote(building.type or 'mlo'))
         lines[#lines + 1] = string.format('        label = %s,', quote(building.label))
+        if building.description then lines[#lines + 1] = string.format('        description = %s,', quote(building.description)) end
+
+        if building.type == 'interior' then
+            lines[#lines + 1] = string.format('        enter = %s,', fmtVec3(building.enter))
+            lines[#lines + 1] = '    },'
+            goto continue
+        end
+
+        if building.resource then lines[#lines + 1] = string.format('        resource = %s,', quote(building.resource)) end
+        if building.layout then lines[#lines + 1] = string.format('        layout = %s,', quote(building.layout)) end
+        if building.perRoomInterior then lines[#lines + 1] = '        perRoomInterior = true,' end
         lines[#lines + 1] = string.format('        entrance = %s,', fmtVec3(building.entrance))
 
         if building.lobbyElevators and #building.lobbyElevators > 0 then
@@ -46,14 +58,17 @@ local function serialise(buildings)
 
         lines[#lines + 1] = '        floors = {'
         lines[#lines + 1] = string.format('            count = %d,', building.floors.count)
-        lines[#lines + 1] = string.format('            baseZ = %.2f,', building.floors.baseZ)
-        lines[#lines + 1] = string.format('            step = %.2f,', building.floors.step)
+        lines[#lines + 1] = string.format('            baseZ = %.3f,', building.floors.baseZ)
+        lines[#lines + 1] = string.format('            step = %.3f,', building.floors.step)
         lines[#lines + 1] = '        },'
 
         if building.ipl then lines[#lines + 1] = string.format('        ipl = %s,', quote(building.ipl)) end
         if building.interiorAnchor then lines[#lines + 1] = string.format('        interiorAnchor = %s,', fmtVec3(building.interiorAnchor)) end
-        lines[#lines + 1] = string.format('        roomName = %s,', quote(building.roomName))
+        if building.roomName then lines[#lines + 1] = string.format('        roomName = %s,', quote(building.roomName)) end
+        if building.roomNumberOffset then lines[#lines + 1] = string.format('        roomNumberOffset = %d,', building.roomNumberOffset) end
+        if building.wallEntitySet then lines[#lines + 1] = string.format('        wallEntitySet = %s,', quote(building.wallEntitySet)) end
         if building.elevator then lines[#lines + 1] = string.format('        elevator = %s,', fmtVec4(building.elevator)) end
+        if building.garageElevator then lines[#lines + 1] = string.format('        garageElevator = %s,', fmtVec4(building.garageElevator)) end
 
         lines[#lines + 1] = '        rooms = {'
         for i = 1, #building.rooms do
@@ -66,9 +81,27 @@ local function serialise(buildings)
         lines[#lines + 1] = string.format('            spawn = %s,', fmtVec3(layout.spawn))
         lines[#lines + 1] = string.format('            height = %.2f,', layout.height or 3.2)
         lines[#lines + 1] = string.format('            decorateDist = %.2f,', layout.decorateDist or 5.0)
+        if layout.points and #layout.points > 0 then
+            lines[#lines + 1] = '            points = {'
+            for i = 1, #layout.points do
+                lines[#lines + 1] = string.format('                vec2(%.2f, %.2f),', layout.points[i].x, layout.points[i].y)
+            end
+            lines[#lines + 1] = '            },'
+        end
+        if layout.doors and #layout.doors > 0 then
+            lines[#lines + 1] = '            doors = {'
+            for i = 1, #layout.doors do
+                lines[#lines + 1] = '                {'
+                lines[#lines + 1] = string.format('                    coords = %s,', fmtVec3(layout.doors[i].coords))
+                lines[#lines + 1] = string.format('                    model = %d,', layout.doors[i].model)
+                lines[#lines + 1] = '                },'
+            end
+            lines[#lines + 1] = '            },'
+        end
         lines[#lines + 1] = '        },'
 
         lines[#lines + 1] = '    },'
+        ::continue::
     end
 
     lines[#lines + 1] = '}'

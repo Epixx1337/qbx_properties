@@ -125,7 +125,10 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
         end
 
         local ok, usedCredit = ConsumeFurnitureCredit(playerSource, hash, existing)
-        if not ok then return end
+        if not ok then
+            exports.qbx_core:Notify(playerSource, 'This piece has to be paid for through the cart.', 'error')
+            return
+        end
         paid = usedCredit
     end
     if not paid and #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end

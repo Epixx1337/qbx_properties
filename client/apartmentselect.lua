@@ -1,9 +1,11 @@
 local sharedConfig = require 'config.shared'
 local ApartmentOptions = GetApartmentOptions()
+local currentButtonID
 local BoardCoords = vec4(-44.19, -585.99, 87.71, 250.0)
 local BoardModel = `tr_prop_tr_planning_board_01a`
 local RenderTarget = 'modgarage_01'
-local Board, scaleform, buttonsScaleform, currentButtonID = nil, 0, 0, 1
+local Board, scaleform, buttonsScaleform = nil, 0, 0
+currentButtonID = 1
 local previewCam
 
 local function SetupBoard()
@@ -184,7 +186,7 @@ local function inputConfirm(apartmentIndex)
     FreezeEntityPosition(cache.ped, false)
     SetEntityCoords(cache.ped, ApartmentOptions[apartmentIndex].enter.x, ApartmentOptions[apartmentIndex].enter.y, ApartmentOptions[apartmentIndex].enter.z - 2.0, false, false, false, false)
     Wait(0)
-    TriggerServerEvent('qbx_properties:server:apartmentSelect', apartmentIndex)
+    TriggerServerEvent('qbx_properties:server:apartmentSelect', ApartmentOptions[apartmentIndex].index or apartmentIndex)
     Wait(1000) -- Wait for player to spawn correctly so clothing menu can load in nice
     TriggerServerEvent('QBCore:Server:OnPlayerLoaded')
     TriggerEvent('QBCore:Client:OnPlayerLoaded')
@@ -239,6 +241,13 @@ local function InputHandler()
 end
 
 RegisterNetEvent('apartments:client:setupSpawnUI', function()
+    ApartmentOptions = lib.callback.await('qbx_properties:callback:getApartmentChoices', false) or GetApartmentOptions()
+    currentButtonID = 1
+
+    if #ApartmentOptions == 0 then
+        DoScreenFadeIn(1000)
+        return
+    end
     if #ApartmentOptions == 1 then
         inputConfirm(1)
         return

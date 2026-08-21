@@ -106,12 +106,14 @@ function GetApartmentOptions()
                 enter = entry.enter,
             }
         elseif sharedConfig.dynamicApartments then
-            options[#options + 1] = {
-                building = keys[i],
-                label = entry.label,
-                description = entry.description or string.format('An apartment in %s.', entry.label),
-                enter = entry.entrance,
-            }
+            if not entry.resource or GetResourceState(entry.resource) == 'started' then
+                options[#options + 1] = {
+                    building = keys[i],
+                    label = entry.label,
+                    description = entry.description or string.format('An apartment in %s.', entry.label),
+                    enter = entry.entrance,
+                }
+            end
         end
     end
 

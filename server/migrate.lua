@@ -13,6 +13,8 @@ local schemaFiles = {
     'property_stash_slots.sql',
     'property_tints.sql',
     'property_item_furniture.sql',
+    'property_apartment_layouts.sql',
+    'property_layout_defaults.sql',
 }
 
 local columns = {
@@ -28,6 +30,7 @@ local columns = {
         tint = 'INT DEFAULT NULL',
         item = 'VARCHAR(100) DEFAULT NULL',
         item_metadata = 'LONGTEXT DEFAULT NULL',
+        layout = 'VARCHAR(50) DEFAULT NULL',
     },
     properties = {
         building = 'VARCHAR(50) DEFAULT NULL',

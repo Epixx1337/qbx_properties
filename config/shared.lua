@@ -7,6 +7,8 @@ return {
     realtorRequiresDuty = true,
 
     dynamicApartments = true,
+    freeApartmentMoves = true, -- reception lets tenants switch buildings, false locks them to their current home
+    migrationOffer = true, -- one-time login offer to relocate when other buildings have free rooms
     logoutEnabled = true, -- beds and logout points let players switch character, false hides them everywhere
     shellStreamDistance = 60.0,
     targetInteractions = true, -- MLO furniture uses ox_target labels instead of floating interaction points

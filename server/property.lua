@@ -9,6 +9,12 @@ local rentThreads = {}
 local enteredInPlace = {}
 local spawning = {}
 
+---@param playerSource integer
+---@return integer?
+function GetPlayerEnteredProperty(playerSource)
+    return enteredProperty[playerSource]
+end
+
 ---@param propertyId integer
 ---@return integer[]
 function GetPropertyOccupants(propertyId)
@@ -79,11 +85,19 @@ function GetPropertyKeyholders(property)
     return keyholders
 end
 
+---@param buildingKey string?
+---@return string?
+function GetBuildingLayout(buildingKey)
+    if not buildingKey then return end
+    local building = Buildings[buildingKey]
+    return building and building.layout or buildingKey
+end
+
 ---@param property table
 ---@return table
 function GetPropertyDecorations(property)
     if property.building then
-        return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_apartment_decorations` WHERE `citizenid` = ? ORDER BY `id`', {property.owner})
+        return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_apartment_decorations` WHERE `citizenid` = ? AND `layout` = ? ORDER BY `id`', {property.owner, GetBuildingLayout(property.building)})
     end
     return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_decorations` WHERE `property_id` = ? ORDER BY `id`', {property.id})
 end
@@ -891,12 +905,15 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
         local existing
         if IsFirstFreeFurniture(hash) then
             existing = property.building
-                and MySQL.scalar.await('SELECT COUNT(*) FROM properties_apartment_decorations WHERE citizenid = ? AND model = ?', {property.owner, hash})
+                and MySQL.scalar.await('SELECT COUNT(*) FROM properties_apartment_decorations WHERE citizenid = ? AND model = ? AND layout = ?', {property.owner, hash, GetBuildingLayout(property.building)})
                 or MySQL.scalar.await('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model = ? AND IFNULL(garden, 0) = 0', {propertyId, hash})
         end
 
         local ok, usedCredit = ConsumeFurnitureCredit(playerSource, hash, existing)
-        if not ok then return end
+        if not ok then
+            exports.qbx_core:Notify(playerSource, 'This piece has to be paid for through the cart.', 'error')
+            return
+        end
         paid = usedCredit
     end
     if not paid and #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
@@ -960,7 +977,7 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
         })
     else
         local id = anchor
-            and MySQL.insert.await('INSERT INTO `properties_apartment_decorations` (citizenid, model, coords, rotation, stash_slot, tint) VALUES (?, ?, ?, ?, ?, ?)', {property.owner, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint})
+            and MySQL.insert.await('INSERT INTO `properties_apartment_decorations` (citizenid, model, coords, rotation, stash_slot, tint, layout) VALUES (?, ?, ?, ?, ?, ?, ?)', {property.owner, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint, GetBuildingLayout(property.building)})
             or MySQL.insert.await('INSERT INTO `properties_decorations` (property_id, model, coords, rotation, stash_slot, tint) VALUES (?, ?, ?, ?, ?, ?)', {propertyId, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint})
 
         property.id = propertyId
@@ -1191,8 +1208,8 @@ RegisterNetEvent('qbx_properties:server:placeItemDecoration', function(item, slo
     local storedRotation = anchor and vec3(rotation.x, rotation.y, (rotation.z - anchor.w) % 360.0) or rotation
 
     local id = anchor
-        and MySQL.insert.await('INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, item, item_metadata) VALUES (?, ?, ?, ?, ?, ?)',
-            {property.owner, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta})
+        and MySQL.insert.await('INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, item, item_metadata, layout) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            {property.owner, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta, GetBuildingLayout(property.building)})
         or MySQL.insert.await('INSERT INTO properties_decorations (property_id, model, coords, rotation, item, item_metadata) VALUES (?, ?, ?, ?, ?, ?)',
             {propertyId, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta})
     if not id then return end

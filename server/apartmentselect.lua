@@ -32,6 +32,27 @@ local function selectBuildingUnit(playerSource, player, buildingKey)
     return true
 end
 
+lib.callback.register('qbx_properties:callback:getApartmentChoices', function()
+    local options = GetApartmentOptions()
+    local taken = {}
+    local rows = MySQL.query.await('SELECT building, COUNT(*) AS n FROM properties WHERE building IS NOT NULL AND owner IS NOT NULL GROUP BY building') or {}
+    for i = 1, #rows do taken[rows[i].building] = rows[i].n end
+
+    local result = {}
+    for i = 1, #options do
+        local option = options[i]
+        local building = option.building and Buildings[option.building]
+        local capacity = building and building.floors.count * #building.rooms or 0
+
+        if not option.building or (taken[option.building] or 0) < capacity then
+            option.index = i
+            result[#result + 1] = option
+        end
+    end
+
+    return result
+end)
+
 RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentIndex)
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)

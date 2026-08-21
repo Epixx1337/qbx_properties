@@ -132,6 +132,37 @@ RegisterNetEvent('qbx_properties:server:releaseUnit', function(propertyId)
     exports.qbx_core:Notify(playerSource, string.format('%s is now free.', property.property_name), 'success')
 end)
 
+---@param citizenId string
+---@param buildingKey string
+local function seedLayoutFurniture(citizenId, buildingKey)
+    local layout = GetBuildingLayout(buildingKey)
+    if not layout then return end
+
+    if MySQL.scalar.await('SELECT 1 FROM properties_apartment_decorations WHERE citizenid = ? AND layout = ? LIMIT 1', {citizenId, layout}) then return end
+
+    local defaults = MySQL.query.await('SELECT model, coords, rotation, tint FROM properties_layout_defaults WHERE layout = ?', {layout})
+    if not defaults or #defaults == 0 then return end
+
+    local specs = GetFurnitureSpecs()
+    local taken = {}
+    local used = MySQL.query.await('SELECT stash_slot FROM properties_apartment_decorations WHERE citizenid = ? AND stash_slot IS NOT NULL', {citizenId}) or {}
+    for i = 1, #used do taken[used[i].stash_slot] = true end
+
+    for i = 1, #defaults do
+        local entry = defaults[i]
+        local stashSlot = nil
+
+        if (specs[entry.model] or {}).type == 'stash' then
+            stashSlot = 1
+            while taken[stashSlot] do stashSlot += 1 end
+            taken[stashSlot] = true
+        end
+
+        MySQL.insert.await('INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, tint, stash_slot, layout) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            {citizenId, entry.model, entry.coords, entry.rotation, entry.tint, stashSlot, layout})
+    end
+end
+
 ---@param player table
 ---@param buildingKey string
 ---@return integer? propertyId
@@ -148,6 +179,7 @@ function AssignRoom(player, buildingKey)
 
     if free then
         if MySQL.update.await('UPDATE properties SET owner = ? WHERE id = ? AND owner IS NULL', {citizenId, free.id}) == 1 then
+            seedLayoutFurniture(citizenId, buildingKey)
             return free.id
         end
         return AssignRoom(player, buildingKey)
@@ -159,6 +191,7 @@ function AssignRoom(player, buildingKey)
             if not taken[floor * 1000 + room] then
                 local id = CreateUnit(buildingKey, floor, room, 0, nil)
                 if id and MySQL.update.await('UPDATE properties SET owner = ? WHERE id = ? AND owner IS NULL', {citizenId, id}) == 1 then
+                    seedLayoutFurniture(citizenId, buildingKey)
                     return id
                 end
             end
@@ -352,7 +385,17 @@ RegisterNetEvent('qbx_properties:server:moveIn', function(buildingKey)
     if type(buildingKey) ~= 'string' or not Buildings[buildingKey] then return end
 
     local building = Buildings[buildingKey]
+    if building.resource and GetResourceState(building.resource) ~= 'started' then return end
     if #(GetEntityCoords(GetPlayerPed(playerSource)) - building.entrance) > 30.0 then return end
+
+    if not sharedConfig.freeApartmentMoves then
+        local currentKey = player.PlayerData.metadata.apartmentBuilding
+        if currentKey and currentKey ~= buildingKey then
+            claiming[playerSource] = nil
+            exports.qbx_core:Notify(playerSource, 'You already have a home. Moving between buildings is disabled.', 'error')
+            return
+        end
+    end
 
     claiming[playerSource] = true
 
@@ -436,4 +479,116 @@ lib.callback.register('qbx_properties:callback:getUnitProperty', function(_, bui
     if type(buildingKey) ~= 'string' or not Buildings[buildingKey] or not floor or not room then return end
 
     return MySQL.scalar.await('SELECT id FROM properties WHERE building = ? AND floor = ? AND room = ?', {buildingKey, floor, room})
+end)
+
+RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
+    if sharedConfig.migrationOffer == false then return end
+
+    local playerSource = source --[[@as number]]
+    local player = exports.qbx_core:GetPlayer(playerSource)
+    if not player or player.PlayerData.metadata.apartmentMigration then return end
+
+    local currentKey = player.PlayerData.metadata.apartmentBuilding
+    if not currentKey then
+        local row = MySQL.single.await('SELECT building FROM properties WHERE owner = ? AND building IS NOT NULL LIMIT 1', {player.PlayerData.citizenid})
+        currentKey = row and row.building
+    end
+    if not currentKey then return end
+
+    local taken = {}
+    local rows = MySQL.query.await('SELECT building, COUNT(*) AS n FROM properties WHERE building IS NOT NULL AND owner IS NOT NULL GROUP BY building') or {}
+    for i = 1, #rows do taken[rows[i].building] = rows[i].n end
+
+    local options = {}
+    for key, building in pairs(Buildings) do
+        if building.type == 'mlo' and key ~= currentKey
+            and (not building.resource or GetResourceState(building.resource) == 'started')
+            and (taken[key] or 0) < building.floors.count * #building.rooms then
+            options[#options + 1] = { key = key, label = building.label, description = building.description }
+        end
+    end
+    if #options == 0 then return end
+
+    table.sort(options, function(a, b) return a.label < b.label end)
+
+    local currentBuilding = Buildings[currentKey]
+    local currentLabel = currentBuilding and currentBuilding.label or currentKey
+
+    SetTimeout(10000, function()
+        TriggerClientEvent('qbx_properties:client:offerMigration', playerSource, options, currentLabel)
+    end)
+end)
+
+RegisterNetEvent('qbx_properties:server:chooseMigration', function(buildingKey)
+    if sharedConfig.migrationOffer == false then return end
+
+    local playerSource = source --[[@as number]]
+    local player = exports.qbx_core:GetPlayer(playerSource)
+    if not player or player.PlayerData.metadata.apartmentMigration then return end
+
+    if buildingKey == 'stay' then
+        player.Functions.SetMetaData('apartmentMigration', 'stayed')
+        return
+    end
+
+    if type(buildingKey) ~= 'string' or not Buildings[buildingKey] then return end
+
+    local building = Buildings[buildingKey]
+    if building.type ~= 'mlo' then return end
+    if building.resource and GetResourceState(building.resource) ~= 'started' then return end
+
+    local currentKey = player.PlayerData.metadata.apartmentBuilding
+    if not currentKey then
+        local row = MySQL.single.await('SELECT building FROM properties WHERE owner = ? AND building IS NOT NULL LIMIT 1', {player.PlayerData.citizenid})
+        currentKey = row and row.building
+    end
+    if not currentKey or currentKey == buildingKey then return end
+
+    ReleaseRooms(player.PlayerData.citizenid)
+    player.Functions.SetMetaData('apartmentBuilding', buildingKey)
+
+    local id = AssignRoom(player, buildingKey)
+    if not id then
+        player.Functions.SetMetaData('apartmentBuilding', currentKey)
+        if Buildings[currentKey] then AssignRoom(player, currentKey) end
+        exports.qbx_core:Notify(playerSource, 'That building is full.', 'error')
+        return
+    end
+
+    player.Functions.SetMetaData('apartmentMigration', buildingKey)
+    exports.qbx_core:Notify(playerSource, ('You now live in %s. Take the elevator to find your new room.'):format(building.label), 'success')
+    lib.logger(playerSource, 'qbx_properties:server:chooseMigration', string.format('%s migrated to %s (room id %d)', player.PlayerData.citizenid, buildingKey, id))
+end)
+
+lib.addCommand('saveroom', {
+    help = 'Save the furniture in your current unit as the default loadout for its room layout',
+    restricted = 'group.admin',
+}, function(source)
+    local propertyId = GetPlayerEnteredProperty and GetPlayerEnteredProperty(source)
+    if not propertyId then
+        exports.qbx_core:Notify(source, 'Stand inside an apartment unit first.', 'error')
+        return
+    end
+
+    local property = MySQL.single.await('SELECT building, owner FROM properties WHERE id = ? AND building IS NOT NULL', {propertyId})
+    if not property or not property.owner then
+        exports.qbx_core:Notify(source, 'This is not an apartment unit.', 'error')
+        return
+    end
+
+    local layout = GetBuildingLayout(property.building)
+    local rows = MySQL.query.await('SELECT model, coords, rotation, tint FROM properties_apartment_decorations WHERE citizenid = ? AND layout = ? AND item IS NULL', {property.owner, layout})
+    if not rows or #rows == 0 then
+        exports.qbx_core:Notify(source, 'This unit has no furniture to save.', 'error')
+        return
+    end
+
+    MySQL.update.await('DELETE FROM properties_layout_defaults WHERE layout = ?', {layout})
+    for i = 1, #rows do
+        MySQL.insert.await('INSERT INTO properties_layout_defaults (layout, model, coords, rotation, tint) VALUES (?, ?, ?, ?, ?)',
+            {layout, rows[i].model, rows[i].coords, rows[i].rotation, rows[i].tint})
+    end
+
+    exports.qbx_core:Notify(source, ('Saved %d piece(s) as the default loadout for the %s layout.'):format(#rows, layout), 'success')
+    lib.logger(source, 'qbx_properties:server:saveroom', string.format('saved %d default piece(s) for layout %s', #rows, layout))
 end)
