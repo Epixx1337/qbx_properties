@@ -369,6 +369,7 @@ function SnapToWall()
     local min, max = GetModelDimensions(GetEntityModel(previewObject))
     local halfDepth = (max.y - min.y) / 2
     local halfWidth = (max.x - min.x) / 2
+    local center = GetOffsetFromEntityInWorldCoords(previewObject, (min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2)
 
     local probes = {
         { dir = forward, offset = halfDepth },
@@ -380,10 +381,17 @@ function SnapToWall()
     local best
     for i = 1, #probes do
         local dir = probes[i].dir
-        local handle = StartExpensiveSynchronousShapeTestLosProbe(coords.x, coords.y, coords.z, coords.x + dir.x * 6.0, coords.y + dir.y * 6.0, coords.z + dir.z * 6.0, 1 + 16, previewObject, 4)
-        local _, hit, endCoords = GetShapeTestResult(handle)
-        if hit == 1 then
-            local dist = #(endCoords - coords)
+        local handle = StartShapeTestLosProbe(center.x, center.y, center.z, center.x + dir.x * 6.0, center.y + dir.y * 6.0, center.z + dir.z * 6.0, 1 + 16, previewObject, 4)
+        local status, hit, endCoords = GetShapeTestResult(handle)
+        local tries = 0
+        while status == 1 and tries < 30 do
+            Wait(0)
+            tries += 1
+            status, hit, endCoords = GetShapeTestResult(handle)
+        end
+
+        if status == 2 and (hit == true or hit == 1) then
+            local dist = #(endCoords - center)
             if not best or dist < best.dist then
                 best = { dist = dist, dir = dir, offset = probes[i].offset, endCoords = endCoords }
             end
