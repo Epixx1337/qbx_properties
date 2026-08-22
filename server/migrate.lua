@@ -90,4 +90,36 @@ MySQL.ready(function()
     if added > 0 then
         lib.print.info(('migrated the database, %d column(s) added'):format(added))
     end
+
+    local requiredTables = {
+        'properties',
+        'properties_decorations',
+        'properties_apartment_decorations',
+        'properties_apartment_keyholders',
+        'properties_layout_defaults',
+        'properties_utilities',
+        'properties_raids',
+    }
+
+    local missing = {}
+    for i = 1, #requiredTables do
+        local exists = MySQL.scalar.await('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', {requiredTables[i]})
+        if not exists then missing[#missing + 1] = requiredTables[i] end
+    end
+
+    for tableName, defs in pairs(columns) do
+        local rows = MySQL.query.await('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', {tableName}) or {}
+        local have = {}
+        for j = 1, #rows do have[rows[j].COLUMN_NAME] = true end
+
+        if #rows > 0 then
+            for column in pairs(defs) do
+                if not have[column] then missing[#missing + 1] = ('%s.%s'):format(tableName, column) end
+            end
+        end
+    end
+
+    if #missing > 0 then
+        lib.print.error(('the database schema is incomplete and things WILL misbehave: %s — check that the database user may CREATE and ALTER, or run the .sql files by hand'):format(table.concat(missing, ', ')))
+    end
 end)

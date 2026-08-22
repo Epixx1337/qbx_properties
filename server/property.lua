@@ -97,7 +97,11 @@ end
 ---@return table
 function GetPropertyDecorations(property)
     if property.building then
-        return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_apartment_decorations` WHERE `citizenid` = ? AND `layout` = ? ORDER BY `id`', {property.owner, GetBuildingLayout(property.building)})
+        local ok, rows = pcall(MySQL.query.await, 'SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_apartment_decorations` WHERE `citizenid` = ? AND `layout` = ? ORDER BY `id`', {property.owner, GetBuildingLayout(property.building)})
+        if ok and rows then return rows end
+
+        lib.print.error('properties_apartment_decorations is missing the layout column, run property_apartment_layouts.sql')
+        return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_apartment_decorations` WHERE `citizenid` = ? ORDER BY `id`', {property.owner}) or {}
     end
     return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata` FROM `properties_decorations` WHERE `property_id` = ? ORDER BY `id`', {property.id})
 end
@@ -976,9 +980,14 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
             metadata = movedMeta,
         })
     else
-        local id = anchor
-            and MySQL.insert.await('INSERT INTO `properties_apartment_decorations` (citizenid, model, coords, rotation, stash_slot, tint, layout) VALUES (?, ?, ?, ?, ?, ?, ?)', {property.owner, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint, GetBuildingLayout(property.building)})
-            or MySQL.insert.await('INSERT INTO `properties_decorations` (property_id, model, coords, rotation, stash_slot, tint) VALUES (?, ?, ?, ?, ?, ?)', {propertyId, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint})
+        local id
+        if anchor then
+            local ok, insertId = pcall(MySQL.insert.await, 'INSERT INTO `properties_apartment_decorations` (citizenid, model, coords, rotation, stash_slot, tint, layout) VALUES (?, ?, ?, ?, ?, ?, ?)', {property.owner, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint, GetBuildingLayout(property.building)})
+            id = ok and insertId
+                or MySQL.insert.await('INSERT INTO `properties_apartment_decorations` (citizenid, model, coords, rotation, stash_slot, tint) VALUES (?, ?, ?, ?, ?, ?)', {property.owner, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint})
+        else
+            id = MySQL.insert.await('INSERT INTO `properties_decorations` (property_id, model, coords, rotation, stash_slot, tint) VALUES (?, ?, ?, ?, ?, ?)', {propertyId, hash, json.encode(storedCoords), json.encode(storedRotation), stashSlot, tint})
+        end
 
         property.id = propertyId
         local stashIndex = interaction == 'stash'
@@ -1207,11 +1216,17 @@ RegisterNetEvent('qbx_properties:server:placeItemDecoration', function(item, slo
     local storedCoords = anchor and UnrotateOffset(anchor, coords) or coords
     local storedRotation = anchor and vec3(rotation.x, rotation.y, (rotation.z - anchor.w) % 360.0) or rotation
 
-    local id = anchor
-        and MySQL.insert.await('INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, item, item_metadata, layout) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    local id
+    if anchor then
+        local ok, insertId = pcall(MySQL.insert.await, 'INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, item, item_metadata, layout) VALUES (?, ?, ?, ?, ?, ?, ?)',
             {property.owner, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta, GetBuildingLayout(property.building)})
-        or MySQL.insert.await('INSERT INTO properties_decorations (property_id, model, coords, rotation, item, item_metadata) VALUES (?, ?, ?, ?, ?, ?)',
+        id = ok and insertId
+            or MySQL.insert.await('INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, item, item_metadata) VALUES (?, ?, ?, ?, ?, ?)',
+                {property.owner, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta})
+    else
+        id = MySQL.insert.await('INSERT INTO properties_decorations (property_id, model, coords, rotation, item, item_metadata) VALUES (?, ?, ?, ?, ?, ?)',
             {propertyId, model, json.encode(storedCoords), json.encode(storedRotation), item, encodedMeta})
+    end
     if not id then return end
 
     lib.triggerClientEvent('qbx_properties:client:addDecoration', insideProperty[propertyId], {

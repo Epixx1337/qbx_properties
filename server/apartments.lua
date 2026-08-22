@@ -135,31 +135,37 @@ end)
 ---@param citizenId string
 ---@param buildingKey string
 local function seedLayoutFurniture(citizenId, buildingKey)
-    local layout = GetBuildingLayout(buildingKey)
-    if not layout then return end
+    local ok, err = pcall(function()
+        local layout = GetBuildingLayout(buildingKey)
+        if not layout then return end
 
-    if MySQL.scalar.await('SELECT 1 FROM properties_apartment_decorations WHERE citizenid = ? AND layout = ? LIMIT 1', {citizenId, layout}) then return end
+        if MySQL.scalar.await('SELECT 1 FROM properties_apartment_decorations WHERE citizenid = ? AND layout = ? LIMIT 1', {citizenId, layout}) then return end
 
-    local defaults = MySQL.query.await('SELECT model, coords, rotation, tint FROM properties_layout_defaults WHERE layout = ?', {layout})
-    if not defaults or #defaults == 0 then return end
+        local defaults = MySQL.query.await('SELECT model, coords, rotation, tint FROM properties_layout_defaults WHERE layout = ?', {layout})
+        if not defaults or #defaults == 0 then return end
 
-    local specs = GetFurnitureSpecs()
-    local taken = {}
-    local used = MySQL.query.await('SELECT stash_slot FROM properties_apartment_decorations WHERE citizenid = ? AND stash_slot IS NOT NULL', {citizenId}) or {}
-    for i = 1, #used do taken[used[i].stash_slot] = true end
+        local specs = GetFurnitureSpecs()
+        local taken = {}
+        local used = MySQL.query.await('SELECT stash_slot FROM properties_apartment_decorations WHERE citizenid = ? AND stash_slot IS NOT NULL', {citizenId}) or {}
+        for i = 1, #used do taken[used[i].stash_slot] = true end
 
-    for i = 1, #defaults do
-        local entry = defaults[i]
-        local stashSlot = nil
+        for i = 1, #defaults do
+            local entry = defaults[i]
+            local stashSlot = nil
 
-        if (specs[entry.model] or {}).type == 'stash' then
-            stashSlot = 1
-            while taken[stashSlot] do stashSlot += 1 end
-            taken[stashSlot] = true
+            if (specs[entry.model] or {}).type == 'stash' then
+                stashSlot = 1
+                while taken[stashSlot] do stashSlot += 1 end
+                taken[stashSlot] = true
+            end
+
+            MySQL.insert.await('INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, tint, stash_slot, layout) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                {citizenId, entry.model, entry.coords, entry.rotation, entry.tint, stashSlot, layout})
         end
+    end)
 
-        MySQL.insert.await('INSERT INTO properties_apartment_decorations (citizenid, model, coords, rotation, tint, stash_slot, layout) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            {citizenId, entry.model, entry.coords, entry.rotation, entry.tint, stashSlot, layout})
+    if not ok then
+        lib.print.error(('could not seed default furniture: %s'):format(err))
     end
 end
 
