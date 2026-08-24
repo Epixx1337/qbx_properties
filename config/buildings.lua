@@ -305,8 +305,9 @@ return {
             decorateDist = 6.0,
             doors = {
                 {
-                    coords = vec3(4.308, -1.069, -0.421),
-                    model = 3735113502,
+                    coords = vec3(4.454, -1.707, -0.399),
+                    model = 1474746819,
+                    headingOffset = 90.0,
                 },
             },
         },

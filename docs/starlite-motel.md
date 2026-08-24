@@ -12,6 +12,22 @@ The [Starlite Motel](https://github.com/Zydrec/zydrec-starlitemotel) is a free M
 
 The motel only has staircases, so the entry sets `stairsOnly = true` and skips every elevator field (`lobbyElevators`, `elevator`, `garageElevator`). Any building can do this — the elevator fields have always been optional, the flag just makes the intent explicit, keeps the MLO Apartments Creator from dropping it on re-save, and switches the move-in message to point tenants at the stairs.
 
+## Room doors
+
+The swinging room door is **not** the MLO's base child entity (`3735113502` — that one is a static filler piece). The real door (`1474746819`, hinge at the frame corner) lives inside the interior's **entity sets** — every room variant set places it at the same interior-local spot — so the shipped config targets that:
+
+```lua
+doors = {
+    {
+        coords = vec3(4.454, -1.707, -0.399),
+        model = 1474746819,
+        headingOffset = 90.0,
+    },
+},
+```
+
+No map edits are needed. If a door ever registers on the wrong entity, the quickest diagnostic is to create a door on it through ox_doorlock's own UI and compare the stored `model`/`coords` with the programmatic record.
+
 ## Receptionist
 
 The shipped `entrance`/`receptionist` coordinates are a courtyard placeholder. Stand where the desk should be and update both vec4s in `config/buildings.lua` — the motel office by the parking lot is the natural spot.

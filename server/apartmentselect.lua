@@ -8,7 +8,8 @@ function ClearApartmentLock(playerSource)
     selecting[playerSource] = nil
 end
 
-local apartmentOptions = GetApartmentOptions()
+-- resolved per call: building entries only exist once their map resource is started,
+-- and the picker's indexes are built against the runtime list
 
 ---@param playerSource integer
 ---@param player table
@@ -59,8 +60,11 @@ RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentInde
     if not player or selecting[playerSource] then return end
     apartmentIndex = ToId(apartmentIndex)
 
-    local option = apartmentIndex and apartmentOptions[apartmentIndex]
-    if not option then return end
+    local option = apartmentIndex and GetApartmentOptions()[apartmentIndex]
+    if not option then
+        TriggerClientEvent('qbx_properties:client:finishSpawn', playerSource)
+        return
+    end
 
     selecting[playerSource] = true
 
@@ -73,10 +77,12 @@ RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentInde
     end
 
     if option.building then
-        if Buildings[option.building] then
-            selectBuildingUnit(playerSource, player, option.building)
-        end
+        local assigned = Buildings[option.building] and selectBuildingUnit(playerSource, player, option.building)
         selecting[playerSource] = nil
+        if not assigned then
+            TriggerClientEvent('qbx_properties:client:finishSpawn', playerSource)
+            return
+        end
         Wait(200)
         TriggerClientEvent('qb-clothes:client:CreateFirstCharacter', playerSource)
         return
