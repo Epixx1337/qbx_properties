@@ -2,9 +2,7 @@
   "name": "qbx_properties",
   "private": true,
   "dependencies": {
-    "@citizenfx/server": "^2.0.8903-1",
-    "pngjs": "^7.0.0",
-    "webp-converter": "^2.3.3"
+    "@citizenfx/server": "^2.0.8903-1"
   },
   "overrides": {
     "@babel/runtime": "^7.26.10",

@@ -87,7 +87,8 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 ## Features
 
 **Properties**
-- Pooled IPL apartments (Del Perro, Integrity Way, Richard Majestic, Tinsel Towers) plus multi-unit apartment buildings with per-floor rooms, doorbells and shared parking garages — the Wiwang Hotel and the four Prodigy towers ship preconfigured, see [docs/prp-apartments.md](docs/prp-apartments.md)
+- Pooled IPL apartments (Del Perro, Integrity Way, Richard Majestic, Tinsel Towers) plus multi-unit apartment buildings with per-floor rooms, doorbells and shared parking garages — the Wiwang Hotel, the four Prodigy towers ([docs/prp-apartments.md](docs/prp-apartments.md)) and the Starlite Motel ([docs/starlite-motel.md](docs/starlite-motel.md)) ship preconfigured
+- Garages register with qbx_garages by default or bridge to jg-advancedgarages, cd_garage or okokGarage through one config option — see [docs/garage-systems.md](docs/garage-systems.md)
 - Tenants can relocate between buildings, gated by config: free moves at the reception, plus a one-time migration offer on login whenever new buildings open with free rooms
 - Admins can furnish a unit and run `/saveroom` to save it as the default loadout for that room layout — every fresh tenant starts with those pieces already placed and fully editable
 - Standalone properties using interior shells, IPL interiors or real MLO houses
@@ -113,6 +114,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 **Economy**
 - Market with direct sales and auctions (configurable durations, anti-snipe)
+- The market UI can be embedded in laptop and tablet resources (fd_laptops and similar), with `/housing` optionally disabled — see [docs/third-party-ui.md](docs/third-party-ui.md)
 - Rent cycles and utility billing with power usage and humidity per property size
 - Optional society/government accounts for proceeds and bills
 
@@ -258,6 +260,7 @@ With the key left empty, the Take photo button reports that uploads are not conf
 | `config/crime.lua` | robbery and raid rules, alarm sound |
 | `config/dispatch.lua` | hooks to send alerts to whatever dispatch the server runs |
 | `config/buildings.lua` | multi-unit apartment building layouts (written by the MLO Apartments Creator) |
+| `config/garages.lua` | adapters for third-party garage systems |
 | `config/shell_defaults.lua` | interaction points for the bundled shells |
 
 Options worth knowing about:
@@ -265,8 +268,12 @@ Options worth knowing about:
 - `realtorJobs` / `realtorRequiresDuty` (shared) — which jobs and grades get the realtor tabs, and whether they must be on duty.
 - `logoutEnabled` (shared) — beds and logout points let players switch character; `false` hides them everywhere.
 - `furnitureShop` (shared) — `false` ignores all furniture prices, so everything places instantly for free and the cart never appears.
+- `furnitureImageSource` (shared) — `'cdn'` lazy-loads the furniture catalog thumbnails from uploaded CDN copies instead of resource files, see "Regenerating catalog images".
 - `freeApartmentMoves` (shared) — `false` locks tenants to their apartment building; the reception refuses switching.
 - `migrationOffer` (shared) — `false` disables the one-time relocation offer shown on login when other buildings have free rooms.
+- `housingCommand` (shared) — `false` removes the `/housing` command; the UI stays reachable through the `openHousing` export or an embedded app, see [docs/third-party-ui.md](docs/third-party-ui.md).
+- `garageSystem` (shared) — `'qbx'` uses qbx_garages; other values bridge property and apartment garages to third-party garage scripts, see [docs/garage-systems.md](docs/garage-systems.md).
+- `stairsOnly` (buildings) — marks an apartment building without elevators, like the Starlite Motel: elevator fields are skipped and move-in messages point at the stairs.
 - `targetInteractions` (shared) — MLO furniture uses ox_target labels instead of floating interaction points.
 - `propertySizes` (shared) — each size sets the power allowance (W) and the monthly utility cost; realtors pick the size on creation.
 - `utilities` (shared) — billing period, grace period, and the humidity model (base level, effect per kilowatt, comfort threshold).
@@ -289,12 +296,16 @@ While decorating: `E` toggles between the catalog and the world, **hold `F` to f
 
 ## Regenerating catalog images
 
-The furniture catalog images in `screenshots/` are generated with a dev tool that is disabled by default. To regenerate them after adding furniture:
+The furniture catalog images in `screenshots/` are shot in game by the admin-only `/screenshotfurniture` command (requires the screencapture resource to be running — nothing to uncomment, nothing to install):
 
-1. Uncomment `'server/decorating.js'` in `fxmanifest.lua`
-2. Uncomment the `/screenshotfurniture` command block at the bottom of `client/decorating.lua`
-3. Run `bun i` in the resource root and make sure the screencapture resource is running
-4. Restart the resource and run `/screenshotfurniture` in game — it spawns a green screen, photographs every catalog entry and writes cropped transparent `.webp` files to `screenshots/`
-5. Comment both blocks back out when you are done
+- `/screenshotfurniture` photographs every catalog entry that has no image yet, so interrupted runs resume where they stopped; `/screenshotfurniture overwrite` reshoots everything, `/screenshotfurniture manual` starts paused with full control per shot.
+- Each item is captured twice against two backdrop colors and a difference matte solves the exact per-pixel alpha — transparent parts, glass and green furniture come out clean. The image is cropped, encoded to webp in the NUI and saved to `screenshots/`, no external image tooling involved.
+- The studio panel (top right) can pause a batch at any time: navigate items with ◀ ▶, drag ←→ to rotate the piece, drag ↑↓ to raise or lower the camera, scroll to zoom, nudge the FOV, and swap the backdrop color for pieces that blend into it. **Shoot** reshoots the current item with the current framing, **Save framing** persists it to `screenshots/_tuning.json` so every future batch uses it — it overrides the `screenshotRotation`/`screenshotFov`/`screenshotCameraOffset` catalog fields, which still work as before.
 
-Per-item camera tweaks (`screenshotRotation`, `screenshotFov`, `screenshotCameraOffset`) can be set on entries in the furniture catalog.
+### Serving the images from a CDN
+
+`screenshots/` normally streams to every client with the resource. To serve the thumbnails over HTTP instead:
+
+1. Configure `imageUpload` in `config/server.lua` (the same provider used for property photos). `autoUpload = true` uploads every shot as it is saved, or run `/screenshotfurniture upload` to push everything missing (`uploadall` re-uploads all) — the file → URL mapping is kept in `screenshots/_cdn.json`.
+2. Set `furnitureImageSource = 'cdn'` in `config/shared.lua`. The catalog lazy-loads thumbnails from the CDN — only what is on screen is fetched — and any image without an uploaded copy falls back to the local file, so a partial upload never breaks the UI.
+3. Once everything is uploaded, the `screenshots/*.webp` entry can be removed from `files {}` in `fxmanifest.lua` so clients stop downloading the images entirely.

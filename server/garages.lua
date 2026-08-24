@@ -1,5 +1,37 @@
 local sharedConfig = require 'config.shared'
 
+UsesCustomGarages = sharedConfig.garageSystem ~= nil and sharedConfig.garageSystem ~= 'qbx'
+
+local customGarages = {}
+
+---@param key string
+---@param garage { name: string, label: string, coords: vector4?, spots: vector4[]?, blip: table?, canAccess: fun(source: integer): boolean }
+function RegisterCustomGarage(key, garage)
+    customGarages[key] = garage
+    TriggerClientEvent('qbx_properties:client:refreshGarages', -1)
+end
+
+function RefreshCustomGarages()
+    if not UsesCustomGarages then return end
+    TriggerClientEvent('qbx_properties:client:refreshGarages', -1)
+end
+
+lib.callback.register('qbx_properties:callback:getGarages', function(source)
+    local result = {}
+    for _, garage in pairs(customGarages) do
+        if garage.canAccess(source) then
+            result[#result + 1] = {
+                name = garage.name,
+                label = garage.label,
+                coords = garage.coords,
+                spots = garage.spots,
+                blip = garage.blip,
+            }
+        end
+    end
+    return result
+end)
+
 local garages = sharedConfig.apartmentGarages
 
 if not garages or #garages == 0 then return end
@@ -44,6 +76,14 @@ CreateThread(function()
 
         if not query then
             lib.print.warn(('apartment garage %s lists no interiors or buildings, skipping'):format(garage.name))
+        elseif UsesCustomGarages then
+            RegisterCustomGarage(garage.name, {
+                name = garage.name,
+                label = garage.label,
+                spots = garage.spots,
+                blip = sharedConfig.apartmentGarageBlip,
+                canAccess = residentCheck(query, values),
+            })
         else
             local accessPoints = {}
             for j = 1, #garage.spots do

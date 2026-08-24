@@ -4,11 +4,13 @@ local market = sharedConfig.market
 
 local pendingAgentBids = {}
 
-lib.addCommand('housing', {
-    help = 'Open the housing market',
-}, function(source)
-    TriggerClientEvent('qbx_properties:client:openHousing', source)
-end)
+if sharedConfig.housingCommand ~= false then
+    lib.addCommand('housing', {
+        help = 'Open the housing market',
+    }, function(source)
+        TriggerClientEvent('qbx_properties:client:openHousing', source)
+    end)
+end
 
 ---@param citizenId string
 ---@param amount integer

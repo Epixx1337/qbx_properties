@@ -1,6 +1,8 @@
 const RESOURCE = 'qbx_properties'
 
-export const isBrowser = !window.invokeNative
+// embedded frames (third-party apps loading this UI in an iframe) have no invokeNative but still live inside NUI
+export const isEmbedded = new URLSearchParams(window.location.search).has('app')
+export const isBrowser = !window.invokeNative && !isEmbedded
 
 export async function fetchNui(name, data = {}) {
   if (isBrowser) return null
@@ -19,16 +21,35 @@ export async function fetchNui(name, data = {}) {
 }
 
 const handlers = new Map()
+const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('qbx_properties_ui') : null
 
 export function onMessage(action, handler) {
   handlers.set(action, handler)
 }
 
-window.addEventListener('message', (event) => {
-  const { action, data } = event.data ?? {}
+function dispatch(action, data) {
   const handler = handlers.get(action)
   if (handler) handler(data)
+}
+
+window.addEventListener('message', (event) => {
+  const { action, data, embedded } = event.data ?? {}
+  if (!action) return
+
+  if (embedded) {
+    channel?.postMessage({ action, data })
+    return
+  }
+
+  if (!isEmbedded) dispatch(action, data)
 })
+
+if (channel && isEmbedded) {
+  channel.onmessage = (event) => {
+    const { action, data } = event.data ?? {}
+    if (action) dispatch(action, data)
+  }
+}
 
 export function formatMoney(value) {
   return `$${Number(value ?? 0).toLocaleString('en-US')}`

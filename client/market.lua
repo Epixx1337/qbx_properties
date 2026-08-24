@@ -1,7 +1,9 @@
 local sharedConfig = require 'config.shared'
 
 local function pushListings()
-    SendUI('market:listings', lib.callback.await('qbx_properties:callback:getListings', false))
+    local listings = lib.callback.await('qbx_properties:callback:getListings', false)
+    SendUI('market:listings', listings)
+    SendUIEmbedded('market:listings', listings)
 end
 
 RegisterNUICallback('market:refresh', function(_, cb)
@@ -44,7 +46,9 @@ end)
 RegisterNUICallback('market:getBids', function(data, cb)
     cb(1)
     if type(data) ~= 'table' then return end
-    SendUI('market:bids', lib.callback.await('qbx_properties:callback:getListingBids', false, data.listingId))
+    local bids = lib.callback.await('qbx_properties:callback:getListingBids', false, data.listingId)
+    SendUI('market:bids', bids)
+    SendUIEmbedded('market:bids', bids)
 end)
 
 RegisterNUICallback('market:getNearbyClients', function(_, cb)
@@ -89,4 +93,18 @@ end)
 
 RegisterNetEvent('qbx_properties:client:openHousing', function()
     OpenHousing()
+end)
+
+exports('openHousing', OpenHousing)
+
+RegisterNUICallback('housing:embed', function(_, cb)
+    cb(1)
+    OpenUIEmbedded('housing')
+    SendUIEmbedded('market:init', {
+        listings = lib.callback.await('qbx_properties:callback:getListings', false),
+        config = sharedConfig.market,
+        sizes = sharedConfig.propertySizes,
+        sizeOrder = sharedConfig.propertySizeOrder,
+        gardens = sharedConfig.gardens.enabled,
+    })
 end)

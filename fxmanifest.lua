@@ -4,7 +4,7 @@ game 'gta5'
 name 'qbx_properties'
 description 'Hopefully one day a feature rich property system'
 repository 'https://github.com/Qbox-project/qbx_properties'
-version '0.0.4'
+version '0.0.5'
 
 ox_lib 'locale'
 
@@ -31,6 +31,7 @@ client_scripts {
     'client/interiors.lua',
     'client/shells.lua',
     'client/market.lua',
+    'client/garages.lua',
     'client/placement.lua',
     'client/preview.lua',
     'client/creation.lua',
@@ -42,6 +43,7 @@ client_scripts {
     'client/tablet.lua',
     'client/creator.lua',
     'client/items.lua',
+    'client/screenshot.lua',
 }
 
 server_scripts {
@@ -65,12 +67,14 @@ server_scripts {
     'server/wallcolor.lua',
     'server/utilities.lua',
     'server/creator.lua',
-    -- 'server/decorating.js', -- dev tool for /screenshotfurniture, see the readme
+    'server/screenshot.lua',
+    'server/screenshot.js',
 }
 
 files {
     'config/client.lua',
     'config/shared.lua',
+    'config/garages.lua',
     'config/dispatch.lua',
     'config/crime.lua',
     'config/shell_defaults.lua',

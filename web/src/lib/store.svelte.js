@@ -4,9 +4,26 @@ export const app = $state({
   isRealtor: false,
 })
 
+export const shot = $state({
+  active: false,
+  index: 0,
+  total: 0,
+  label: '',
+  object: '',
+  paused: false,
+  primary: 'green',
+  done: 0,
+  skipped: 0,
+  failed: 0,
+  empty: 0,
+  hasImage: false,
+  tuned: false,
+})
+
 export const furniture = $state({
   categories: {},
   category: null,
+  cdnMap: null,
   search: '',
   selected: null,
   placing: false,

@@ -38,6 +38,7 @@ local function serialise(buildings)
         if building.resource then lines[#lines + 1] = string.format('        resource = %s,', quote(building.resource)) end
         if building.layout then lines[#lines + 1] = string.format('        layout = %s,', quote(building.layout)) end
         if building.perRoomInterior then lines[#lines + 1] = '        perRoomInterior = true,' end
+        if building.stairsOnly then lines[#lines + 1] = '        stairsOnly = true,' end
         lines[#lines + 1] = string.format('        entrance = %s,', fmtVec3(building.entrance))
 
         if building.lobbyElevators and #building.lobbyElevators > 0 then

@@ -19,6 +19,16 @@
   import { fetchNui } from '../nui.js'
   import { furniture } from '../store.svelte.js'
 
+  const imgSrc = (name) => furniture.cdnMap?.[`${name}.webp`] ?? `nui://qbx_properties/screenshots/${name}.webp`
+
+  const PLACEHOLDER = `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g fill="none" stroke="#8b8b95" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"><path d="M19 33v-11a7 7 0 0 1 7-7h12a7 7 0 0 1 7 7v11"/><path d="M12 33a5 5 0 0 1 5 5v3h30v-3a5 5 0 0 1 10 0v7a6 6 0 0 1-6 6H13a6 6 0 0 1-6-6v-7a5 5 0 0 1 5-5z"/><path d="M17 51v5M47 51v5"/></g></svg>`
+  )}`
+
+  const onImgError = (event) => {
+    if (event.currentTarget.src !== PLACEHOLDER) event.currentTarget.src = PLACEHOLDER
+  }
+
   let mode = $state('catalog')
   let placedSearch = $state('')
 
@@ -99,7 +109,7 @@
         {#each items as item (item.object)}
           <button class="card" onclick={() => place(item)}>
             <div class="thumb">
-              <img src={`nui://qbx_properties/screenshots/${item.object}.webp`} alt={item.label} loading="lazy" />
+              <img src={imgSrc(item.object)} alt={item.label} loading="lazy" onerror={onImgError} />
               {#if item.price && furniture.shopEnabled}
                 {#if isFirstFree(item)}
                   <span class="price-tag free">Free · then ${item.price.toLocaleString()}</span>
@@ -122,7 +132,7 @@
       <div class="placed scroll">
         {#each placedItems as item (item.id)}
           <div class="placed-row" class:active={furniture.selected?.objectId === item.id}>
-            <img src={item.image ?? `nui://qbx_properties/screenshots/${item.model}.webp`} alt={item.label} loading="lazy" />
+            <img src={item.image ?? imgSrc(item.model)} alt={item.label} loading="lazy" onerror={onImgError} />
             <span class="placed-label">{item.label}</span>
             <button class="mini" title="Edit this piece" onclick={() => fetchNui('furniture:select', { id: item.id })}>Edit</button>
             <button class="mini accent" title="Duplicate in place" onclick={() => fetchNui('furniture:clone', { id: item.id })}>Clone</button>

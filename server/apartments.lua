@@ -562,7 +562,7 @@ RegisterNetEvent('qbx_properties:server:chooseMigration', function(buildingKey)
     end
 
     player.Functions.SetMetaData('apartmentMigration', buildingKey)
-    exports.qbx_core:Notify(playerSource, ('You now live in %s. Take the elevator to find your new room.'):format(building.label), 'success')
+    exports.qbx_core:Notify(playerSource, ('You now live in %s. Take the %s to find your new room.'):format(building.label, building.stairsOnly and 'stairs' or 'elevator'), 'success')
     lib.logger(playerSource, 'qbx_properties:server:chooseMigration', string.format('%s migrated to %s (room id %d)', player.PlayerData.citizenid, buildingKey, id))
 end)
 

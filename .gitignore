@@ -6,3 +6,5 @@ node_modules/
 yarn.lock
 
 web/node_modules/
+
+screenshots/_cdn.json

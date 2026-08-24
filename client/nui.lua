@@ -45,6 +45,18 @@ function OpenUI(view)
     SetUIFocus(true)
 end
 
+---@param action string
+---@param data any
+function SendUIEmbedded(action, data)
+    SendNUIMessage({ action = action, data = data, embedded = true })
+end
+
+---@param view string
+function OpenUIEmbedded(view)
+    SendUIEmbedded('theme', { color = GetConvar('ox:primaryColor', 'blue'), shade = GetConvarInt('ox:primaryShade', 8) })
+    SendUIEmbedded('setView', { view = view, isRealtor = false })
+end
+
 function CloseUI()
     currentView = nil
     focused = false

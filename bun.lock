@@ -1,0 +1,19 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "qbx_properties",
+      "dependencies": {
+        "@citizenfx/server": "^2.0.8903-1",
+      },
+    },
+  },
+  "overrides": {
+    "@babel/runtime": "^7.26.10",
+    "uuid": "^11.1.1",
+  },
+  "packages": {
+    "@citizenfx/server": ["@citizenfx/server@2.0.8903-1", "", {}, "sha512-08COhAwTkhNgoBbpdZ694ZAO2ffFswIUPXFuico5CusFqVdS48RC3i90iCYf+BW2Ew/b/vlvMq0Q7AotALKOIg=="],
+  }
+}

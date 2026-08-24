@@ -1,8 +1,9 @@
 <script>
   import './lib/theme.css'
   import { applyTheme } from './lib/mantine.js'
-  import { onMessage, fetchNui } from './lib/nui.js'
-  import { app, furniture, market, realtor, creator, tablet, placement, preview, creation, creationFormDefaults } from './lib/store.svelte.js'
+  import { onMessage, fetchNui, isEmbedded } from './lib/nui.js'
+  import { app, furniture, market, realtor, creator, tablet, placement, preview, creation, creationFormDefaults, shot } from './lib/store.svelte.js'
+  import ShotStudio from './lib/screenshot/ShotStudio.svelte'
   import FurnitureApp from './lib/furniture/FurnitureApp.svelte'
   import HousingApp from './lib/HousingApp.svelte'
   import TabletApp from './lib/tablet/TabletApp.svelte'
@@ -14,16 +15,62 @@
     if (data?.isRealtor !== undefined) app.isRealtor = data.isRealtor
   })
 
+  if (isEmbedded) {
+    fetchNui('housing:embed')
+  }
+
   onMessage('furniture:init', (data) => {
     furniture.categories = data.categories ?? {}
     furniture.category = Object.keys(furniture.categories)[0] ?? null
     furniture.propertyName = data.propertyName ?? ''
     furniture.palette = data.palette ?? []
     furniture.shopEnabled = data.shopEnabled ?? true
+    furniture.cdnMap = data.cdnMap ?? null
     furniture.selected = null
     furniture.placing = false
     furniture.search = ''
     furniture.placed = []
+  })
+
+  onMessage('shotstudio:open', (data) => {
+    shot.active = true
+    shot.total = data?.total ?? 0
+    shot.index = 0
+    shot.done = 0
+    shot.skipped = 0
+    shot.failed = 0
+    shot.empty = 0
+    shot.primary = 'green'
+  })
+
+  onMessage('shotstudio:progress', (data) => {
+    shot.index = data?.index ?? shot.index
+    shot.total = data?.total ?? shot.total
+    shot.label = data?.label ?? ''
+    shot.object = data?.object ?? ''
+    shot.paused = data?.paused ?? false
+    shot.primary = data?.primary ?? 'green'
+    shot.done = data?.done ?? 0
+    shot.skipped = data?.skipped ?? 0
+    shot.failed = data?.failed ?? 0
+    shot.empty = data?.empty ?? 0
+    shot.hasImage = data?.hasImage ?? false
+    shot.tuned = data?.tuned ?? false
+  })
+
+  onMessage('shotstudio:close', () => {
+    shot.active = false
+  })
+
+  onMessage('screenshot:process', async (data) => {
+    let result
+    try {
+      const { processPair } = await import('./lib/screenshot/processor.js')
+      result = await processPair(data.uri1, data.uri2, data.opaque)
+    } catch (err) {
+      result = { ok: false, error: String(err) }
+    }
+    fetchNui('screenshot:processed', { id: data.id, result })
   })
 
   onMessage('furniture:placed', (data) => {
@@ -206,6 +253,10 @@
 
 {#if placement.active}
   <PlacementHud />
+{/if}
+
+{#if shot.active}
+  <ShotStudio />
 {/if}
 
 {#if app.view === 'furniture'}

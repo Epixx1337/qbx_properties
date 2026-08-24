@@ -1,7 +1,9 @@
 local sharedConfig = require 'config.shared'
+local clientConfig = require 'config.client'
 
 local previewShell
 local previewInterior
+local previewCullModels
 local returnCoords
 local previewPoints = {}
 local editingProperty = nil
@@ -153,6 +155,18 @@ function StartShellPreview(interior, returnTo)
         end
     end
 
+    previewCullModels = clientConfig.exteriorHashs[tostring(interior)]
+    if previewCullModels then
+        CreateThread(function()
+            while previewCullModels do
+                for i = 1, #previewCullModels do
+                    EnableExteriorCullModelThisFrame(previewCullModels[i])
+                end
+                Wait(0)
+            end
+        end)
+    end
+
     local players = GetActivePlayers()
     for i = 1, #players do
         if players[i] ~= cache.playerId then NetworkConcealPlayer(players[i], true, false) end
@@ -166,6 +180,7 @@ end
 function StopShellPreview()
     if not previewInterior then return end
 
+    previewCullModels = nil
     if previewShell and DoesEntityExist(previewShell) then DeleteEntity(previewShell) end
     if returnCoords then
         SetEntityCoords(cache.ped, returnCoords.x, returnCoords.y, returnCoords.z, false, false, false, false)

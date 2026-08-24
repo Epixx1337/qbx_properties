@@ -343,7 +343,6 @@ function ClonePlacedDecoration(id)
     PushDecoratingState()
 end
 
-
 ---@return number
 function DecorationAtCursor()
     local _, _, endCoords = lib.raycast.fromCamera(1 + 16, 4, 30.0)
@@ -688,6 +687,7 @@ function ToggleDecorating()
             propertyName = CurrentPropertyName or '',
             palette = sharedConfig.wallColors.enabled and sharedConfig.wallColors.palette or {},
             shopEnabled = sharedConfig.furnitureShop ~= false,
+            cdnMap = GetFurnitureCdnMap(),
         })
         PushPlacedDecorations()
         PushDecoratingState()
@@ -883,67 +883,6 @@ RegisterNUICallback('furniture:remove', function(_, cb)
     cb(1)
     RemoveSelectedDecoration()
 end)
-
--- dev tool that regenerates the catalog images, see the readme before enabling
---[[
-RegisterCommand('screenshotfurniture', function()
-    local modelHash = GetHashKey('prop_ld_greenscreen_01')
-    lib.requestModel(modelHash, 60000)
-    local greenScreen = CreateObject(modelHash, -1894.99, -3357.08, 145.35, false, false, false)
-    SetModelAsNoLongerNeeded(modelHash)
-    FreezeEntityPosition(greenScreen, true)
-    CreateThread(function()
-        while DoesEntityExist(greenScreen) do
-            local forward, right, upVector, position = GetEntityMatrix(greenScreen)
-            SetEntityMatrix(greenScreen, forward.x, 20.0, forward.z, 20.0, right.y, right.z, upVector.x, upVector.y, 20.0, position.x, position.y, position.z)
-            Wait(0)
-        end
-    end)
-    DisableIdleCamera(true)
-    local cam = CreateCam('DEFAULT_SCRIPTED_CAMERA', true)
-    RenderScriptCams(true, false, 0, false, false)
-    for _, v in pairs(config.furniture) do
-        for i = 1, #v do
-            modelHash = GetHashKey(v[i].object)
-            if not IsModelValid(modelHash) then
-                lib.print.warn(("skipping invalid furniture model '%s'"):format(v[i].object))
-                goto continue
-            end
-            lib.requestModel(modelHash, 60000)
-            local object = CreateObjectNoOffset(modelHash, -1899.83, -3340.52, 150.24, false, false, false)
-            SetModelAsNoLongerNeeded(modelHash)
-            FreezeEntityPosition(object, true)
-
-            local spin = v[i].screenshotRotation
-            if spin then SetEntityRotation(object, spin.x, spin.y, spin.z, 2, false) end
-            local minDimension, maxDimension = GetModelDimensions(modelHash)
-            local modelSize = maxDimension - minDimension
-            local fov = v[i].screenshotFov or math.min(math.max(modelSize.x, modelSize.y) / 0.35 * 10, 60)
-            local objectCoords = GetEntityCoords(object)
-            local objectForward = -GetEntityForwardVector(object) * 2
-            local center = vector3(objectCoords.x + (minDimension.x + maxDimension.x) / 2, objectCoords.y + (minDimension.y + maxDimension.y) / 2, objectCoords.z + (minDimension.z + maxDimension.z) / 2)
-            local camOffset = v[i].screenshotCameraOffset
-            local cameraPosition
-            if camOffset then
-                cameraPosition = center + camOffset
-            else
-                cameraPosition = center + objectForward * 2 + vector3(1.5, -1, 1.5 * modelSize.z)
-            end
-            SetCamFov(cam, fov)
-            SetCamCoord(cam, cameraPosition.x, cameraPosition.y, cameraPosition.z)
-            PointCamAtCoord(cam, center.x, center.y, center.z)
-            TriggerServerEvent('screenshotFurniture', v[i].object)
-            Wait(1000)
-            DeleteEntity(object)
-            ::continue::
-        end
-    end
-    DestroyCam(cam, false)
-    RenderScriptCams(false, false, 0, false, false)
-    DisableIdleCamera(false)
-    DeleteEntity(greenScreen)
-end)
---]]
 
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= cache.resource then return end

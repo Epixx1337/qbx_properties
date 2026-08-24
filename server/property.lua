@@ -391,6 +391,28 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     SetTimeout(60000, function() spawning[playerSource] = nil end)
 end)
 
+RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
+    if GetResourceState('qbx_spawn') == 'started' then return end
+
+    local playerSource = source --[[@as number]]
+    local player = exports.qbx_core:GetPlayer(playerSource)
+    if not player then return end
+
+    local propertyId = ToId(player.PlayerData.metadata.currentPropertyId)
+    if not propertyId then return end
+
+    if not hasAccess(player.PlayerData.citizenid, propertyId) then
+        player.Functions.SetMetaData('currentPropertyId', nil)
+        return
+    end
+
+    SetTimeout(2000, function()
+        if enteredProperty[playerSource] then return end
+        if not exports.qbx_core:GetPlayer(playerSource) then return end
+        EnterProperty(playerSource, propertyId, true)
+    end)
+end)
+
 RegisterNetEvent('qbx_properties:server:enterProperty', function(data)
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)
@@ -580,6 +602,7 @@ RegisterNetEvent('qbx_properties:server:addKeyholder', function(keyholderCid)
         MySQL.update.await('UPDATE properties SET keyholders = ? WHERE id = ?', {json.encode(keyholders), propertyId})
     end
 
+    RefreshCustomGarages()
     exports.qbx_core:Notify(playerSource, keyholder.PlayerData.charinfo.firstname.. locale('notify.keyholder'))
     exports.qbx_core:Notify(keyholder.PlayerData.source, locale('notify.added_as_keyholder'))
 
@@ -609,6 +632,8 @@ RegisterNetEvent('qbx_properties:server:removeKeyholder', function(keyholderCid)
         end
         MySQL.update.await('UPDATE properties SET keyholders = ? WHERE id = ?', {json.encode(keyholders), propertyId})
     end
+
+    RefreshCustomGarages()
     local keyholder = exports.qbx_core:GetOfflinePlayer(keyholderCid)
     if keyholder then
         exports.qbx_core:Notify(playerSource, keyholder.PlayerData.charinfo.firstname.. locale('notify.removed_as_keyholder'))
@@ -701,6 +726,20 @@ end)
 
 local function registerGarage(propertyId, name, garage)
     local garageName = 'property_' .. string.gsub(string.lower(name), ' ', '_')
+
+    if UsesCustomGarages then
+        RegisterCustomGarage('property_' .. propertyId, {
+            name = garageName,
+            label = name,
+            coords = vec4(garage.x, garage.y, garage.z, garage.w),
+            canAccess = function(source)
+                local player = exports.qbx_core:GetPlayer(source)
+                return player ~= nil and hasAccess(player.PlayerData.citizenid, propertyId, 'garage')
+            end
+        })
+        return
+    end
+
     exports.qbx_garages:RegisterGarage(garageName, {
         label = name,
         vehicleType = 'car',
@@ -736,6 +775,8 @@ local function evictProperty(propertyId)
     for _ = 1, #occupants do
         exitProperty(occupants[1])
     end
+
+    RefreshCustomGarages()
 end
 
 local function startRentThread(propertyId)

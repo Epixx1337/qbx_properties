@@ -17,13 +17,14 @@
         "price": "Preço",
         "price_description": "O preço de compra ou o preço deduzido para o aluguer",
         "rent_interval": "Intervalo de Aluguer",
-        "rent_interval_description": "O intervalo em que o aluguer será deduzido em horas (torna a propriedade alugável em vez de comprável)"
+        "rent_interval_description": "O intervalo em que o aluguer será deduzido em horas (torna a propriedade alugável em vez de comprável)",
+        "add_garage": "Adicionar Garagem"
     },
     "menu": {
         "add_keyholder": "Adicionar Portador de Chave",
         "people_inside": "Pessoas Dentro",
         "keyholders": "Portadores de Chave",
-        "doorbell_ringers": "Toque de Campainha",
+        "doorbell_ringers": "Toques de Campainha",
         "manage_keys": "Gerir Chaves",
         "doorbell": "Campainha",
         "manage_property": "Gerir Propriedade",
@@ -32,7 +33,9 @@
         "properties": "Propriedades",
         "retrieve_properties": "Recuperar Propriedades Possuídas",
         "show_owned_properties": "Mostrar apenas propriedades que possuís",
-        "interior_preview": "Pré-visualização de Interior"
+        "interior_preview": "Pré-visualização de Interior",
+        "start_decorating": "Começar a Decorar",
+        "decorating_categories": "Categorias"
     },
     "instructButtons": {
         "up": "Cima",
@@ -40,10 +43,10 @@
         "submit": "Submeter"
     },
     "keyMappings": {
-        "gizmo_translation": "Sets mode to translation",
-        "gizmo_rotation": "Sets mode to rotation",
-        "gizmo_select": "Selects currently highlighted",
-        "gizmo_local": "Sets gizmo local to the entity"
+        "gizmo_translation": "Muda o modo para translação",
+        "gizmo_rotation": "Muda o modo para rotação",
+        "gizmo_select": "Seleciona o item destacado",
+        "gizmo_local": "Muda o gizmo para os eixos locais da entidade"
     },
     "drawtext": {
         "stash": "[E] - Esconderijo",
@@ -51,5 +54,19 @@
         "clothing": "[E] - Roupas | [G] - Equipamentos",
         "logout": "[E] - Terminar Sessão",
         "view_property": "[E] - Ver Propriedade"
+    },
+    "logs": {
+        "create_property": "A tentar criar uma propriedade.",
+        "property_created": "Propriedade %s criada com sucesso.",
+        "enter_property": "O jogador %s entrou na propriedade %s.",
+        "exit_property": "O jogador %s saiu da propriedade id %s.",
+        "apartment_selected": "O jogador %s selecionou o apartamento %s %s.",
+        "added_keyholder": "%s adicionado como portador de chave da propriedade %s.",
+        "removed_keyholder": "%s removido como portador de chave da propriedade %s.",
+        "rent_property": "O jogador %s alugou a propriedade %s.",
+        "buy_property": "O jogador %s comprou a propriedade %s.",
+        "stop_renting": "O jogador %s deixou de alugar a propriedade %s.",
+        "add_decoration": "O jogador %s adicionou a decoração %s à propriedade %s.",
+        "remove_decoration": "O jogador %s removeu a decoração %s da propriedade %s."
     }
 }

@@ -1,119 +1,36 @@
 return {
+    -- Shell streaming
     shellUndergroundOffset = 50.0,
+    shellStreamDistance = 60.0,
 
+    -- Realtors
     realtorJobs = { -- job name mapped to the minimum grade level allowed to manage properties
         realestate = 0,
     },
     realtorRequiresDuty = true,
-
-    dynamicApartments = true,
-    freeApartmentMoves = true, -- reception lets tenants switch buildings, false locks them to their current home
-    migrationOffer = true, -- one-time login offer to relocate when other buildings have free rooms
-    logoutEnabled = true, -- beds and logout points let players switch character, false hides them everywhere
-    shellStreamDistance = 60.0,
-    targetInteractions = true, -- MLO furniture uses ox_target labels instead of floating interaction points
-    freecamRange = 10.0, -- how far the decorating freecam may drift from the player
-    nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
-    furnitureShop = true, -- false ignores furniture prices, everything places instantly for free
-
-    market = {
-        minPrice = 1000,
-        maxPrice = 100000000,
-        minIncrement = 1000,
-        auctionHours = 72,
-        maxAuctionHours = 72,
-        auctionDurations = { 24, 48, 72 },
-        antiSnipeMinutes = 5,
-        agentBidRange = 6.0,
-        anonymousBids = true,
-        sellRange = 5.0,
-    },
-
-    gardens = {
-        enabled = true,
-        furnitureLimit = 40,
-        streamDistance = 80.0,
-        maxPoints = 20,
-        height = 2.0, -- maximum build height inside the zone
-    },
-
-    propertySizes = {
-        small = { label = 'Small', power = 5000, cost = 750 },
-        medium = { label = 'Medium', power = 10000, cost = 1500 },
-        large = { label = 'Large', power = 20000, cost = 3000 },
-        mansion = { label = 'Mansion', power = 40000, cost = 6000 },
-    },
-    propertySizeOrder = { 'small', 'medium', 'large', 'mansion' },
-    defaultPropertySize = 'medium',
-
-    utilities = {
-        enabled = true,
-        billingDays = 30,
-        gracePeriodDays = 3,
-
-        apartment = {
-            power = 4000,
-            cost = 0,
-        },
-
-        humidity = {
-            base = 40,
-            perKilowatt = 0.004,
-            max = 100,
-            comfortable = 60,
-        },
-    },
-
     commission = {
         sale = 0.05,
         rent = 0.10,
     },
 
+    -- Interaction & UI
+    housingCommand = true, -- false removes /housing, open it through the openHousing export or an embedded app instead
+    logoutEnabled = true, -- beds and logout points let players switch character, false hides them everywhere
+    targetInteractions = true, -- MLO furniture uses ox_target labels instead of floating interaction points
+    freecamRange = 10.0, -- how far the decorating freecam may drift from the player
+    nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
+    furnitureShop = true, -- false ignores furniture prices, everything places instantly for free
+    furnitureImageSource = 'local', -- 'cdn' lazy-loads catalog thumbnails from the uploaded copies, run /screenshotfurniture upload first
 
-    wallColors = {
-        enabled = true,
-        entitySet = 'wall_tint',
-        probeLength = 50.0, -- keeps taller interiors loaded when high up inside them
-        palette = {
-            { index = 0, label = 'White', hex = 'F1F1F1' },
-            { index = 1, label = 'Light Beige', hex = 'DFD7CD' },
-            { index = 2, label = 'Dark Beige', hex = 'E1BE8E' },
-            { index = 3, label = 'Orange', hex = 'EBAB69' },
-            { index = 4, label = 'Baby Blue', hex = '7E9AB1' },
-            { index = 5, label = 'Satin Blue', hex = '736DD2' },
-            { index = 6, label = 'Navy Blue', hex = '38356E' },
-            { index = 7, label = 'Maroon Red', hex = 'A85E53' },
-            { index = 8, label = 'Red', hex = 'F13B59' },
-            { index = 9, label = 'Burgundy Red', hex = '8E4D58' },
-            { index = 10, label = 'Earthy Green', hex = '96A08A' },
-            { index = 11, label = 'Dull Green', hex = '646F69' },
-            { index = 12, label = 'Purple', hex = '473C5B' },
-            { index = 13, label = 'Light Pink', hex = 'D5A6DE' },
-            { index = 14, label = 'Grey', hex = '6B6A6C' },
-            { index = 15, label = 'Dark Grey', hex = '343435' },
-            { index = 16, label = 'Light Blue', hex = 'C1CDE0' },
-            { index = 17, label = 'Dark Green', hex = '023020' },
-            { index = 18, label = 'Aqua Blue', hex = '4FEDE5' },
-            { index = 19, label = 'Blue', hex = '62C1E5' },
-            { index = 20, label = 'Geraldine Red', hex = 'FF7B7B' },
-            { index = 21, label = 'Black', hex = '000000' },
-            { index = 22, label = 'Yellow', hex = 'FFEE8C' },
-            { index = 23, label = 'Light Grey', hex = 'C0C0C0' },
-            { index = 24, label = 'Forest Green', hex = '012D21' },
-            { index = 25, label = 'Pink', hex = 'E190B7' },
-            { index = 26, label = 'Lime Green', hex = 'A2E783' },
-            { index = 27, label = 'Green', hex = '49862E' },
-            { index = 28, label = 'Deep Red', hex = '5E0606' },
-            { index = 29, label = 'Brown', hex = '653E21' },
-            { index = 30, label = 'Tea Green', hex = 'D5F3C6' },
-            { index = 31, label = 'Light Purple', hex = 'AE4BFF' },
-        },
-    },
+    -- Apartments
+    dynamicApartments = true,
+    freeApartmentMoves = true, -- reception lets tenants switch buildings, false locks them to their current home
+    migrationOffer = true, -- one-time login offer to relocate when other buildings have free rooms
 
-
+    -- Garages
+    garageSystem = 'qbx', -- 'qbx' registers with qbx_garages, any other value must match an adapter in config/garages.lua
     apartmentGarageBlip = { sprite = 357, color = 3 },
     apartmentGarageUseRadius = 1.5, -- each bay doubles as the menu and the park point; keep under half the tightest bay spacing (3.41m at Wiwang)
-
     apartmentGarages = { -- one garage per complex, every bay is an access point so tenants never queue for the same spot
         -- `name` is stored on every parked vehicle, never change it or those vehicles become unreachable
         {
@@ -200,6 +117,99 @@ return {
                 vec4(-841.8, -764.24, 20.67, 268.53),
                 vec4(-841.0, -760.44, 21.07, 269.47),
             },
+        },
+    },
+
+    -- Market
+    market = {
+        minPrice = 1000,
+        maxPrice = 100000000,
+        minIncrement = 1000,
+        auctionHours = 72,
+        maxAuctionHours = 72,
+        auctionDurations = { 24, 48, 72 },
+        antiSnipeMinutes = 5,
+        agentBidRange = 6.0,
+        anonymousBids = true,
+        sellRange = 5.0,
+    },
+
+    -- Gardens
+    gardens = {
+        enabled = true,
+        furnitureLimit = 40,
+        streamDistance = 80.0,
+        maxPoints = 20,
+        height = 2.0, -- maximum build height inside the zone
+    },
+
+    -- Property sizes
+    propertySizes = {
+        small = { label = 'Small', power = 5000, cost = 750 },
+        medium = { label = 'Medium', power = 10000, cost = 1500 },
+        large = { label = 'Large', power = 20000, cost = 3000 },
+        mansion = { label = 'Mansion', power = 40000, cost = 6000 },
+    },
+    propertySizeOrder = { 'small', 'medium', 'large', 'mansion' },
+    defaultPropertySize = 'medium',
+
+    -- Utilities
+    utilities = {
+        enabled = true,
+        billingDays = 30,
+        gracePeriodDays = 3,
+
+        apartment = {
+            power = 4000,
+            cost = 0,
+        },
+
+        humidity = {
+            base = 40,
+            perKilowatt = 0.004,
+            max = 100,
+            comfortable = 60,
+        },
+    },
+
+    -- Wall colors
+    wallColors = {
+        enabled = true,
+        entitySet = 'wall_tint',
+        probeLength = 50.0, -- keeps taller interiors loaded when high up inside them
+        palette = {
+            { index = 0, label = 'White', hex = 'F1F1F1' },
+            { index = 1, label = 'Light Beige', hex = 'DFD7CD' },
+            { index = 2, label = 'Dark Beige', hex = 'E1BE8E' },
+            { index = 3, label = 'Orange', hex = 'EBAB69' },
+            { index = 4, label = 'Baby Blue', hex = '7E9AB1' },
+            { index = 5, label = 'Satin Blue', hex = '736DD2' },
+            { index = 6, label = 'Navy Blue', hex = '38356E' },
+            { index = 7, label = 'Maroon Red', hex = 'A85E53' },
+            { index = 8, label = 'Red', hex = 'F13B59' },
+            { index = 9, label = 'Burgundy Red', hex = '8E4D58' },
+            { index = 10, label = 'Earthy Green', hex = '96A08A' },
+            { index = 11, label = 'Dull Green', hex = '646F69' },
+            { index = 12, label = 'Purple', hex = '473C5B' },
+            { index = 13, label = 'Light Pink', hex = 'D5A6DE' },
+            { index = 14, label = 'Grey', hex = '6B6A6C' },
+            { index = 15, label = 'Dark Grey', hex = '343435' },
+            { index = 16, label = 'Light Blue', hex = 'C1CDE0' },
+            { index = 17, label = 'Dark Green', hex = '023020' },
+            { index = 18, label = 'Aqua Blue', hex = '4FEDE5' },
+            { index = 19, label = 'Blue', hex = '62C1E5' },
+            { index = 20, label = 'Geraldine Red', hex = 'FF7B7B' },
+            { index = 21, label = 'Black', hex = '000000' },
+            { index = 22, label = 'Yellow', hex = 'FFEE8C' },
+            { index = 23, label = 'Light Grey', hex = 'C0C0C0' },
+            { index = 24, label = 'Forest Green', hex = '012D21' },
+            { index = 25, label = 'Pink', hex = 'E190B7' },
+            { index = 26, label = 'Lime Green', hex = 'A2E783' },
+            { index = 27, label = 'Green', hex = '49862E' },
+            { index = 28, label = 'Deep Red', hex = '5E0606' },
+            { index = 29, label = 'Brown', hex = '653E21' },
+            { index = 30, label = 'Tea Green', hex = 'D5F3C6' },
+            { index = 31, label = 'Light Purple', hex = 'AE4BFF' },
         },
     },
 }
