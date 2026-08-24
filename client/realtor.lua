@@ -57,6 +57,15 @@ RegisterNUICallback('realtor:repossess', function(data, cb)
     SendUI('realtor:properties', RealtorProperties())
 end)
 
+RegisterNUICallback('realtor:deleteProperty', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    TriggerServerEvent('qbx_properties:server:deleteProperty', data.propertyId)
+    Wait(400)
+    SendUI('realtor:properties', RealtorProperties())
+end)
+
 RegisterNUICallback('realtor:releaseUnit', function(data, cb)
     cb(1)
     if type(data) ~= 'table' then return end

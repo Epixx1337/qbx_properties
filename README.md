@@ -89,6 +89,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 **Properties**
 - Pooled IPL apartments (Del Perro, Integrity Way, Richard Majestic, Tinsel Towers) plus multi-unit apartment buildings with per-floor rooms, doorbells and shared parking garages — the Wiwang Hotel, the four Prodigy towers ([docs/prp-apartments.md](docs/prp-apartments.md)) and the Starlite Motel ([docs/starlite-motel.md](docs/starlite-motel.md)) ship preconfigured
 - Garages register with qbx_garages by default or bridge to jg-advancedgarages, cd_garage or okokGarage through one config option — see [docs/garage-systems.md](docs/garage-systems.md)
+- Phone home apps hook in through secured exports (list homes, waypoint, lock doors, manage keys) — drop-in lb-phone files and an sd-phone adapter ship in [docs/phone-integrations.md](docs/phone-integrations.md)
 - Tenants can relocate between buildings, gated by config: free moves at the reception, plus a one-time migration offer on login whenever new buildings open with free rooms
 - Admins can furnish a unit and run `/saveroom` to save it as the default loadout for that room layout — every fresh tenant starts with those pieces already placed and fully editable
 - Standalone properties using interior shells, IPL interiors or real MLO houses

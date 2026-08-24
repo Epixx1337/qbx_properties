@@ -10,13 +10,21 @@
   let editRentInterval = $state(24)
   let editDescription = $state('')
   let lightboxIndex = $state(null)
+  let deleteArmed = $state(false)
 
   const details = $derived(realtor.details && selected && realtor.details.id === selected.id ? realtor.details : null)
 
   function select(property) {
     selected = property
     realtor.details = null
+    deleteArmed = false
     fetchNui('realtor:details', { propertyId: property.id })
+  }
+
+  function deleteProperty() {
+    fetchNui('realtor:deleteProperty', { propertyId: selected.id })
+    selected = null
+    deleteArmed = false
   }
 
   $effect(() => {
@@ -347,6 +355,19 @@
         {/if}
 
         <button class="btn wide push" disabled={!valid} onclick={createListing}>Create listing</button>
+      {/if}
+
+      {#if !selected.building}
+        <div class="section-title">Danger zone</div>
+        {#if deleteArmed}
+          <button class="btn danger wide" onclick={deleteProperty}>Confirm — permanently delete</button>
+          <div class="hint">Removes the property, its furniture, stashes, photos and doors for good. Garaged vehicles go to the impound.</div>
+        {:else}
+          <button class="btn danger wide" disabled={selected.listed} onclick={() => (deleteArmed = true)}>Delete property</button>
+          {#if selected.listed}
+            <div class="hint">Cancel the active listing before deleting.</div>
+          {/if}
+        {/if}
       {/if}
     {/if}
   </div>

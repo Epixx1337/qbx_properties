@@ -555,3 +555,12 @@ RegisterNetEvent('qbx_properties:client:addProperty', function(propertyCoords)
     if lib.table.contains(properties, propertyCoords) then return end
     properties[#properties + 1] = propertyCoords
 end)
+
+RegisterNetEvent('qbx_properties:client:removeProperty', function(propertyCoords)
+    for i = 1, #properties do
+        if #(properties[i] - propertyCoords) < 0.05 then
+            table.remove(properties, i)
+            break
+        end
+    end
+end)

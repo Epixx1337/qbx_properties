@@ -1364,6 +1364,60 @@ RegisterNetEvent('qbx_properties:server:pickupDecoration', function(objectId)
     lib.logger(playerSource, 'qbx_properties:server:pickupDecoration', locale('logs.remove_decoration', player.PlayerData.citizenid, objectId, propertyId or gardenId))
 end)
 
+RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
+    local playerSource = source --[[@as number]]
+    local player = exports.qbx_core:GetPlayer(playerSource)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId or not IsRealtor(player.PlayerData.job) then return end
+
+    local property = MySQL.single.await('SELECT id, owner, property_name, coords, images FROM properties WHERE id = ? AND building IS NULL', {propertyId})
+    if not property then return end
+
+    local listed = MySQL.scalar.await("SELECT 1 FROM properties_listings WHERE property_id = ? AND status IN ('active', 'finalizing')", {propertyId})
+    if listed then
+        exports.qbx_core:Notify(playerSource, 'Cancel the active listing before deleting this property.', 'error')
+        return
+    end
+
+    evictProperty(propertyId)
+
+    local owner = property.owner and exports.qbx_core:GetPlayerByCitizenId(property.owner)
+    if owner then
+        owner.Functions.SetMetaData('currentPropertyId', nil)
+        exports.qbx_core:Notify(owner.PlayerData.source, string.format('%s has been demolished.', property.property_name), 'error')
+    end
+
+    local slots = MySQL.query.await('SELECT stash_slot FROM properties_decorations WHERE property_id = ? AND stash_slot IS NOT NULL', {propertyId}) or {}
+    pcall(function() exports.ox_inventory:ClearInventory(GetStashId(property)) end)
+    for i = 1, #slots do
+        pcall(function() exports.ox_inventory:ClearInventory(GetStashId(property, slots[i].stash_slot)) end)
+    end
+
+    pcall(function() exports.ox_doorlock:removeDoorByName(string.format('qbx_properties:%d:', propertyId)) end)
+
+    if property.images and DeletePropertyImagesRemote then
+        local ok, images = pcall(json.decode, property.images)
+        if ok and type(images) == 'table' then DeletePropertyImagesRemote(images) end
+    end
+
+    local garageName = 'property_' .. string.gsub(string.lower(property.property_name), ' ', '_')
+    pcall(MySQL.update.await, 'UPDATE player_vehicles SET state = 2 WHERE garage = ?', {garageName})
+
+    pcall(MySQL.update.await, 'DELETE FROM properties_access WHERE property_id = ?', {propertyId})
+    pcall(MySQL.update.await, 'DELETE FROM properties_raids WHERE property_id = ?', {propertyId})
+    MySQL.update.await('DELETE FROM properties WHERE id = ?', {propertyId})
+
+    local coords = json.decode(property.coords)
+    TriggerClientEvent('qbx_properties:client:removeProperty', -1, vec3(coords.x, coords.y, coords.z))
+    TriggerClientEvent('qbx_properties:client:removeShell', -1, propertyId)
+    TriggerClientEvent('qbx_properties:client:removeGarden', -1, propertyId)
+    TriggerClientEvent('qbx_properties:client:invalidateUnitAccess', -1)
+    TriggerClientEvent('qbx_properties:client:refreshBlips', -1)
+
+    lib.logger(playerSource, 'qbx_properties:server:deleteProperty', string.format('%s deleted property %s (id %d)', player.PlayerData.citizenid, property.property_name, propertyId))
+    exports.qbx_core:Notify(playerSource, string.format('%s deleted.', property.property_name), 'success')
+end)
+
 exports('removeItemDecoration', function(decorationId)
     decorationId = ToId(decorationId)
     if not decorationId then return false end

@@ -539,6 +539,21 @@ lib.callback.register('qbx_properties:callback:removePropertyImage', function(so
     return true
 end)
 
+---@param images table decoded images column
+function DeletePropertyImagesRemote(images)
+    local provider = imageProvider()
+    if not provider or not provider.deleteUrl then return end
+
+    for i = 1, #images do
+        local image = images[i]
+        if type(image) == 'table' and image.path then
+            PerformHttpRequest(provider.deleteUrl:format(urlEncode(image.path)), function(status)
+                if status ~= 200 then lib.print.warn(('CDN delete returned %s for %s'):format(status, image.path)) end
+            end, 'DELETE', '', { Authorization = config.imageUpload.apiKey })
+        end
+    end
+end
+
 lib.callback.register('qbx_properties:callback:recaptureInterior', function(source, propertyId, point)
     local player = exports.qbx_core:GetPlayer(source)
     propertyId = ToId(propertyId)
