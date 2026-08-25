@@ -277,6 +277,7 @@ Options worth knowing about:
 - `garageSystem` (shared) — `'qbx'` uses qbx_garages; other values bridge property and apartment garages to third-party garage scripts, see [docs/garage-systems.md](docs/garage-systems.md).
 - `stairsOnly` (buildings) — marks an apartment building without elevators, like the Starlite Motel: elevator fields are skipped and move-in messages point at the stairs.
 - `targetInteractions` (shared) — MLO furniture uses ox_target labels instead of floating interaction points.
+- `targetShellInteractions` (shared) — `true` replaces the floating drawtext on shell and IPL interaction points (stash, exit, clothing, logout) with ox_target zones.
 - `propertySizes` (shared) — each size sets the power allowance (W) and the monthly utility cost; realtors pick the size on creation.
 - `utilities` (shared) — billing period, grace period, and the humidity model (base level, effect per kilowatt, comfort threshold).
 - `commission` (shared) — the cut of sales and rent paid to the realtor who created the property.

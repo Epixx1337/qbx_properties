@@ -17,6 +17,7 @@ return {
     housingCommand = true, -- false removes /housing, open it through the openHousing export or an embedded app instead
     logoutEnabled = true, -- beds and logout points let players switch character, false hides them everywhere
     targetInteractions = true, -- MLO furniture uses ox_target labels instead of floating interaction points
+    targetShellInteractions = false, -- shell and IPL interaction points (stash, exit, clothing, logout) use ox_target instead of drawtext
     freecamRange = 10.0, -- how far the decorating freecam may drift from the player
     nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
     furnitureShop = true, -- false ignores furniture prices, everything places instantly for free

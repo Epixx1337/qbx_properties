@@ -183,21 +183,55 @@ local function prepareManageMenu()
     lib.showContext('qbx_properties_manageMenu')
 end
 
+local function canUseStash()
+    return PropertyAccess.stash or (IsPropertyBreached and IsPropertyBreached(CurrentPropertyId)) or false
+end
+
+local function openPropertyStash()
+    TriggerServerEvent('qbx_properties:server:openStash')
+end
+
+local function exitPropertyInteract()
+    DoScreenFadeOut(1000)
+    while not IsScreenFadedOut() do Wait(0) end
+    TriggerServerEvent('qbx_properties:server:exitProperty')
+end
+
+local function openClothingInteract()
+    exports['illenium-appearance']:startPlayerCustomization(function(appearance)
+        if appearance then
+            TriggerServerEvent("illenium-appearance:server:saveAppearance", appearance)
+        end
+    end, {
+        components = true, componentConfig = { masks = true, upperBody = true, lowerBody = true, bags = true, shoes = true, scarfAndChains = true, bodyArmor = true, shirts = true, decals = true, jackets = true },
+        props = true, propConfig = { hats = true, glasses = true, ear = true, watches = true, bracelets = true },
+        enableExit = true,
+    })
+end
+
+local function openOutfitsInteract()
+    TriggerEvent('illenium-appearance:client:openOutfitMenu')
+end
+
+local function logoutInteract()
+    DoScreenFadeOut(1000)
+    while not IsScreenFadedOut() do Wait(0) end
+    TriggerServerEvent('qbx_properties:server:logoutProperty')
+end
+
 local function checkInteractions()
     local interactOptions = {
         ['stash'] = function(coords)
-            if not PropertyAccess.stash and not (IsPropertyBreached and IsPropertyBreached(CurrentPropertyId)) then return end
+            if not canUseStash() then return end
             qbx.drawText3d({ coords = coords, text = locale('drawtext.stash') })
             if IsControlJustPressed(0, 38) then
-                TriggerServerEvent('qbx_properties:server:openStash')
+                openPropertyStash()
             end
         end,
         ['exit'] = function(coords)
             qbx.drawText3d({ coords = coords, text = locale('drawtext.exit') })
             if IsControlJustPressed(0, 38) then
-                DoScreenFadeOut(1000)
-                while not IsScreenFadedOut() do Wait(0) end
-                TriggerServerEvent('qbx_properties:server:exitProperty')
+                exitPropertyInteract()
             end
             if IsControlJustPressed(0, 47) then
                 prepareManageMenu()
@@ -206,27 +240,17 @@ local function checkInteractions()
         ['clothing'] = function(coords)
             qbx.drawText3d({ coords = coords, text = locale('drawtext.clothing') })
             if IsControlJustPressed(0, 38) then
-                exports['illenium-appearance']:startPlayerCustomization(function(appearance)
-                    if appearance then
-                        TriggerServerEvent("illenium-appearance:server:saveAppearance", appearance)
-                    end
-                end, {
-                    components = true, componentConfig = { masks = true, upperBody = true, lowerBody = true, bags = true, shoes = true, scarfAndChains = true, bodyArmor = true, shirts = true, decals = true, jackets = true },
-                    props = true, propConfig = { hats = true, glasses = true, ear = true, watches = true, bracelets = true },
-                    enableExit = true,
-                })
+                openClothingInteract()
             end
             if IsControlJustPressed(0, 47) then
-                TriggerEvent('illenium-appearance:client:openOutfitMenu')
+                openOutfitsInteract()
             end
         end,
         ['logout'] = function(coords)
             if not sharedConfig.logoutEnabled then return end
             qbx.drawText3d({ coords = coords, text = locale('drawtext.logout') })
             if IsControlJustPressed(0, 38) then
-                DoScreenFadeOut(1000)
-                while not IsScreenFadedOut() do Wait(0) end
-                TriggerServerEvent('qbx_properties:server:logoutProperty')
+                logoutInteract()
             end
         end,
     }
@@ -245,6 +269,91 @@ local function checkInteractions()
     end)
 end
 
+local interactionZones = {}
+
+local function clearInteractionTargets()
+    for i = 1, #interactionZones do
+        exports.ox_target:removeZone(interactionZones[i])
+    end
+    table.wipe(interactionZones)
+end
+
+local function notDecorating()
+    return not IsDecorating
+end
+
+local function createInteractionTargets()
+    clearInteractionTargets()
+
+    local targetOptions = {
+        ['stash'] = function()
+            return {
+                {
+                    label = 'Open stash',
+                    icon = 'fas fa-box-open',
+                    canInteract = function() return not IsDecorating and canUseStash() end,
+                    onSelect = openPropertyStash,
+                },
+            }
+        end,
+        ['exit'] = function()
+            return {
+                {
+                    label = 'Exit property',
+                    icon = 'fas fa-door-open',
+                    canInteract = notDecorating,
+                    onSelect = exitPropertyInteract,
+                },
+                {
+                    label = 'Manage property',
+                    icon = 'fas fa-list',
+                    canInteract = notDecorating,
+                    onSelect = prepareManageMenu,
+                },
+            }
+        end,
+        ['clothing'] = function()
+            return {
+                {
+                    label = 'Change clothing',
+                    icon = 'fas fa-shirt',
+                    canInteract = notDecorating,
+                    onSelect = openClothingInteract,
+                },
+                {
+                    label = 'Outfits',
+                    icon = 'fas fa-person-booth',
+                    canInteract = notDecorating,
+                    onSelect = openOutfitsInteract,
+                },
+            }
+        end,
+        ['logout'] = function()
+            if not sharedConfig.logoutEnabled then return end
+            return {
+                {
+                    label = 'Log out',
+                    icon = 'fas fa-bed',
+                    canInteract = notDecorating,
+                    onSelect = logoutInteract,
+                },
+            }
+        end,
+    }
+
+    for i = 1, #interactions do
+        local builder = targetOptions[interactions[i].type]
+        local options = builder and builder()
+        if options then
+            interactionZones[#interactionZones + 1] = exports.ox_target:addSphereZone({
+                coords = interactions[i].coords,
+                radius = 1.0,
+                options = options,
+            })
+        end
+    end
+end
+
 local function hideExterior(name)
     local models = clientConfig.exteriorHashs[name]
     if not models then return end
@@ -261,6 +370,7 @@ end
 RegisterNetEvent('qbx_properties:client:refreshInteractions', function(interactionsData)
     if not insideProperty then return end
     interactions = interactionsData
+    if sharedConfig.targetShellInteractions then createInteractionTargets() end
 end)
 
 RegisterNetEvent('qbx_properties:client:updateInteractions', function(interactionsData, interiorString, isRental, propertyId)
@@ -278,7 +388,11 @@ RegisterNetEvent('qbx_properties:client:updateInteractions', function(interactio
     interactions = interactionsData
     insideProperty = true
     isPropertyRental = isRental
-    checkInteractions()
+    if sharedConfig.targetShellInteractions then
+        createInteractionTargets()
+    else
+        checkInteractions()
+    end
     hideExterior(interiorString)
 
     if lib.callback.await('qbx_properties:callback:checkAccess', false) then
@@ -315,6 +429,7 @@ end)
 
 RegisterNetEvent('qbx_properties:client:unloadProperty', function()
     RemovePropertyRadial('qbx_properties_points')
+    clearInteractionTargets()
 
     DoScreenFadeIn(1000)
     if insideProperty then CurrentPropertyId = nil end
