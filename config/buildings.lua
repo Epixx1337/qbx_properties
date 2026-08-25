@@ -274,6 +274,7 @@ return {
         description = 'A budget motel in East Vinewood, rooms right off the walkway.',
         resource = 'zydrec-starlitemotel',
         layout = 'starlite',
+        wallEntitySet = 'wall_tint', -- needs the fork linked in docs/starlite-motel.md, remove on the original map
         perRoomInterior = true,
         stairsOnly = true,
         entrance = vec3(958.5, -205.5, 73.0),

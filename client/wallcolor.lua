@@ -32,6 +32,11 @@ function ApplyWallColor(interiorId, colorIndex, entitySet)
     colorIndex = colorIndex or DEFAULT_COLOR
 
     probeLength()
+    if applied[interiorId] and applied[interiorId][entitySet] == colorIndex
+        and IsInteriorEntitySetActive(interiorId, entitySet) then
+        return
+    end
+
     ActivateInteriorEntitySet(interiorId, entitySet)
     SetInteriorEntitySetColor(interiorId, entitySet, colorIndex)
     RefreshInterior(interiorId)

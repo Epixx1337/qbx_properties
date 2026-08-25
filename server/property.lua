@@ -224,7 +224,7 @@ function EnterProperty(playerSource, id, isSpawn, inPlace)
     end
 
     enteredProperty[playerSource] = id
-    enteredInPlace[playerSource] = inPlace or nil
+    enteredInPlace[playerSource] = (inPlace or property.building ~= nil) and true or nil
     insideProperty[id] = insideProperty[id] or {}
     insideProperty[id][#insideProperty[id] + 1] = playerSource
 

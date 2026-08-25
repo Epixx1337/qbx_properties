@@ -8,9 +8,6 @@ function ClearApartmentLock(playerSource)
     selecting[playerSource] = nil
 end
 
--- resolved per call: building entries only exist once their map resource is started,
--- and the picker's indexes are built against the runtime list
-
 ---@param playerSource integer
 ---@param player table
 ---@param buildingKey string

@@ -2,6 +2,8 @@
 
 The [Starlite Motel](https://github.com/Zydrec/zydrec-starlitemotel) is a free MLO in East Vinewood with 30 rentable rooms: 3 floors of 10 rooms each, connected by exterior walkways and staircases. Each room is its own small MLO interior, so the config marks the building `perRoomInterior = true` and unit detection works exactly like the Prodigy towers.
 
+Grab the map from [our fork](https://github.com/Epixx1337/zydrec-starlitemotel) rather than the original — it adds tintable walls (see Wall colors below) and is what the shipped config expects.
+
 ## Setup
 
 1. Drop the `zydrec-starlitemotel` resource on the server and `ensure` it before `qbx_properties`.
@@ -38,4 +40,6 @@ The building uses `layout = 'starlite'`, so `/saveroom` inside any motel room sa
 
 ## Wall colors
 
-Not supported here — the interior ships entity sets, but their names are hashed and could not be recovered, so `wallEntitySet` is omitted and the paint option simply does not show.
+We maintain [our own fork of the map](https://github.com/Epixx1337/zydrec-starlitemotel) that adds a tintable `wall_tint` entity set to every room — the same convention the Prodigy towers use — so tenants can repaint their walls from the housing tablet. Use the fork and the shipped `wallEntitySet = 'wall_tint'` on the `starlite` entry just works.
+
+The original Zydrec map only ships hashed, unnamed entity sets, so tinting is not possible with it — if you run the original instead of the fork, remove the `wallEntitySet` line from the `starlite` entry so the paint option does not show.
