@@ -248,7 +248,7 @@ RegisterNetEvent('apartments:client:setupSpawnUI', function()
         DoScreenFadeIn(1000)
         return
     end
-    if #ApartmentOptions == 1 then
+    if #ApartmentOptions == 1 or sharedConfig.apartmentChoice == false then
         inputConfirm(1)
         return
     end

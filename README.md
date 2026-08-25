@@ -270,6 +270,7 @@ Options worth knowing about:
 - `logoutEnabled` (shared) — beds and logout points let players switch character; `false` hides them everywhere.
 - `furnitureShop` (shared) — `false` ignores all furniture prices, so everything places instantly for free and the cart never appears.
 - `furnitureImageSource` (shared) — `'cdn'` lazy-loads the furniture catalog thumbnails from uploaded CDN copies instead of resource files, see "Regenerating catalog images".
+- `apartmentChoice` (shared) — `false` skips the apartment picker at character creation and assigns the first available apartment automatically. A single active building already skips the picker on its own.
 - `freeApartmentMoves` (shared) — `false` locks tenants to their apartment building; the reception refuses switching.
 - `migrationOffer` (shared) — `false` disables the one-time relocation offer shown on login when other buildings have free rooms.
 - `housingCommand` (shared) — `false` removes the `/housing` command; the UI stays reachable through the `openHousing` export or an embedded app, see [docs/third-party-ui.md](docs/third-party-ui.md).

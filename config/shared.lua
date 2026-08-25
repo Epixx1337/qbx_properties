@@ -24,6 +24,7 @@ return {
 
     -- Apartments
     dynamicApartments = true,
+    apartmentChoice = true, -- false skips the picker at character creation and auto-assigns the first available apartment
     freeApartmentMoves = true, -- reception lets tenants switch buildings, false locks them to their current home
     migrationOffer = true, -- one-time login offer to relocate when other buildings have free rooms
 
