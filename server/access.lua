@@ -32,6 +32,16 @@ local function isKeyholder(citizenId, property)
 end
 
 ---@param citizenId string
+---@param property table needs type and group_name
+---@return boolean
+local function isGroupMember(citizenId, property)
+    if not property.group_name or not GetPropertyType(property).groupAccess then return false end
+    local player = exports.qbx_core:GetPlayerByCitizenId(citizenId)
+    local gang = player and player.PlayerData.gang
+    return gang ~= nil and gang.name == property.group_name
+end
+
+---@param citizenId string
 ---@param property table
 ---@param permission string
 ---@return boolean
@@ -40,7 +50,9 @@ function HasPropertyAccess(citizenId, property, permission)
     if IsBreached and IsBreached(property.id) and BREACH_OPEN[permission] then return true end
     if property.owner == citizenId then return appliesTo(property, permission) end
     if not appliesTo(property, permission) then return false end
+    if property.tenant == citizenId then return true end
     if isKeyholder(citizenId, property) then return true end
+    if isGroupMember(citizenId, property) then return true end
 
     local key = accessKey(property)
     if not key.value then return false end
@@ -58,7 +70,7 @@ function GetAccessFlags(citizenId, property)
     local garage = not property.building
     local flags
 
-    if property.owner == citizenId or isKeyholder(citizenId, property) then
+    if property.owner == citizenId or property.tenant == citizenId or isKeyholder(citizenId, property) or isGroupMember(citizenId, property) then
         flags = { door = true, stash = true, furniture = true, garage = garage }
     else
         local key = accessKey(property)

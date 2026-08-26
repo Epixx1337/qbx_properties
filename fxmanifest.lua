@@ -4,7 +4,7 @@ game 'gta5'
 name 'qbx_properties'
 description 'Hopefully one day a feature rich property system'
 repository 'https://github.com/Qbox-project/qbx_properties'
-version '0.0.6'
+version '0.0.7'
 
 ox_lib 'locale'
 
@@ -71,6 +71,9 @@ server_scripts {
     'server/screenshot.lua',
     'server/screenshot.js',
     'server/phone.lua',
+    'server/upgrades.lua',
+    'server/tenancy.lua',
+    'server/exports.lua',
 }
 
 files {
@@ -102,8 +105,10 @@ files {
     'stream/audiodirectory/qbx_properties_sounds.awc',
     'stream/data/qbx_properties_sounds.dat54.rel',
     'stream/props/qbx_props.ytyp',
+    'stream/props/cdx_intercom_prop.ytyp',
 }
 
 data_file 'AUDIO_WAVEPACK' 'stream/audiodirectory'
 data_file 'AUDIO_SOUNDDATA' 'stream/data/qbx_properties_sounds.dat'
 data_file 'DLC_ITYP_REQUEST' 'stream/props/qbx_props.ytyp'
+data_file 'DLC_ITYP_REQUEST' 'stream/props/cdx_intercom_prop.ytyp'

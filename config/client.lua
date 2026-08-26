@@ -35,15 +35,12 @@ return {
                 maxWeight = 100000,
             },
             {
-                object = 'reh_prop_reh_tablet_01a',
+                object = 'cdx_intercom_prop',
                 label = 'Housing Tablet',
                 type = 'tablet',
                 price = 500,
                 firstFree = true,
                 power = 20,
-                -- the tablet lies flat with its screen facing +Z, so shoot it from above
-                screenshotCameraOffset = vec3(0.0, -1.66, 5.0),
-                screenshotFov = 4.0,
             },
             {
                 object = 'apa_v_ilev_fh_bedrmdoor',

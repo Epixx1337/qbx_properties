@@ -17,7 +17,16 @@
     {#if placement.gizmo}
       <span><kbd>T</kbd> Move</span>
       <span><kbd>R</kbd> Rotate</span>
-      <span><kbd>G</kbd> Walk / adjust</span>
+      {#if placement.flying}
+        <span><kbd>WASD</kbd> Fly</span>
+        <span><kbd>Space</kbd>/<kbd>Ctrl</kbd> Up / down</span>
+        <span><kbd>Scroll</kbd> Speed</span>
+        <span><kbd>G</kbd> Drag gizmo</span>
+        <span><kbd>F</kbd> Exit freecam</span>
+      {:else}
+        <span><kbd>G</kbd> Walk / adjust</span>
+        <span><kbd>F</kbd> Freecam</span>
+      {/if}
       <span><kbd>Enter</kbd> Confirm</span>
     {:else if placement.zone}
       <span><kbd>LMB</kbd> Add corner</span>

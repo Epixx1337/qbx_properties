@@ -22,14 +22,22 @@ local function soundAlarm(coords)
     end)
 end
 
+RegisterNetEvent('qbx_properties:client:securityDispatch', function(propertyName)
+    if dispatch.enabled and dispatch.Burglary then
+        dispatch.Burglary(GetEntityCoords(cache.ped), propertyName)
+    end
+end)
+
 ---@param propertyId integer
 local function forceDoor(propertyId, entity)
-    if not lib.callback.await('qbx_properties:callback:canRobDoor', false, propertyId) then
+    local allowed, securityTier = lib.callback.await('qbx_properties:callback:canRobDoor', false, propertyId)
+    if not allowed then
         lib.notify({ type = 'error', description = 'You cannot force this door.' })
         return
     end
 
-    local success = lib.skillCheck(robbery.skillCheck)
+    local pattern = securityTier and securityTier > 0 and robbery.skillCheckSecure and robbery.skillCheckSecure[securityTier] or robbery.skillCheck
+    local success = lib.skillCheck(pattern)
     local coords = entity and DoesEntityExist(entity) and GetEntityCoords(entity) or GetEntityCoords(cache.ped)
     local name = lib.callback.await('qbx_properties:callback:robDoor', false, propertyId, success)
 

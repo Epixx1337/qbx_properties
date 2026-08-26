@@ -53,6 +53,11 @@ function LoadWallColor(propertyId, building, room)
 
     local colorIndex = propertyId and lib.callback.await('qbx_properties:callback:getWallColor', false, propertyId) or nil
     local interiorId = GetInteriorFromEntity(cache.ped)
+    for _ = 1, 30 do
+        if interiorId ~= 0 then break end
+        Wait(100)
+        interiorId = GetInteriorFromEntity(cache.ped)
+    end
     local entitySet = entitySetFor(building, room)
 
     if colorIndex then

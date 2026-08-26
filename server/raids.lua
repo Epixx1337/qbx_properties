@@ -328,7 +328,7 @@ lib.callback.register('qbx_properties:callback:returnProperty', function(source,
 end)
 
 CreateThread(function()
-    Wait(1000)
+    AwaitMigration()
     clearStaleRaids()
 end)
 

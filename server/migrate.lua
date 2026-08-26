@@ -15,6 +15,7 @@ local schemaFiles = {
     'property_item_furniture.sql',
     'property_apartment_layouts.sql',
     'property_layout_defaults.sql',
+    'property_upgrades.sql',
 }
 
 local columns = {
@@ -48,12 +49,25 @@ local columns = {
         images = 'LONGTEXT DEFAULT NULL',
         description = 'TEXT DEFAULT NULL',
         rent_last_paid = 'DATETIME DEFAULT NULL',
+        type = 'VARCHAR(20) DEFAULT NULL',
+        group_name = 'VARCHAR(50) DEFAULT NULL',
+        mailbox = 'JSON DEFAULT NULL',
+        tenant = 'VARCHAR(50) DEFAULT NULL',
+        tenant_rent = 'INT DEFAULT NULL',
+        tenant_interval = 'INT DEFAULT NULL',
+        tenant_last_paid = 'DATETIME DEFAULT NULL',
     },
     properties_raids = {
         assigned_room = 'TINYINT(1) NOT NULL DEFAULT 0',
         assigned_building = 'TINYINT(1) NOT NULL DEFAULT 0',
     },
 }
+
+local migrated = false
+
+function AwaitMigration()
+    while not migrated do Wait(50) end
+end
 
 MySQL.ready(function()
     for i = 1, #schemaFiles do
@@ -122,4 +136,6 @@ MySQL.ready(function()
     if #missing > 0 then
         lib.print.error(('the database schema is incomplete and things WILL misbehave: %s — check that the database user may CREATE and ALTER, or run the .sql files by hand'):format(table.concat(missing, ', ')))
     end
+
+    migrated = true
 end)

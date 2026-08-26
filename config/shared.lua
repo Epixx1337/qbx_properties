@@ -145,6 +145,61 @@ return {
         height = 2.0, -- maximum build height inside the zone
     },
 
+    -- Property types
+    propertyTypes = { -- nil fields fall back to residential behaviour
+        residential = { label = 'Residential' },
+        commercial = { label = 'Commercial', stashMultiplier = 1.5 },
+        warehouse = { label = 'Warehouse', stashMultiplier = 3.0, robbery = false, wardrobe = false, logout = false },
+        gang = { label = 'Gang', stashMultiplier = 2.0, groupAccess = true }, -- groupAccess opens the doors to every member of the property's group_name gang
+    },
+
+    -- Upgrades, bought from the housing tablet; requires chains tiers
+    keyholderLimit = 5, -- keyholders per property before key upgrades are needed, false is unlimited
+    stashLimit = 2, -- stash furniture pieces per property before storage upgrades are needed, false is unlimited
+    upgrades = { -- residential and commercial properties
+        storage_1 = { label = 'Storage I', description = '+2 stash placements', price = 12500, stashLimitBonus = 2 },
+        storage_2 = { label = 'Storage II', description = '+4 stash placements', price = 15000, requires = 'storage_1', stashLimitBonus = 4 },
+        storage_3 = { label = 'Storage III', description = '+6 stash placements', price = 20000, requires = 'storage_2', stashLimitBonus = 6 },
+        power_1 = { label = 'Wiring I', description = '+5kW breaker capacity', price = 10000, powerBonus = 5000 },
+        power_2 = { label = 'Wiring II', description = '+10kW breaker capacity', price = 15000, requires = 'power_1', powerBonus = 10000 },
+        power_3 = { label = 'Wiring III', description = '+20kW breaker capacity', price = 20000, requires = 'power_2', powerBonus = 20000 },
+        keyholders_1 = { label = 'Guest Keys', description = '5 extra key slots', price = 7500, keyholderBonus = 5 },
+        security_1 = { label = 'Security I', description = 'Harder locks, break-in alerts for you and your keyholders', price = 7500, securityTier = 1 },
+        security_2 = { label = 'Security II', description = 'The hardest locks, alerts everyone and calls the police', price = 15000, requires = 'security_1', securityTier = 2 },
+        garage = { label = 'Second Garage', description = 'Place one extra garage spot outside', price = 12500, garageSpots = 1 },
+    },
+    typeUpgrades = { -- separate catalogs per property type, types without one use `upgrades`
+        warehouse = {
+            storage_1 = { label = 'Racking I', description = '+4 stash placements', price = 15000, stashLimitBonus = 4 },
+            storage_2 = { label = 'Racking II', description = '+8 stash placements', price = 20000, requires = 'storage_1', stashLimitBonus = 8 },
+            storage_3 = { label = 'Racking III', description = '+12 stash placements', price = 30000, requires = 'storage_2', stashLimitBonus = 12 },
+            power_1 = { label = 'Industrial Wiring', description = '+15kW breaker capacity', price = 20000, powerBonus = 15000 },
+            security_1 = { label = 'Security I', description = 'Harder locks, break-in alerts for keyholders', price = 10000, securityTier = 1 },
+            security_2 = { label = 'Security II', description = 'The hardest locks, alerts everyone and calls the police', price = 20000, requires = 'security_1', securityTier = 2 },
+        },
+        gang = {
+            storage_1 = { label = 'Stockpile I', description = '+3 stash placements', price = 12500, stashLimitBonus = 3 },
+            storage_2 = { label = 'Stockpile II', description = '+6 stash placements', price = 15000, requires = 'storage_1', stashLimitBonus = 6 },
+            storage_3 = { label = 'Stockpile III', description = '+9 stash placements', price = 15000, requires = 'storage_2', stashLimitBonus = 9 },
+            storage_4 = { label = 'Stockpile IV', description = '+12 stash placements', price = 15000, requires = 'storage_3', stashLimitBonus = 12 },
+            security_1 = { label = 'Lookout', description = 'Harder locks, break-in alerts for the gang', price = 7500, securityTier = 1 },
+            security_2 = { label = 'Fortified', description = 'The hardest locks, alerts everyone and calls the police', price = 15000, requires = 'security_1', securityTier = 2 },
+        },
+    },
+
+    -- Electricity
+    electricity = {
+        tripping = true, -- exceeding the power limit trips the breaker: stashes stay shut until someone repairs it
+        repairJobs = { mechanic = 0 }, -- job grades allowed to repair, admins always can
+        repairSkillCheck = { 'medium', 'medium', 'hard' },
+    },
+
+    -- Mailboxes
+    mailbox = { enabled = true, slots = 10, maxWeight = 20000 }, -- small stash on the entrance for keyed players
+
+    -- Rent
+    rentGraceHours = 24, -- hours after a failed rent payment before the eviction lands, 0 evicts immediately
+
     -- Property sizes
     propertySizes = {
         small = { label = 'Small', power = 5000, cost = 750 },

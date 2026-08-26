@@ -29,7 +29,8 @@ function RefreshUtilities(propertyId)
 
     local limit = GetPowerLimit(property)
     local state = GetUtilities(property)
-    local powered = ToBool(state.powered) and power <= limit
+    local powered = property.building ~= nil and power <= limit
+        or property.building == nil and ToBool(state.powered) and power <= limit
 
     MySQL.update.await([[
         UPDATE properties_utilities SET power_used = ?, humidity = ?, powered = ? WHERE property_id = ?
@@ -45,6 +46,68 @@ function RefreshUtilities(propertyId)
     return { powered = powered, power = power, limit = limit, humidity = humidity }
 end
 
+lib.callback.register('qbx_properties:callback:repairBreaker', function(source, propertyId)
+    local electricity = sharedConfig.electricity
+    if not electricity or not electricity.tripping then return false end
+
+    local player = exports.qbx_core:GetPlayer(source)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId then return false end
+
+    local job = player.PlayerData.job
+    local requiredGrade = electricity.repairJobs and electricity.repairJobs[job.name]
+    local allowed = exports.qbx_core:HasPermission(source, 'admin')
+        or (requiredGrade ~= nil and job.grade.level >= requiredGrade)
+    if not allowed then
+        exports.qbx_core:Notify(source, 'You do not know your way around a breaker box.', 'error')
+        return false
+    end
+
+    local property = MySQL.single.await('SELECT id, owner, building, power_limit FROM properties WHERE id = ?', {propertyId})
+    if not property or property.building then return false end
+
+    local power = CalculateUtilityLoad(GetPropertyDecorations(property))
+    if power > GetPowerLimit(property) then
+        exports.qbx_core:Notify(source, 'The circuit is still overloaded, remove some powered furniture first.', 'error')
+        return false
+    end
+
+    MySQL.update.await('UPDATE properties_utilities SET powered = 1 WHERE property_id = ?', {propertyId})
+    RefreshUtilities(propertyId)
+    exports.qbx_core:Notify(source, 'The breaker hums back to life.', 'success')
+    lib.logger(source, 'qbx_properties:server:repairBreaker', string.format('%s repaired the breaker of property %d', player.PlayerData.citizenid, propertyId))
+
+    return true
+end)
+
+local function biggestDraws(property)
+    local decorations = GetPropertyDecorations(property)
+    local specs = GetFurnitureSpecs()
+    local byModel = {}
+    local items = 0
+
+    for i = 1, #decorations do
+        local spec = specs[decorations[i].model]
+        if spec and spec.power > 0 then
+            items += 1
+            local entry = byModel[decorations[i].model]
+            if entry then
+                entry.watts += spec.power
+                entry.count += 1
+            else
+                byModel[decorations[i].model] = { name = spec.label, watts = spec.power, count = 1 }
+            end
+        end
+    end
+
+    local draws = {}
+    for _, entry in pairs(byModel) do draws[#draws + 1] = entry end
+    table.sort(draws, function(a, b) return a.watts > b.watts end)
+    for i = #draws, 5, -1 do draws[i] = nil end
+
+    return draws, items
+end
+
 lib.callback.register('qbx_properties:callback:getUtilities', function(source, propertyId)
     local player = exports.qbx_core:GetPlayer(source)
     propertyId = ToId(propertyId)
@@ -58,6 +121,7 @@ lib.callback.register('qbx_properties:callback:getUtilities', function(source, p
     if not state then return end
 
     local cost = GetUtilityCost(property)
+    local draws, poweredItems = biggestDraws(property)
 
     return {
         power = state.power,
@@ -69,6 +133,10 @@ lib.callback.register('qbx_properties:callback:getUtilities', function(source, p
         size = property.building and 'Apartment' or GetPropertySize(property.size).label,
         paidUntil = property.paidUntil,
         overdue = cost > 0 and (not property.paidUntil or os.time() > property.paidUntil),
+        draws = draws,
+        poweredItems = poweredItems,
+        humidityMax = utilities.humidity.max,
+        humidityThreshold = utilities.humidity.comfortable,
     }
 end)
 
@@ -78,11 +146,16 @@ RegisterNetEvent('qbx_properties:server:payUtilities', function(propertyId)
     propertyId = ToId(propertyId)
     if not player or not propertyId then return end
 
-    local property = MySQL.single.await('SELECT id, owner, building, size, property_name FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT id, owner, building, size, property_name, UNIX_TIMESTAMP(utilities_paid_until) AS paidUntil FROM properties WHERE id = ?', {propertyId})
     if not property or property.owner ~= player.PlayerData.citizenid then return end
 
     local cost = GetUtilityCost(property)
     if cost <= 0 then return end
+
+    if property.paidUntil and os.time() < property.paidUntil then
+        exports.qbx_core:Notify(playerSource, 'Utilities are already paid.', 'error')
+        return
+    end
 
     local reason = string.format('Utilities for %s', property.property_name)
     if not player.Functions.RemoveMoney('bank', cost, reason) then
@@ -156,6 +229,7 @@ lib.addCommand('power', {
 end)
 
 local function processBilling()
+    AwaitMigration()
     local overdue = MySQL.query.await([[
         SELECT id, owner, property_name FROM properties
         WHERE owner IS NOT NULL AND building IS NULL

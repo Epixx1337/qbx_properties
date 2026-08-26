@@ -68,10 +68,10 @@ local function transferProperty(propertyId, buyerCid, amount)
     return true
 end
 
-lib.callback.register('qbx_properties:callback:getListings', function()
+local function fetchListings()
     local listings = MySQL.query.await([[
         SELECT l.id, l.property_id, l.listing_type, l.price, l.min_increment, l.reserve_price,
-               UNIX_TIMESTAMP(l.auction_end) AS auction_end, p.property_name, p.coords, p.rent_interval, p.images, p.description,
+               UNIX_TIMESTAMP(l.auction_end) AS auction_end, p.property_name, p.coords, p.rent_interval, p.images, p.description, p.type, p.size,
                (SELECT MAX(amount) FROM properties_bids b WHERE b.listing_id = l.id AND b.status = 'active') AS top_bid
         FROM properties_listings l
         JOIN properties p ON p.id = l.property_id
@@ -84,14 +84,18 @@ lib.callback.register('qbx_properties:callback:getListings', function()
     end
 
     return listings
-end)
+end
+
+lib.callback.register('qbx_properties:callback:getListings', fetchListings)
+
+exports('GetListings', fetchListings)
 
 lib.callback.register('qbx_properties:callback:getRealtorProperties', function(source)
     local player = exports.qbx_core:GetPlayer(source)
     if not player or not IsRealtor(player.PlayerData.job) then return {} end
 
-    return MySQL.query.await([[
-        SELECT p.id, p.property_name, p.owner, p.price, p.rent_interval, p.building, p.interior,
+    local rows = MySQL.query.await([[
+        SELECT p.id, p.property_name, p.owner, p.price, p.rent_interval, p.building, p.interior, p.images,
                p.interior REGEXP '^-?[0-9]+$' AS shell,
                pl.charinfo AS owner_charinfo,
                EXISTS(SELECT 1 FROM properties_listings l WHERE l.property_id = p.id AND l.status IN ('active','finalizing')) AS listed
@@ -100,6 +104,14 @@ lib.callback.register('qbx_properties:callback:getRealtorProperties', function(s
         ORDER BY p.property_name
         LIMIT 500
     ]])
+
+    for i = 1, #rows do
+        local urls = PropertyImageUrls(rows[i].images)
+        rows[i].images = nil
+        rows[i].thumb = urls[1]
+    end
+
+    return rows
 end)
 
 RegisterNetEvent('qbx_properties:server:repossess', function(propertyId)
@@ -130,7 +142,7 @@ lib.callback.register('qbx_properties:callback:getListingBids', function(source,
     if not player or not listingId or not IsRealtor(player.PlayerData.job) then return {} end
 
     local bids = MySQL.query.await([[
-        SELECT b.amount, b.status, b.created_at, pl.charinfo
+        SELECT b.id, b.amount, b.status, b.created_at, pl.charinfo
         FROM properties_bids b
         LEFT JOIN players pl ON pl.citizenid = b.bidder
         WHERE b.listing_id = ?
@@ -141,6 +153,7 @@ lib.callback.register('qbx_properties:callback:getListingBids', function(source,
     for i = 1, #bids do
         local charinfo = bids[i].charinfo and json.decode(bids[i].charinfo)
         result[i] = {
+            id = bids[i].id,
             amount = bids[i].amount,
             status = bids[i].status,
             createdAt = bids[i].created_at,
@@ -159,7 +172,7 @@ end)
 function CreateListingInternal(source, player, propertyId, listing)
     local price = ToId(listing.price)
     if not price or price < market.minPrice or price > market.maxPrice then return false end
-    if listing.type ~= 'sale' and listing.type ~= 'auction' then return false end
+    if listing.type ~= 'sale' and listing.type ~= 'auction' and listing.type ~= 'offer' then return false end
 
     local existing = MySQL.scalar.await("SELECT id FROM properties_listings WHERE property_id = ? AND status IN ('active','finalizing')", {propertyId})
     if existing then return false end
@@ -192,7 +205,7 @@ lib.callback.register('qbx_properties:callback:createListing', function(source, 
     local price = ToId(data.price)
     if not propertyId or not price then return false end
     if price < market.minPrice or price > market.maxPrice then return false end
-    if data.listingType ~= 'sale' and data.listingType ~= 'auction' then return false end
+    if data.listingType ~= 'sale' and data.listingType ~= 'auction' and data.listingType ~= 'offer' then return false end
 
     local property = MySQL.single.await('SELECT id, property_name, owner FROM properties WHERE id = ?', {propertyId})
     if not property then return false end
@@ -294,6 +307,99 @@ end)
 ---@param listingId integer
 ---@param amount integer
 ---@return boolean, string?
+lib.callback.register('qbx_properties:callback:placeOffer', function(source, listingId, amount)
+    local player = exports.qbx_core:GetPlayer(source)
+    listingId = ToId(listingId)
+    amount = ToId(amount)
+    if not player or not listingId or not amount then return false, 'Invalid offer.' end
+
+    local citizenId = player.PlayerData.citizenid
+    local listing = getActiveListing(listingId)
+    if not listing or listing.listing_type ~= 'offer' then return false, 'Listing not found.' end
+    if listing.listed_by == citizenId then return false, 'You cannot make an offer on your own listing.' end
+    if amount < listing.price then return false, string.format('Offers start at $%d.', listing.price) end
+    if amount > market.maxPrice then return false, 'That offer is too high.' end
+
+    local previous = MySQL.single.await("SELECT id, amount FROM properties_bids WHERE listing_id = ? AND bidder = ? AND status = 'active'", {listingId, citizenId})
+
+    if player.PlayerData.money.bank < amount then return false, 'Not enough money in your bank.' end
+    if not player.Functions.RemoveMoney('bank', amount, string.format('Offer on listing %d', listingId)) then
+        return false, 'Not enough money in your bank.'
+    end
+
+    if previous then
+        MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ?", {previous.id})
+        payOut(citizenId, previous.amount, string.format('Replaced offer (listing %d)', listingId))
+    end
+
+    MySQL.insert.await("INSERT INTO `properties_bids` (`listing_id`, `bidder`, `amount`) VALUES (?, ?, ?)", {listingId, citizenId, amount})
+
+    lib.logger(source, 'qbx_properties:server:placeOffer', string.format('%s offered $%d on listing %d', citizenId, amount, listingId))
+
+    return true
+end)
+
+---@param source integer
+---@param listingId integer?
+---@param bidId integer?
+---@param accept boolean
+---@return boolean
+local function settleOffer(source, listingId, bidId, accept)
+    local player = exports.qbx_core:GetPlayer(source)
+    listingId = ToId(listingId)
+    bidId = ToId(bidId)
+    if not player or not listingId or not bidId or not IsRealtor(player.PlayerData.job) then return false end
+
+    local listing = getActiveListing(listingId)
+    if not listing or listing.listing_type ~= 'offer' then return false end
+
+    local bid = MySQL.single.await("SELECT id, bidder, amount FROM properties_bids WHERE id = ? AND listing_id = ? AND status = 'active'", {bidId, listingId})
+    if not bid then return false end
+
+    if not accept then
+        MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ?", {bid.id})
+        payOut(bid.bidder, bid.amount, string.format('Offer declined (listing %d)', listingId))
+
+        local bidder = exports.qbx_core:GetPlayerByCitizenId(bid.bidder)
+        if bidder then
+            exports.qbx_core:Notify(bidder.PlayerData.source, 'Your property offer was declined and refunded.', 'error')
+        end
+        lib.logger(source, 'qbx_properties:server:declineOffer', string.format('declined offer %d on listing %d', bid.id, listingId))
+        return true
+    end
+
+    if MySQL.update.await("UPDATE properties_listings SET status = 'finalizing' WHERE id = ? AND status = 'active'", {listingId}) ~= 1 then return false end
+
+    MySQL.update.await("UPDATE properties_bids SET status = 'won' WHERE id = ?", {bid.id})
+
+    if not transferProperty(listing.property_id, bid.bidder, bid.amount) then
+        MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ?", {bid.id})
+        payOut(bid.bidder, bid.amount, string.format('Offer failed (listing %d)', listingId))
+        MySQL.update.await("UPDATE properties_listings SET status = 'active' WHERE id = ?", {listingId})
+        return false
+    end
+
+    refundActiveBids(listingId, 'refunded')
+    MySQL.update.await("UPDATE properties_listings SET status = 'sold' WHERE id = ?", {listingId})
+
+    local buyer = exports.qbx_core:GetPlayerByCitizenId(bid.bidder)
+    if buyer then
+        exports.qbx_core:Notify(buyer.PlayerData.source, string.format('Your offer of $%d was accepted, the property is yours.', bid.amount), 'success')
+    end
+
+    lib.logger(source, 'qbx_properties:server:acceptOffer', string.format('%s accepted offer %d ($%d) on listing %d', player.PlayerData.citizenid, bid.id, bid.amount, listingId))
+
+    return true
+end
+
+lib.callback.register('qbx_properties:callback:acceptOffer', function(source, listingId, bidId)
+    return settleOffer(source, listingId, bidId, true)
+end)
+
+lib.callback.register('qbx_properties:callback:declineOffer', function(source, listingId, bidId)
+    return settleOffer(source, listingId, bidId, false)
+end)
+
 local bidLocks = {}
 local executeBidLocked
 
@@ -451,6 +557,7 @@ AddEventHandler('playerDropped', function()
 end)
 
 local function finalizeAuctions()
+    AwaitMigration()
     MySQL.update.await("UPDATE properties_listings SET status = 'finalizing' WHERE listing_type = 'auction' AND status = 'active' AND auction_end <= NOW()")
     local ended = MySQL.query.await("SELECT * FROM properties_listings WHERE listing_type = 'auction' AND status = 'finalizing'")
 

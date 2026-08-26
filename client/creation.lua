@@ -197,6 +197,8 @@ RegisterNUICallback('creation:submit', function(data, cb)
         garden = draft.garden,
         garage = draft.garage,
         listing = data.listing,
+        propertyType = data.propertyType,
+        group = data.group,
     })
 
     lib.notify({

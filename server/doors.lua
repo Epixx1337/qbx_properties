@@ -121,6 +121,7 @@ CreateThread(function()
     end
 
     Wait(2000)
+    AwaitMigration()
 
     runtimeDoors = pcall(function() return exports.ox_doorlock:createDoorProgrammatic(nil) end)
     if not runtimeDoors then
@@ -137,10 +138,10 @@ CreateThread(function()
 
         if IsBreached and IsBreached(propertyId) then return payload.door.state == 1 end
 
-        if IsRealtor(player.PlayerData.job) then return true end
-
-        local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ?', {propertyId})
+        local property = MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant FROM properties WHERE id = ?', {propertyId})
         if not property then return false end
+
+        if not property.owner and IsRealtor(player.PlayerData.job) then return true end
 
         return HasPropertyAccess(player.PlayerData.citizenid, property, 'door')
     end, {

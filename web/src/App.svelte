@@ -114,6 +114,7 @@
     if (data.config) market.config = data.config
     if (data.sizes) market.sizes = data.sizes
     if (data.sizeOrder) market.sizeOrder = data.sizeOrder
+    if (data.types) market.types = data.types
     market.gardens = data.gardens ?? false
     market.selected = null
     market.bids = []
@@ -157,6 +158,20 @@
     tablet.access = []
     tablet.nearby = []
     tablet.utilities = null
+    tablet.upgrades = null
+    tablet.isUpgradeOwner = false
+    tablet.tenancy = null
+  })
+
+  onMessage('tablet:upgrades', (data) => {
+    tablet.upgrades = data?.upgrades ?? []
+    tablet.isUpgradeOwner = data?.isOwner ?? false
+    tablet.garageSpots = data?.garageSpots ?? 0
+    tablet.garageLimit = data?.garageLimit ?? 0
+  })
+
+  onMessage('tablet:tenancy', (data) => {
+    tablet.tenancy = data ?? null
   })
 
   onMessage('theme', (data) => { applyTheme(data?.color, data?.shade) })
@@ -178,6 +193,7 @@
     placement.height = data?.height ?? null
     placement.photo = data?.photo ?? false
     placement.capture = data?.capture ?? false
+    placement.flying = data?.flying ?? false
   })
 
   onMessage('placement:hide', () => { placement.active = false })

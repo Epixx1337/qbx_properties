@@ -41,7 +41,7 @@ lib.callback.register('qbx_properties:callback:setWallColor', function(source, p
     if not property then return false end
 
     local citizenId = player.PlayerData.citizenid
-    local allowed = IsRealtor(player.PlayerData.job) or HasPropertyAccess(citizenId, property, 'furniture')
+    local allowed = (not property.owner and IsRealtor(player.PlayerData.job)) or HasPropertyAccess(citizenId, property, 'furniture')
 
     if not allowed then
         local keyholders = GetPropertyKeyholders(property)

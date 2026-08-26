@@ -11,10 +11,31 @@
   let editDescription = $state('')
   let lightboxIndex = $state(null)
   let deleteArmed = $state(false)
+  let search = $state('')
+  let filter = $state('all')
+
+  let listingType = $state('sale')
+  let price = $state(50000)
+  let auctionHours = $state(72)
+  let reservePrice = $state(0)
+  let minIncrement = $state(1000)
 
   const details = $derived(realtor.details && selected && realtor.details.id === selected.id ? realtor.details : null)
 
+  const visible = $derived(
+    realtor.properties.filter((property) => {
+      if (filter === 'owned' && !property.owner) return false
+      if (filter === 'free' && property.owner) return false
+      if (search.trim()) {
+        const q = search.trim().toLowerCase()
+        if (!property.property_name.toLowerCase().includes(q) && !(ownerName(property) ?? '').toLowerCase().includes(q)) return false
+      }
+      return true
+    })
+  )
+
   function select(property) {
+    if (selected?.id === property.id) return
     selected = property
     realtor.details = null
     deleteArmed = false
@@ -36,6 +57,20 @@
     editDescription = details.description ?? ''
   })
 
+  $effect(() => {
+    if (!selected) return
+    const fresh = realtor.properties.find((p) => p.id === selected.id)
+    if (fresh !== selected) selected = fresh ?? null
+  })
+
+  $effect(() => {
+    if (selected && !selected.owner) {
+      price = selected.price || market.config.minPrice
+      minIncrement = market.config.minIncrement
+      auctionHours = market.config.auctionHours
+    }
+  })
+
   function saveEdits() {
     fetchNui('realtor:updateProperty', {
       propertyId: selected.id,
@@ -51,48 +86,6 @@
     const date = new Date(utilities.paidUntil * 1000).toLocaleDateString()
     return utilities.overdue ? `Overdue since ${date}` : `Paid until ${date}`
   }
-  let listingType = $state('sale')
-  let price = $state(50000)
-  let auctionHours = $state(72)
-  let reservePrice = $state(0)
-  let minIncrement = $state(1000)
-  let search = $state('')
-  let filter = $state('all')
-
-  const visible = $derived(
-    realtor.properties.filter((property) => {
-      if (filter === 'owned' && !property.owner) return false
-      if (filter === 'free' && property.owner) return false
-      if (search.trim() && !property.property_name.toLowerCase().includes(search.trim().toLowerCase())) return false
-      return true
-    })
-  )
-
-  $effect(() => {
-    if (!selected) return
-    const fresh = realtor.properties.find((p) => p.id === selected.id)
-    if (fresh !== selected) selected = fresh ?? null
-  })
-
-  $effect(() => {
-    if (selected && !selected.owner) {
-      price = selected.price || market.config.minPrice
-      minIncrement = market.config.minIncrement
-      auctionHours = market.config.auctionHours
-    }
-  })
-
-  const valid = $derived(
-    selected !== null &&
-      !selected.owner &&
-      price >= market.config.minPrice &&
-      price <= market.config.maxPrice &&
-      (listingType === 'sale' ||
-        (auctionHours >= 1 &&
-          auctionHours <= market.config.maxAuctionHours &&
-          minIncrement >= 1 &&
-          (reservePrice === 0 || reservePrice >= price)))
-  )
 
   function ownerName(property) {
     if (!property.owner) return null
@@ -104,6 +97,23 @@
       return property.owner
     }
   }
+
+  function kindLabel(property) {
+    return property.building ? 'Apartment' : property.shell ? 'Shell' : 'MLO'
+  }
+
+  const valid = $derived(
+    selected !== null &&
+      !selected.owner &&
+      price >= market.config.minPrice &&
+      price <= market.config.maxPrice &&
+      (listingType === 'sale' ||
+        listingType === 'offer' ||
+        (auctionHours >= 1 &&
+          auctionHours <= market.config.maxAuctionHours &&
+          minIncrement >= 1 &&
+          (reservePrice === 0 || reservePrice >= price)))
+  )
 
   function createListing() {
     if (!valid) return
@@ -117,258 +127,229 @@
     })
     selected = null
   }
+
+  const worldEdits = $derived(
+    !details || selected?.building
+      ? []
+      : [
+          { label: details.hasGarage ? 'Re-place garage' : 'Add garage', run: () => fetchNui('realtor:editGarage', { propertyId: selected.id }) },
+          { label: details.hasGarden ? 'Redraw garden' : 'Add garden', run: () => fetchNui('realtor:editGarden', { propertyId: selected.id }) },
+          ...(details.interior === 'mlo'
+            ? [
+                { label: 'Re-set interior point', run: () => fetchNui('realtor:recaptureInterior', { propertyId: selected.id }) },
+                { label: 'Add door', run: () => fetchNui('realtor:addDoor', { propertyId: selected.id, double: false }) },
+                { label: 'Add double door', run: () => fetchNui('realtor:addDoor', { propertyId: selected.id, double: true }) },
+              ]
+            : []),
+          { label: 'Set mailbox', run: () => fetchNui('realtor:setMailbox', { propertyId: selected.id }) },
+          ...(selected.owner ? [] : [{ label: 'Enter property', run: () => fetchNui('realtor:enterProperty', { propertyId: selected.id }) }]),
+        ]
+  )
+
+  const statusRows = $derived(
+    !details
+      ? []
+      : [
+          ['Created by', details.createdBy ?? 'Unknown'],
+          ['Interior', details.interior],
+          ['Garden', details.hasGarden ? 'Yes' : 'No'],
+          ['Garage', details.hasGarage ? 'Yes' : 'No'],
+          ...(selected?.building
+            ? []
+            : [
+                ['Utilities', paidLabel(details.utilities)],
+                ['Power', `${details.utilities.power} / ${details.utilities.limit} W${details.utilities.powered ? '' : ' · CUT OFF'}`],
+                ['Monthly cost', formatMoney(details.utilities.cost)],
+              ]),
+        ]
+  )
 </script>
 
-<div class="layout">
-  <div class="col">
-    <div class="toolbar">
-      <input class="input" placeholder="Search properties..." bind:value={search} />
-      <div class="chips">
-        {#each [['all', 'All'], ['free', 'Available'], ['owned', 'Owned']] as [value, label]}
-          <button class="chip" class:active={filter === value} onclick={() => (filter = value)}>{label}</button>
-        {/each}
-      </div>
-    </div>
-
-    <div class="list scroll">
-      {#each visible as property (property.id)}
-        <button class="row" class:active={selected?.id === property.id} onclick={() => select(property)}>
-          <div class="row-main">
-            <span class="row-name">{property.property_name}</span>
-            <span class="row-sub">
-              {#if property.owner}{ownerName(property)}{:else}Available{/if}
-              {#if property.building} · Apartment{:else if property.shell} · Shell{:else} · MLO{/if}
-            </span>
-          </div>
-          {#if property.listed}
-            <span class="badge yellow">Listed</span>
-          {:else if property.owner}
-            <span class="badge red">Owned</span>
-          {:else}
-            <span class="badge green">Free</span>
-          {/if}
-        </button>
-      {:else}
-        <div class="empty">No properties match</div>
+<div class="manage">
+  <div class="toolbar">
+    <input class="input grow" placeholder="Search properties or owners..." bind:value={search} />
+    <div class="chips">
+      {#each [['all', 'All'], ['free', 'Available'], ['owned', 'Owned']] as [value, label] (value)}
+        <button class="chip" class:active={filter === value} onclick={() => (filter = value)}>{label}</button>
       {/each}
     </div>
   </div>
 
-  <div class="col detail scroll">
-    {#if !selected}
-      <div class="empty">Select a property</div>
-    {:else}
-      <div class="detail-head">
-        <span class="section-title">{selected.property_name}</span>
-        {#if selected.listed}<span class="badge yellow">Listed</span>{/if}
-      </div>
-
-      <div class="facts">
-        <div class="fact"><span>Property ID</span><b>{selected.id}</b></div>
-        <div class="fact">
-          <span>Type</span>
-          <b>{selected.building ? 'Apartment' : selected.shell ? 'Shell' : 'MLO'}</b>
-        </div>
-        {#if selected.rent_interval}
-          <div class="fact"><span>Rent</span><b>{formatMoney(selected.price)} / {selected.rent_interval}h</b></div>
-        {/if}
-        {#if details}
-          <div class="fact"><span>Created by</span><b>{details.createdBy ?? 'Unknown'}</b></div>
-          <div class="fact"><span>Interior</span><b>{details.interior}</b></div>
-          <div class="fact"><span>Garden</span><b>{details.hasGarden ? 'Yes' : 'No'}</b></div>
-          <div class="fact"><span>Garage</span><b>{details.hasGarage ? 'Yes' : 'No'}</b></div>
-        {/if}
-      </div>
-
-      {#if details && !selected.building}
-        <div class="section-title">Utilities</div>
-        <div class="facts">
-          <div class="fact"><span>Status</span><b class:danger={details.utilities.overdue}>{paidLabel(details.utilities)}</b></div>
-          <div class="fact"><span>Power</span><b>{details.utilities.power} / {details.utilities.limit} W {details.utilities.powered ? '' : '· CUT OFF'}</b></div>
-          <div class="fact"><span>Monthly cost</span><b>{formatMoney(details.utilities.cost)}</b></div>
-        </div>
-
-        {#if details.keyholders.length || details.access.length}
-          <div class="section-title">Access</div>
-          <div class="facts">
-            {#each details.keyholders as holder (holder.citizenid)}
-              <div class="fact"><span>{holder.name}</span><b>Keyholder</b></div>
-            {/each}
-            {#each details.access as entry (entry.citizenid)}
-              <div class="fact">
-                <span>{entry.name}</span>
-                <b>{['door', 'stash', 'furniture', 'garage'].filter((k) => entry[k]).join(', ') || 'none'}</b>
-              </div>
-            {/each}
-          </div>
-        {/if}
-
-        <div class="section-title">Edit property</div>
-        <div class="field">
-          <span class="label">Price</span>
-          <input class="input" type="number" bind:value={editPrice} min={market.config.minPrice} />
-        </div>
-        <div class="field">
-          <span class="label">Size</span>
-          <div class="chips">
-            {#each market.sizeOrder as key}
-              <button class="chip" class:active={editSize === key} onclick={() => (editSize = key)}>
-                {market.sizes[key]?.label ?? key}
-              </button>
-            {/each}
-          </div>
-        </div>
-        <label class="check">
-          <input type="checkbox" bind:checked={editRental} />
-          <span>Rental property</span>
-        </label>
-        <div class="field">
-          <span class="label">Listing summary</span>
-          <textarea class="input summary-input" bind:value={editDescription} maxlength="500" rows="3"
-            placeholder="A short pitch shown on the market page"></textarea>
-        </div>
-        {#if editRental}
-          <div class="field">
-            <span class="label">Rent interval (hours)</span>
-            <input class="input" type="number" bind:value={editRentInterval} min="1" max="24" />
-          </div>
-        {/if}
-        <button class="btn wide" onclick={saveEdits}>Save changes</button>
-
-        <div class="chips">
-          <button class="chip" onclick={() => fetchNui('realtor:editGarage', { propertyId: selected.id })}>
-            {details.hasGarage ? 'Re-place garage' : 'Add garage'}
-          </button>
-          <button class="chip" onclick={() => fetchNui('realtor:editGarden', { propertyId: selected.id })}>
-            {details.hasGarden ? 'Redraw garden' : 'Add garden'}
-          </button>
-        </div>
-
-        {#if details.interior === 'mlo'}
-          <div class="chips">
-            <button class="chip" onclick={() => fetchNui('realtor:recaptureInterior', { propertyId: selected.id })}>
-              Re-set interior point
-            </button>
-            <button class="chip" onclick={() => fetchNui('realtor:addDoor', { propertyId: selected.id, double: false })}>
-              Add door
-            </button>
-            <button class="chip" onclick={() => fetchNui('realtor:addDoor', { propertyId: selected.id, double: true })}>
-              Add double door
-            </button>
-          </div>
-        {/if}
-        <div class="section-title">Photos</div>
-        {#if details.images.length}
-          <div class="photos">
-            {#each details.images as image, i (image)}
-              <div class="photo">
-                <img src={image} alt="Property" onclick={() => (lightboxIndex = i)} />
-                <button class="photo-remove" onclick={() => fetchNui('realtor:removeImage', { propertyId: selected.id, index: i + 1 })}>×</button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        <button class="btn subtle wide" onclick={() => fetchNui('realtor:addImage', { propertyId: selected.id })}>
-          Take photo
+  <div class="scroll body">
+    <div class="grid">
+      {#each visible as property (property.id)}
+        <button class="card" class:selected={selected?.id === property.id} onclick={() => select(property)}>
+          <span class="thumb">
+            {#if property.thumb}<img src={property.thumb} alt="" loading="lazy" />{/if}
+          </span>
+          <span class="card-info">
+            <span class="card-name">{property.property_name}</span>
+            <span class="card-meta">
+              {kindLabel(property)}{#if property.rent_interval} · Rental {property.rent_interval}h{/if}{#if property.listed} · Listed{/if}
+            </span>
+            <span class="card-owner">{property.owner ? ownerName(property) : `Available · ${formatMoney(property.price)}`}</span>
+          </span>
         </button>
-        <div class="hint">Closes this window and captures your current view.</div>
-
-        <button class="btn subtle wide" onclick={() => fetchNui('realtor:enterProperty', { propertyId: selected.id })}>
-          Enter property
-        </button>
-        <div class="hint">Once inside, open the radial menu to edit the interaction points.</div>
-      {/if}
-
-      {#if selected.owner}
-        <div class="owned-block">
-          <div class="section-title">Current owner</div>
-          <div class="fact"><span>Name</span><b>{ownerName(selected)}</b></div>
-          <div class="fact"><span>Citizen ID</span><b>{selected.owner}</b></div>
-          <div class="hint">An owned property cannot be listed. End the tenancy first to return it to the pool.</div>
-
-          {#if selected.building}
-            <button
-              class="btn danger wide"
-              onclick={() => {
-                fetchNui('realtor:releaseUnit', { propertyId: selected.id, building: selected.building })
-                selected = null
-              }}
-            >
-              End tenancy
-            </button>
-          {:else}
-            <button
-              class="btn danger wide"
-              onclick={() => {
-                fetchNui('realtor:repossess', { propertyId: selected.id })
-                selected = null
-              }}
-            >
-              Repossess property
-            </button>
-          {/if}
-        </div>
-      {:else if selected.listed}
-        <div class="hint">This property already has an active listing. Cancel it from the Market tab first.</div>
       {:else}
-        <div class="section-title">Create listing</div>
+        <div class="empty span-all">No properties match</div>
+      {/each}
+    </div>
 
-        <div class="field">
-          <span class="label">Listing type</span>
-          <div class="chips">
-            {#each [['sale', 'Direct sale'], ['auction', 'Auction']] as [value, label]}
-              <button class="chip" class:active={listingType === value} onclick={() => (listingType = value)}>
-                {label}
-              </button>
-            {/each}
+    {#if selected}
+      <div class="detail">
+        <div class="detail-head">
+          <span class="detail-name">{selected.property_name}</span>
+          <div class="detail-badges">
+            {#if selected.listed}<span class="badge yellow">Listed</span>{/if}
+            {#if selected.owner}<span class="badge red">Owned</span>{:else}<span class="badge green">Free</span>{/if}
+            <span class="badge">ID {selected.id}</span>
           </div>
         </div>
 
-        <div class="field">
-          <span class="label">{listingType === 'auction' ? 'Starting price' : 'Price'}</span>
-          <input class="input" type="number" bind:value={price} min={market.config.minPrice} />
-          <span class="hint">{formatMoney(price)}</span>
-        </div>
+        {#if !details}
+          <div class="empty">Loading details...</div>
+        {:else}
+          <div class="detail-grid">
+            <div class="pane">
+              {#if !selected.building}
+                <span class="pane-title">Edit</span>
+                <div class="edit-inputs">
+                  <div class="field">
+                    <span class="mini-label">Price</span>
+                    <input class="input mono" type="number" bind:value={editPrice} min={market.config.minPrice} />
+                  </div>
+                  <div class="field">
+                    <span class="mini-label">Rent (hours)</span>
+                    <div class="rent-row">
+                      <label class="check">
+                        <input type="checkbox" bind:checked={editRental} />
+                      </label>
+                      <input class="input mono" type="number" bind:value={editRentInterval} min="1" max="24" disabled={!editRental} />
+                    </div>
+                  </div>
+                </div>
+                <div class="chips wrap">
+                  {#each market.sizeOrder as key (key)}
+                    <button class="chip" class:active={editSize === key} onclick={() => (editSize = key)}>
+                      {market.sizes[key]?.label ?? key}
+                    </button>
+                  {/each}
+                </div>
+                <textarea class="input summary" rows="3" maxlength="500" bind:value={editDescription}
+                  placeholder="A short pitch shown on the market page"></textarea>
+                <div class="chips wrap world">
+                  {#each worldEdits as edit (edit.label)}
+                    <button class="chip world-chip" onclick={edit.run}>{edit.label}</button>
+                  {/each}
+                </div>
+                <button class="btn wide" onclick={saveEdits}>Save changes</button>
+                {#if deleteArmed}
+                  <button class="btn danger wide" onclick={deleteProperty}>Confirm — permanently delete</button>
+                  <span class="hint">Removes the property, its furniture, stashes, photos and doors for good. Garaged vehicles go to the impound.</span>
+                {:else}
+                  <button class="delete-btn" disabled={selected.listed} onclick={() => (deleteArmed = true)}>Delete property</button>
+                  {#if selected.listed}<span class="hint">Cancel the active listing before deleting.</span>{/if}
+                {/if}
+              {:else}
+                <span class="pane-title">Unit</span>
+                <span class="hint">Apartment units are managed from the Buildings tab. World edits and photos are handled by the building.</span>
+              {/if}
+            </div>
 
-        {#if listingType === 'auction'}
-          <div class="field">
-            <span class="label">Duration</span>
-            <div class="chips">
-              {#each [24, 48, 72].filter((h) => h <= market.config.maxAuctionHours) as hours}
-                <button class="chip" class:active={auctionHours === hours} onclick={() => (auctionHours = hours)}>
-                  {hours}h
-                </button>
-              {/each}
+            <div class="pane">
+              <span class="pane-title">Photos</span>
+              {#if !selected.building}
+                <div class="photos">
+                  {#each details.images as image, i (image)}
+                    <span class="photo">
+                      <img src={image} alt="Property" onclick={() => (lightboxIndex = i)} />
+                      <button class="photo-remove" onclick={() => fetchNui('realtor:removeImage', { propertyId: selected.id, index: i + 1 })}>×</button>
+                    </span>
+                  {/each}
+                  <button class="photo-add" onclick={() => fetchNui('realtor:addImage', { propertyId: selected.id })}>+ Add</button>
+                </div>
+                <span class="hint">Adding a photo closes this window and captures your current view.</span>
+              {/if}
+              <div class="status">
+                {#each statusRows as [k, v] (k)}
+                  <div class="status-row">
+                    <span class="status-k">{k}</span>
+                    <span class="status-v">{v}</span>
+                  </div>
+                {/each}
+                {#if details.keyholders?.length}
+                  {#each details.keyholders as holder (holder.citizenid)}
+                    <div class="status-row"><span class="status-k">{holder.name}</span><span class="status-v">Keyholder</span></div>
+                  {/each}
+                {/if}
+                {#if details.access?.length}
+                  {#each details.access as entry (entry.citizenid)}
+                    <div class="status-row">
+                      <span class="status-k">{entry.name}</span>
+                      <span class="status-v">{['door', 'stash', 'furniture', 'garage'].filter((k) => entry[k]).join(', ') || 'none'}</span>
+                    </div>
+                  {/each}
+                {/if}
+              </div>
             </div>
           </div>
 
-          <div class="field">
-            <span class="label">Reserve price</span>
-            <input class="input" type="number" bind:value={reservePrice} min="0" />
-            <span class="hint">0 for no reserve. Must be at least the starting price.</span>
-          </div>
-
-          <div class="field">
-            <span class="label">Minimum increment</span>
-            <input class="input" type="number" bind:value={minIncrement} min="1" />
-          </div>
-        {/if}
-
-        <button class="btn wide push" disabled={!valid} onclick={createListing}>Create listing</button>
-      {/if}
-
-      {#if !selected.building}
-        <div class="section-title">Danger zone</div>
-        {#if deleteArmed}
-          <button class="btn danger wide" onclick={deleteProperty}>Confirm — permanently delete</button>
-          <div class="hint">Removes the property, its furniture, stashes, photos and doors for good. Garaged vehicles go to the impound.</div>
-        {:else}
-          <button class="btn danger wide" disabled={selected.listed} onclick={() => (deleteArmed = true)}>Delete property</button>
-          {#if selected.listed}
-            <div class="hint">Cancel the active listing before deleting.</div>
+          {#if selected.owner}
+            <div class="owner-bar">
+              <span class="owner-info">
+                <span class="owner-name">{ownerName(selected)}</span>
+                <span class="owner-cid">{selected.owner}</span>
+              </span>
+              <span class="hint grow">An owned property cannot be listed. End the tenancy to return it to the pool.</span>
+              {#if selected.building}
+                <button class="delete-btn slim" onclick={() => { fetchNui('realtor:releaseUnit', { propertyId: selected.id, building: selected.building }); selected = null }}>
+                  End tenancy
+                </button>
+              {:else}
+                <button class="delete-btn slim" onclick={() => { fetchNui('realtor:repossess', { propertyId: selected.id }); selected = null }}>
+                  Repossess
+                </button>
+              {/if}
+            </div>
+          {:else if selected.listed}
+            <span class="hint">This property already has an active listing. Cancel it from the Market tab first.</span>
+          {:else}
+            <div class="listing">
+              <span class="pane-title">Create listing</span>
+              <div class="listing-row">
+                <div class="chips">
+                  {#each [['sale', 'Direct sale'], ['auction', 'Auction'], ['offer', 'Open to offers']] as [value, label] (value)}
+                    <button class="chip" class:active={listingType === value} onclick={() => (listingType = value)}>{label}</button>
+                  {/each}
+                </div>
+                <div class="field grow">
+                  <span class="mini-label">{listingType === 'auction' ? 'Starting price' : 'Price'}</span>
+                  <input class="input mono" type="number" bind:value={price} min={market.config.minPrice} />
+                </div>
+                {#if listingType === 'auction'}
+                  <div class="field">
+                    <span class="mini-label">Duration</span>
+                    <div class="chips">
+                      {#each [24, 48, 72].filter((h) => h <= market.config.maxAuctionHours) as hours (hours)}
+                        <button class="chip" class:active={auctionHours === hours} onclick={() => (auctionHours = hours)}>{hours}h</button>
+                      {/each}
+                    </div>
+                  </div>
+                  <div class="field">
+                    <span class="mini-label">Reserve (0 = none)</span>
+                    <input class="input mono" type="number" bind:value={reservePrice} min="0" />
+                  </div>
+                  <div class="field">
+                    <span class="mini-label">Min increment</span>
+                    <input class="input mono" type="number" bind:value={minIncrement} min="1" />
+                  </div>
+                {/if}
+                <button class="btn" disabled={!valid} onclick={createListing}>Create listing</button>
+              </div>
+            </div>
           {/if}
         {/if}
-      {/if}
+      </div>
     {/if}
   </div>
 </div>
@@ -376,24 +357,278 @@
 <Lightbox images={details?.images ?? []} bind:index={lightboxIndex} />
 
 <style>
-  .fact b.danger {
-    color: var(--red);
+  .manage {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
   }
 
-  .summary-input {
-    resize: vertical;
-    min-height: 60px;
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--dark-6);
+    flex: none;
+  }
+
+  .grow {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .chips {
+    display: flex;
+    gap: 5px;
+  }
+
+  .chips.wrap {
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    padding: 8px 12px;
     font-family: inherit;
+    font-size: 12px;
+    color: var(--dark-1);
+    background: var(--dark-6);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .chip:hover {
+    color: #fff;
+  }
+
+  .chip.active {
+    color: #fff;
+    background: var(--accent-15);
+    border-color: var(--blue);
+  }
+
+  .world-chip {
+    flex: 1;
+    min-width: 112px;
+    color: var(--dark-1);
+  }
+
+  .world-chip:hover {
+    border-color: var(--blue);
+  }
+
+  .body {
+    flex: 1;
+    min-height: 0;
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    flex: none;
+  }
+
+  .span-all {
+    grid-column: 1 / -1;
+  }
+
+  .card {
+    position: relative;
+    display: flex;
+    gap: 11px;
+    padding: 11px;
+    font-family: inherit;
+    text-align: left;
+    background: var(--dark-6);
+    border: 1px solid var(--dark-4);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .card:hover {
+    border-color: var(--dark-3);
+  }
+
+  .card.selected {
+    border-color: var(--blue);
+    background: var(--accent-8);
+  }
+
+  .thumb {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: repeating-linear-gradient(135deg, var(--dark-4) 0 7px, var(--dark-5) 7px 14px);
+  }
+
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .card-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-meta {
+    font-size: 11px;
+    color: var(--dark-2);
+  }
+
+  .card-owner {
+    font-size: 11px;
+    color: var(--dark-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .detail {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    background: #1f2023;
+    border: 1px solid var(--dark-4);
+    border-radius: 8px;
+    flex: none;
+  }
+
+  .detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .detail-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .detail-badges {
+    display: flex;
+    gap: 6px;
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    min-width: 0;
+  }
+
+  .pane-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--dark-0);
+  }
+
+  .edit-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .mini-label {
+    font-size: 11px;
+    color: var(--dark-2);
+  }
+
+  .mono {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
+  }
+
+  .rent-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .summary {
+    resize: vertical;
+    min-height: 56px;
+    line-height: 1.5;
+    font-family: inherit;
+  }
+
+  .wide {
+    width: 100%;
+  }
+
+  .delete-btn {
+    width: 100%;
+    padding: 9px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--red);
+    background: transparent;
+    border: 1px solid rgba(250, 82, 82, 0.35);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .delete-btn:hover:not(:disabled) {
+    background: var(--red);
+    color: #fff;
+  }
+
+  .delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .delete-btn.slim {
+    width: auto;
+    flex: none;
+    padding: 9px 14px;
   }
 
   .photos {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 6px;
   }
 
   .photo {
     position: relative;
+    height: 52px;
     border-radius: var(--radius-sm);
     overflow: hidden;
     border: 1px solid var(--dark-4);
@@ -402,7 +637,7 @@
   .photo img {
     display: block;
     width: 100%;
-    height: 56px;
+    height: 100%;
     object-fit: cover;
     cursor: zoom-in;
   }
@@ -427,150 +662,88 @@
     background: var(--red);
   }
 
-  .layout {
-    display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
-    gap: 20px;
-    height: 100%;
-    min-height: 0;
-  }
-
-  .col {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-height: 0;
-  }
-
-  .detail {
-    padding-left: 20px;
-    padding-right: 12px;
-    border-left: 1px solid var(--dark-4);
-  }
-
-  .toolbar {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .chips {
-    display: flex;
-    gap: 6px;
-  }
-
-  .chip {
-    flex: 1;
-    padding: 6px 10px;
+  .photo-add {
+    height: 52px;
     font-family: inherit;
-    font-size: 12px;
-    color: var(--dark-1);
-    background: var(--dark-6);
-    border: 1px solid var(--dark-4);
+    font-size: 11px;
+    color: var(--dark-3);
+    background: transparent;
+    border: 1px dashed var(--dark-4);
     border-radius: var(--radius-sm);
     cursor: pointer;
   }
 
-  .chip:hover {
-    background: var(--dark-5);
-  }
-
-  .chip.active {
+  .photo-add:hover {
     color: #fff;
-    border-color: var(--blue);
-    background: var(--accent-15);
-  }
-
-  .list {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    min-height: 0;
-  }
-
-  .row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 9px 12px;
-    font-family: inherit;
-    text-align: left;
-    background: var(--dark-6);
-    border: 1px solid var(--dark-4);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-  }
-
-  .row:hover {
     border-color: var(--dark-3);
   }
 
-  .row.active {
-    border-color: var(--blue);
-    background: var(--accent-8);
-  }
-
-  .row-main {
+  .status {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    min-width: 0;
   }
 
-  .row-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--dark-0);
+  .status-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--dark-6);
+    font-size: 12px;
   }
 
-  .row-sub {
-    font-size: 11px;
+  .status-k {
     color: var(--dark-2);
   }
 
-  .detail-head {
+  .status-v {
+    font-weight: 500;
+    color: #fff;
+    text-align: right;
+  }
+
+  .owner-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    gap: 14px;
+    padding: 12px 14px;
+    background: var(--dark-6);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-sm);
   }
 
-  .section-title {
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .facts,
-  .owned-block {
+  .owner-info {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
+    flex: none;
   }
 
-  .owned-block {
-    gap: 8px;
+  .owner-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #fff;
+  }
+
+  .owner-cid {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 11px;
+    color: var(--dark-3);
+  }
+
+  .listing {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     padding-top: 12px;
     border-top: 1px solid var(--dark-4);
   }
 
-  .fact {
+  .listing-row {
     display: flex;
-    justify-content: space-between;
+    align-items: flex-end;
     gap: 10px;
-    font-size: 12px;
-    color: var(--dark-2);
-  }
-
-  .fact b {
-    color: #fff;
-  }
-
-  .wide {
-    width: 100%;
-  }
-
-  .push {
-    margin-top: auto;
+    flex-wrap: wrap;
   }
 </style>

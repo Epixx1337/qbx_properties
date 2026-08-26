@@ -257,6 +257,17 @@ function PlaceVehicleOnGround(model, prompt)
     return vec4(coords.x, coords.y, coords.z, heading)
 end
 
+local placementCam = nil
+
+local function stopPlacementCam()
+    if not placementCam then return end
+    RenderScriptCams(false, true, 250, true, true)
+    DestroyCam(placementCam, false)
+    placementCam = nil
+    ClearFocus()
+    FreezeEntityPosition(cache.ped, false)
+end
+
 ---@param model string|number
 ---@param origin vector3
 ---@param prompt string
@@ -275,7 +286,13 @@ function PlaceModelWithGizmo(model, origin, prompt)
     EnterCursorMode()
 
     local cursorOn = true
+    local camSpeed = 0.5
     local confirmed, cancelled = false, false
+
+    local function pushHud()
+        SendUI('placement:show', { prompt = prompt, gizmo = true, flying = placementCam ~= nil })
+    end
+
     while not confirmed and not cancelled do
         Wait(0)
 
@@ -288,6 +305,7 @@ function PlaceModelWithGizmo(model, origin, prompt)
         DisableControlAction(0, 199, true)
         DisableControlAction(0, 24, true)
         DisableControlAction(0, 25, true)
+        DisableControlAction(0, 23, true)
         DisableControlAction(0, 140, true)
         DisableControlAction(0, 141, true)
         DisableControlAction(0, 142, true)
@@ -298,10 +316,77 @@ function PlaceModelWithGizmo(model, origin, prompt)
             if cursorOn then EnterCursorMode() else LeaveCursorMode() end
         end
 
+        if IsControlJustReleased(0, 23) or IsDisabledControlJustReleased(0, 23) then
+            if placementCam then
+                stopPlacementCam()
+                if not cursorOn then
+                    cursorOn = true
+                    EnterCursorMode()
+                end
+            else
+                local camPos = GetGameplayCamCoord()
+                local camRot = GetGameplayCamRot(2)
+                placementCam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', camPos.x, camPos.y, camPos.z, camRot.x, camRot.y, camRot.z, GetGameplayCamFov(), false, 2)
+                SetCamActive(placementCam, true)
+                RenderScriptCams(true, true, 250, true, true)
+                FreezeEntityPosition(cache.ped, true)
+                if cursorOn then
+                    cursorOn = false
+                    LeaveCursorMode()
+                end
+            end
+            pushHud()
+        end
+
+        if placementCam and not cursorOn then
+            local camPos = GetCamCoord(placementCam)
+            local camRot = GetCamRot(placementCam, 2)
+            local forwardX = -math.sin(math.rad(camRot.z))
+            local forwardY = math.cos(math.rad(camRot.z))
+            local rightX = math.cos(math.rad(camRot.z))
+            local rightY = math.sin(math.rad(camRot.z))
+            local upwardZ = math.sin(math.rad(camRot.x))
+
+            if IsDisabledControlPressed(0, 241) then camSpeed = math.min(3.0, camSpeed + 0.02) end
+            if IsDisabledControlPressed(0, 242) then camSpeed = math.max(0.02, camSpeed - 0.02) end
+
+            if IsDisabledControlPressed(0, 32) then
+                camPos = camPos + vector3(forwardX * camSpeed, forwardY * camSpeed, upwardZ * camSpeed)
+            end
+            if IsDisabledControlPressed(0, 33) then
+                camPos = camPos - vector3(forwardX * camSpeed, forwardY * camSpeed, upwardZ * camSpeed)
+            end
+            if IsDisabledControlPressed(0, 34) then
+                camPos = camPos - vector3(rightX * camSpeed, rightY * camSpeed, 0)
+            end
+            if IsDisabledControlPressed(0, 35) then
+                camPos = camPos + vector3(rightX * camSpeed, rightY * camSpeed, 0)
+            end
+            if IsDisabledControlPressed(0, 36) then
+                camPos = camPos - vector3(0, 0, camSpeed)
+            end
+            if IsDisabledControlPressed(0, 203) then
+                camPos = camPos + vector3(0, 0, camSpeed)
+            end
+
+            camRot = camRot - vector3(GetDisabledControlNormal(0, 272) * 5, 0, GetDisabledControlNormal(0, 270) * 5)
+
+            local anchor = GetEntityCoords(cache.ped)
+            local offset = camPos - anchor
+            if #offset > 150.0 then
+                camPos = anchor + offset / #offset * 150.0
+            end
+
+            SetCamCoord(placementCam, camPos.x, camPos.y, camPos.z)
+            SetCamRot(placementCam, math.min(math.max(camRot.x, -89.0), 89.0), camRot.y, camRot.z, 2)
+            SetFocusPosAndVel(camPos.x, camPos.y, camPos.z, 0.0, 0.0, 0.0)
+        end
+
         if IsControlJustReleased(0, 191) then confirmed = true end
         if wantsCancel() then cancelled = true end
     end
 
+    stopPlacementCam()
     if cursorOn then LeaveCursorMode() end
     local coords = GetEntityCoords(ghost)
     local heading = GetEntityHeading(ghost)
@@ -316,4 +401,11 @@ end
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= cache.resource then return end
     if ghost and DoesEntityExist(ghost) then DeleteEntity(ghost) end
+    if placementCam then
+        RenderScriptCams(false, false, 0, true, true)
+        DestroyCam(placementCam, false)
+        placementCam = nil
+        ClearFocus()
+        FreezeEntityPosition(PlayerPedId(), false)
+    end
 end)

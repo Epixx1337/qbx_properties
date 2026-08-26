@@ -140,6 +140,27 @@ RegisterNUICallback('realtor:updateProperty', function(data, cb)
     SendUI('realtor:detailData', lib.callback.await('qbx_properties:callback:getPropertyDetails', false, data.propertyId))
 end)
 
+RegisterNUICallback('realtor:setMailbox', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    CloseUI()
+    local coords, entity = PickWithLaser('Aim at the mailbox prop, or at the spot for one, and click')
+    if not coords then return end
+
+    local point = { x = coords.x, y = coords.y, z = coords.z }
+    if entity and DoesEntityExist(entity) and GetEntityType(entity) == 3 then
+        local entityCoords = GetEntityCoords(entity)
+        point = { x = entityCoords.x, y = entityCoords.y, z = entityCoords.z, model = GetEntityModel(entity) }
+    end
+
+    local ok = lib.callback.await('qbx_properties:callback:setMailbox', false, data.propertyId, point)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Mailbox set.' or 'Could not set the mailbox there.',
+    })
+end)
+
 RegisterNUICallback('realtor:editGarage', function(data, cb)
     cb(1)
     if type(data) ~= 'table' then return end

@@ -135,10 +135,19 @@ lib.callback.register('qbx_properties:callback:createProperty', function(source,
 
     local size = IsValidPropertySize(data.size) and data.size or sharedConfig.defaultPropertySize
 
+    local propertyType = type(data.propertyType) == 'string' and sharedConfig.propertyTypes[data.propertyType] and data.propertyType or nil
+    if propertyType == 'residential' then propertyType = nil end
+    local description = type(data.description) == 'string' and data.description:sub(1, 500) or nil
+    if description == '' then description = nil end
+    local groupName = nil
+    if propertyType and sharedConfig.propertyTypes[propertyType].groupAccess and type(data.group) == 'string' and #data.group > 0 and #data.group <= 50 then
+        groupName = data.group:lower()
+    end
+
     local propertyId = MySQL.insert.await([[
         INSERT INTO `properties`
-            (`coords`, `property_name`, `price`, `interior`, `interact_options`, `stash_options`, `rent_interval`, `garage`, `shell_coords`, `garden_zone`, `door_data`, `size`, `created_by`)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (`coords`, `property_name`, `price`, `interior`, `interact_options`, `stash_options`, `rent_interval`, `garage`, `shell_coords`, `garden_zone`, `door_data`, `size`, `created_by`, `type`, `group_name`, `description`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ]], {
         json.encode({ x = entrance.x, y = entrance.y, z = entrance.z }),
         propertyName,
@@ -153,6 +162,9 @@ lib.callback.register('qbx_properties:callback:createProperty', function(source,
         #doors > 0 and json.encode(doors) or nil,
         size,
         player.PlayerData.citizenid,
+        propertyType,
+        groupName,
+        description,
     })
 
     if not propertyId then return false end

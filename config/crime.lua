@@ -30,6 +30,10 @@ return {
         item = 'advancedlockpick',
         removeOnSuccess = true,
         skillCheck = { 'hard', 'hard', 'hard' },
+        skillCheckSecure = { -- used instead when the property bought security upgrades, indexed by tier
+            { 'hard', 'hard', 'hard', 'hard' },
+            { 'hard', 'hard', 'hard', 'hard', 'hard' },
+        },
         cooldown = 300, -- seconds before the same door can be attempted again
 
         -- plays at the entrance when a lockpick attempt fails, `bank` streams a custom native audio file

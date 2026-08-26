@@ -19,6 +19,7 @@ function OpenHousing()
         sizes = sharedConfig.propertySizes,
         sizeOrder = sharedConfig.propertySizeOrder,
         gardens = sharedConfig.gardens.enabled,
+        types = sharedConfig.propertyTypes,
     })
 
     if IsRealtor(QBX.PlayerData.job) or CanUseCreator() then
@@ -67,6 +68,43 @@ RegisterNUICallback('market:agentBid', function(data, cb)
     end
 end)
 
+RegisterNUICallback('market:placeOffer', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local ok, err = lib.callback.await('qbx_properties:callback:placeOffer', false, data.listingId, data.amount)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Offer placed, the money is held until it settles.' or err or 'Could not place the offer.',
+    })
+    pushListings()
+end)
+
+RegisterNUICallback('market:acceptOffer', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local ok = lib.callback.await('qbx_properties:callback:acceptOffer', false, data.listingId, data.bidId)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Offer accepted.' or 'Could not accept the offer.',
+    })
+    pushListings()
+end)
+
+RegisterNUICallback('market:declineOffer', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local ok = lib.callback.await('qbx_properties:callback:declineOffer', false, data.listingId, data.bidId)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Offer declined and refunded.' or 'Could not decline the offer.',
+    })
+    SendUI('market:bids', lib.callback.await('qbx_properties:callback:getListingBids', false, data.listingId))
+    pushListings()
+end)
+
 RegisterNUICallback('market:cancelListing', function(data, cb)
     cb(1)
     if type(data) ~= 'table' then return end
@@ -106,5 +144,6 @@ RegisterNUICallback('housing:embed', function(_, cb)
         sizes = sharedConfig.propertySizes,
         sizeOrder = sharedConfig.propertySizeOrder,
         gardens = sharedConfig.gardens.enabled,
+        types = sharedConfig.propertyTypes,
     })
 end)

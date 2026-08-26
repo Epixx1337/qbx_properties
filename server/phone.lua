@@ -1,4 +1,4 @@
-local PROPERTY_COLUMNS = 'id, owner, keyholders, building, floor, room, property_name, coords, price, rent_interval, interior, door_data'
+local PROPERTY_COLUMNS = 'id, owner, keyholders, building, floor, room, property_name, coords, price, rent_interval, interior, door_data, type, group_name, tenant'
 
 ---@param propertyId any
 ---@return table? row
@@ -91,6 +91,9 @@ local function addKeyholder(row, targetCid)
     local keyholders = GetPropertyKeyholders(row)
     if lib.table.contains(keyholders, targetCid) then return false end
 
+    local keyLimit = GetKeyholderLimit and GetKeyholderLimit(row.id)
+    if keyLimit and #keyholders >= keyLimit then return false end
+
     if row.building then
         MySQL.insert.await('INSERT IGNORE INTO properties_apartment_keyholders (tenant, keyholder) VALUES (?, ?)', {row.owner, targetCid})
     else
@@ -160,10 +163,6 @@ local function playerProperties(citizenid)
     return out
 end
 
--- Server exports for phone bridges and other resources. Mutations take the acting
--- owner's citizenid and verify ownership themselves, so a sloppy caller cannot be
--- talked into modifying someone else's property.
-
 exports('GetPlayerProperties', function(citizenid)
     if type(citizenid) ~= 'string' then return {} end
     return playerProperties(citizenid)
@@ -206,9 +205,6 @@ exports('SetLocked', function(propertyId, actorCid, locked)
     if not HasPropertyAccess(actorCid, row, 'door') then return false end
     return setLocked(row, locked == true)
 end)
-
--- Player-scoped callbacks for phone client apps. The actor is always resolved from
--- source, never from arguments.
 
 lib.callback.register('qbx_properties:callback:phoneHomes', function(source)
     local player = exports.qbx_core:GetPlayer(source)

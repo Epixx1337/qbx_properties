@@ -307,7 +307,7 @@ lib.callback.register('qbx_properties:callback:canDecorateUnit', function(source
     local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE building = ? AND floor = ? AND room = ?', {buildingKey, floor, room})
     if not property then return false end
 
-    if IsRealtor(player.PlayerData.job) then return true, property.id end
+    if not property.owner and IsRealtor(player.PlayerData.job) then return true, property.id end
     if property.owner == player.PlayerData.citizenid then return true, property.id end
 
     local keyholders = GetPropertyKeyholders(property)

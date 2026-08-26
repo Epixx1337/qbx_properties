@@ -51,6 +51,7 @@ export const market = $state({
   listings: [],
   sizes: {},
   sizeOrder: [],
+  types: {},
   gardens: false,
   selected: null,
   bids: [],
@@ -90,6 +91,11 @@ export const tablet = $state({
   apartment: false,
   nearby: [],
   utilities: null,
+  upgrades: null,
+  isUpgradeOwner: false,
+  garageSpots: 0,
+  garageLimit: 0,
+  tenancy: null,
 })
 
 export const placement = $state({
@@ -102,6 +108,7 @@ export const placement = $state({
   height: null,
   photo: false,
   capture: false,
+  flying: false,
 })
 
 export const preview = $state({
@@ -121,6 +128,9 @@ export const creationFormDefaults = () => ({
   rentInterval: 24,
   listingType: 'none',
   auctionHours: 72,
+  propertyType: 'residential',
+  group: '',
+  description: '',
 })
 
 export const creation = $state({

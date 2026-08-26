@@ -182,6 +182,8 @@ end
 
 exports('registerFurniture', RegisterFurniture)
 
+RegisterFurniture({ object = 'reh_prop_reh_tablet_01a', label = 'Housing Tablet', type = 'tablet', power = 20 })
+
 ---@return table<string, string>
 function GetFurnitureTypes()
     buildFurnitureIndex()
@@ -227,9 +229,17 @@ end
 ---@param property table
 ---@return integer
 function GetPowerLimit(property)
-    if property.power_limit then return property.power_limit end
     if property.building then return sharedConfig.utilities.apartment.power end
-    return GetPropertySize(property.size).power
+    local bonus = GetUpgradePowerBonus and GetUpgradePowerBonus(property.id) or 0
+    if property.power_limit then return property.power_limit + bonus end
+    return GetPropertySize(property.size).power + bonus
+end
+
+---@param property table? needs type
+---@return table
+function GetPropertyType(property)
+    local types = sharedConfig.propertyTypes or {}
+    return types[property and property.type or 'residential'] or types.residential or {}
 end
 
 ---@param property table

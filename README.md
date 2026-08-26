@@ -34,25 +34,25 @@ Player housing for Qbox. Apartments, shell interiors and MLO houses with an in-g
 
 ![Market tab](.github/media/market.png)
 
-Every active listing with photos and prices, filterable by direct sales or auctions. Realtors see the same page plus their tools.
+Every active listing as a photo card with type badges and live countdowns, filterable by direct sales, auctions, open-to-offer listings and your saved listings, with sorting and a recently-viewed strip. Realtors see the same page plus their tools.
 
 ![Listing detail](.github/media/market-listing.png)
 
-A listing opened: photo gallery, the realtor's pitch, price, and the buy button. Auctions show current bid, time left and bid history instead.
+A listing opened: photo gallery with thumbnails, the realtor's pitch, property facts and running costs. Auctions show the current bid, time left, a bid box and (for realtors) the live bid feed; offer listings escrow the full amount until the realtor accepts or declines.
 
 ### New property
 
-![Interior list](.github/media/new-property-interiors.png)
+![Interior pick](.github/media/new-property-interiors.png)
 
-Realtors pick a predefined interior — IPL apartments already exist in the world and only need an entrance, shells get spawned and positioned — or start an MLO property.
+A four-step wizard. Step one picks the interior — IPL apartments already exist in the world and only need an entrance, shells get spawned and positioned, or start an MLO property where you stand.
 
-![IPL flow](.github/media/new-property-ipl.png)
+![Point capture](.github/media/new-property-mlo.png)
 
-The IPL flow: aim at the door with the laser to set the entrance; interaction points come pre-captured for known interiors and can be edited.
+Step two captures the world points: interior point or entrance, doors with the laser, the shell position (placeable from a freecam), and optionally a garden zone and a garage spot. Each row rings green when done.
 
-![MLO flow](.github/media/new-property-mlo.png)
+![Review](.github/media/new-property-review.png)
 
-The MLO flow: stand inside and capture the interior point, add the door(s), and optionally a garden zone and a garage spot. Price, size and rental terms on the right, with the option to list immediately.
+Steps three and four: name, price, size, type and the listing summary, then a review card with the option to list immediately as a sale, auction or open to offers.
 
 ![Creating in the world](.github/media/new-property-ingame.png)
 
@@ -62,17 +62,27 @@ All of it happens standing at the property, not in a config file.
 
 ![Property list](.github/media/manage.png)
 
-Every property on the server with owner and status, searchable and filterable.
+Every property on the server as a card with its photo, status and owner, searchable and filterable.
 
 ![Property details](.github/media/manage-details.png)
 
-A selected property: edit price/size/description, take listing photos, re-place the garage, redraw the garden, and for MLOs re-set the interior point or add more doors. Realtors can also enter the property remotely to fix its interior points.
+A selected property: edit price/size/rental/description, manage listing photos, re-place the garage, redraw the garden, set the mailbox, and for MLOs re-set the interior point or add more doors. Realtors can enter unowned properties remotely to fix their interior points — owned properties are off limits.
 
 ### Buildings
 
 ![Buildings tab](.github/media/buildings.png)
 
-Multi-unit buildings: pick a floor, see every unit and its tenant, and create the remaining units in bulk with a price and rental terms.
+Multi-unit buildings: pick a building and floor, see every unit's occupancy at a glance, and create the remaining units in bulk with a price and rental terms.
+
+### Housing tablet
+
+![Tablet utilities](.github/media/tablet-utilities.png)
+
+The tablet mounted in a property (the wall intercom prop by [CodexisPhantom](https://github.com/CodexisPhantom)): live power draw against the allowance, humidity, the bill, and the biggest power consumers.
+
+![Tablet upgrades](.github/media/tablet-upgrades.png)
+
+Property upgrades as badge tiles with tier progress — the next tier only appears once the previous one is bought. Room management, tenancy and wall colours live in the same tablet.
 
 ### MLO Apartments Creator
 
@@ -90,6 +100,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - Pooled IPL apartments (Del Perro, Integrity Way, Richard Majestic, Tinsel Towers) plus multi-unit apartment buildings with per-floor rooms, doorbells and shared parking garages — the Wiwang Hotel, the four Prodigy towers ([docs/prp-apartments.md](docs/prp-apartments.md)) and the Starlite Motel ([docs/starlite-motel.md](docs/starlite-motel.md)) ship preconfigured
 - Garages register with qbx_garages by default or bridge to jg-advancedgarages, cd_garage or okokGarage through one config option — see [docs/garage-systems.md](docs/garage-systems.md)
 - Phone home apps hook in through secured exports (list homes, waypoint, lock doors, manage keys) — drop-in lb-phone files and an sd-phone adapter ship in [docs/phone-integrations.md](docs/phone-integrations.md)
+- Property types (residential, commercial, warehouse, gang with group access), per-type purchasable upgrades (stash and key limits, wiring, security alerts, a second garage), breaker tripping with electrician repairs, owner-to-player leasing, escrowed offers and realtor-placed mailboxes — see [docs/upgrades-and-types.md](docs/upgrades-and-types.md)
 - Tenants can relocate between buildings, gated by config: free moves at the reception, plus a one-time migration offer on login whenever new buildings open with free rooms
 - Admins can furnish a unit and run `/saveroom` to save it as the default loadout for that room layout — every fresh tenant starts with those pieces already placed and fully editable
 - Standalone properties using interior shells, IPL interiors or real MLO houses
@@ -97,8 +108,9 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - Owned properties show house and garage blips, and can be spawned into from the spawn selector
 
 **Realtor job**
-- Create properties entirely in game: pick the door with a laser pointer, capture the interior point, set price, size and rental terms
-- Manage menu: edit price/size/description, take property photos (uploaded to the Qbox CDN), place garages, draw garden zones, add doors, re-capture the interior point and enter properties remotely
+- Create properties entirely in game through a four-step wizard: pick the door with a laser pointer, capture the interior point, position shells with a gizmo and a fly-anywhere freecam, write the listing summary, and set price, size, type and rental terms
+- Manage menu: edit price/size/description, take property photos (uploaded to the Qbox CDN), place garages, draw garden zones, set mailboxes, add doors, re-capture the interior point and enter properties remotely
+- Realtor access is scoped to unowned properties — owned doors, interiors and furniture are out of reach (raids are the sanctioned way in)
 - Realtors earn a configurable commission on sales and rent of properties they created
 
 **Decorating**
@@ -114,7 +126,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - Wardrobe and logout furniture (logout can be disabled in config)
 
 **Economy**
-- Market with direct sales and auctions (configurable durations, anti-snipe)
+- Market with direct sales, auctions (configurable durations, anti-snipe) and open-to-offer listings with full escrow, plus saved listings and a recently-viewed strip
 - The market UI can be embedded in laptop and tablet resources (fd_laptops and similar), with `/housing` optionally disabled — see [docs/third-party-ui.md](docs/third-party-ui.md)
 - Rent cycles and utility billing with power usage and humidity per property size
 - Optional society/government accounts for proceeds and bills
@@ -140,6 +152,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 **Assets used by specific features**
 
+- [CodexisPhantom](https://github.com/CodexisPhantom) — the `cdx_intercom_prop` wall intercom streamed with the resource and used as the housing tablet prop
 - [Battering-Ram](https://github.com/Epixx1337/Battering-Ram) — the two-handed ram weapon (`WEAPON_BATTERINGRAM`) used for police door breaches, with its looping breach animation
 - [wiwang_hotel](https://github.com/Epixx1337/wiwang_hotel) — our edit of the Wiwang Hotel MLO with per-room `wall_tint` entity sets, required for wall colours inside its apartments
 - [prp-housing shells](https://studio.prodigyrp.net/map) — the ProdigyRP house MLOs, required for wall colours in those interiors
@@ -277,8 +290,9 @@ Options worth knowing about:
 - `garageSystem` (shared) — `'qbx'` uses qbx_garages; other values bridge property and apartment garages to third-party garage scripts, see [docs/garage-systems.md](docs/garage-systems.md).
 - `stairsOnly` (buildings) — marks an apartment building without elevators, like the Starlite Motel: elevator fields are skipped and move-in messages point at the stairs.
 - `targetInteractions` (shared) — MLO furniture uses ox_target labels instead of floating interaction points.
-- `targetShellInteractions` (shared) — `true` replaces the floating drawtext on shell and IPL interaction points (stash, exit, clothing, logout) with ox_target zones.
+- `targetShellInteractions` (shared) — `true` replaces the floating drawtext on shell and IPL properties with ox_target zones, both on the interaction points inside (stash, exit, clothing, logout) and on the entrance outside.
 - `propertySizes` (shared) — each size sets the power allowance (W) and the monthly utility cost; realtors pick the size on creation.
+- `propertyTypes` / `upgrades` / `keyholderLimit` / `electricity` / `mailbox` / `rentGraceHours` (shared) — property types, the upgrade catalog, breaker tripping and mailbox settings, see [docs/upgrades-and-types.md](docs/upgrades-and-types.md).
 - `utilities` (shared) — billing period, grace period, and the humidity model (base level, effect per kilowatt, comfort threshold).
 - `commission` (shared) — the cut of sales and rent paid to the realtor who created the property.
 - `market` (shared) — price bounds, auction durations, anti-snipe window, whether bids are anonymous, and how close an agent must be to bid on a client's behalf.

@@ -443,7 +443,7 @@ end)
 local function singlePropertyMenu(property, noBackMenu)
     local options = {}
 
-    if IsRealtor(QBX.PlayerData.job) then
+    if IsRealtor(QBX.PlayerData.job) and not property.owner then
         options[#options + 1] = {
             title = 'Enter (realtor)',
             description = 'Inspect the property and adjust its interaction points',
@@ -458,7 +458,7 @@ local function singlePropertyMenu(property, noBackMenu)
         }
     end
 
-    if QBX.PlayerData.citizenid == property.owner or lib.table.contains(json.decode(property.keyholders), QBX.PlayerData.citizenid) then
+    if QBX.PlayerData.citizenid == property.owner or QBX.PlayerData.citizenid == property.tenant or lib.table.contains(json.decode(property.keyholders), QBX.PlayerData.citizenid) then
         options[#options + 1] = {
             title = locale('menu.enter'),
             icon = 'cog',
@@ -576,6 +576,33 @@ function PreparePropertyMenu(propertyCoords)
     end
 end
 
+local entranceZones = {}
+
+local function refreshEntranceZones()
+    for i = 1, #entranceZones do
+        exports.ox_target:removeZone(entranceZones[i])
+    end
+    table.wipe(entranceZones)
+
+    local label = locale('drawtext.view_property'):gsub('^%[E%]%s*%-?%s*', '')
+    for i = 1, #properties do
+        local coords = properties[i]
+        entranceZones[#entranceZones + 1] = exports.ox_target:addSphereZone({
+            coords = coords.xyz,
+            radius = 1.6,
+            options = {
+                {
+                    label = label,
+                    icon = 'fas fa-house',
+                    onSelect = function()
+                        PreparePropertyMenu(coords)
+                    end,
+                },
+            },
+        })
+    end
+end
+
 CreateThread(function()
     local apartmentOptions = GetApartmentOptions()
     for i = 1, #apartmentOptions do
@@ -587,6 +614,12 @@ CreateThread(function()
     end
 
     properties = lib.callback.await('qbx_properties:callback:loadProperties')
+
+    if sharedConfig.targetShellInteractions then
+        refreshEntranceZones()
+        return
+    end
+
     while true do
         local sleep = 800
         local playerCoords = GetEntityCoords(cache.ped)
@@ -669,6 +702,44 @@ end)
 RegisterNetEvent('qbx_properties:client:addProperty', function(propertyCoords)
     if lib.table.contains(properties, propertyCoords) then return end
     properties[#properties + 1] = propertyCoords
+    if sharedConfig.targetShellInteractions then refreshEntranceZones() end
+end)
+
+local mailboxZones = {}
+
+local function refreshMailboxes()
+    for i = 1, #mailboxZones do
+        exports.ox_target:removeZone(mailboxZones[i])
+    end
+    table.wipe(mailboxZones)
+
+    if not sharedConfig.mailbox or not sharedConfig.mailbox.enabled then return end
+
+    local list = lib.callback.await('qbx_properties:callback:getMailboxes', false) or {}
+    for i = 1, #list do
+        local entry = list[i]
+        mailboxZones[#mailboxZones + 1] = exports.ox_target:addSphereZone({
+            coords = entry.coords,
+            radius = 0.8,
+            options = {
+                {
+                    label = 'Mailbox',
+                    icon = 'fas fa-envelope',
+                    onSelect = function()
+                        TriggerServerEvent('qbx_properties:server:openMailbox', entry.id)
+                    end,
+                },
+            },
+        })
+    end
+end
+
+RegisterNetEvent('qbx_properties:client:refreshMailboxes', refreshMailboxes)
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', refreshMailboxes)
+
+AddEventHandler('onResourceStart', function(resource)
+    if resource ~= cache.resource then return end
+    if LocalPlayer.state.isLoggedIn then refreshMailboxes() end
 end)
 
 RegisterNetEvent('qbx_properties:client:removeProperty', function(propertyCoords)
@@ -678,4 +749,5 @@ RegisterNetEvent('qbx_properties:client:removeProperty', function(propertyCoords
             break
         end
     end
+    if sharedConfig.targetShellInteractions then refreshEntranceZones() end
 end)
