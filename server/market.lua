@@ -49,9 +49,9 @@ end
 ---@param buyerCid string
 ---@param amount integer
 local function transferProperty(propertyId, buyerCid, amount)
-    local property = MySQL.single.await('SELECT owner, property_name FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT owner, property_name, type FROM properties WHERE id = ?', {propertyId})
     if not property then return false end
-    if not CanOwnAnotherProperty(buyerCid) then return false end
+    if not CanOwnAnotherProperty(buyerCid, property.type) then return false end
 
     MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT() WHERE id = ?', {buyerCid, propertyId})
 
@@ -273,18 +273,29 @@ lib.callback.register('qbx_properties:callback:buyListing', function(source, lis
     if not player or not listingId then return false end
 
     local listing = getActiveListing(listingId)
-    if not listing or listing.listing_type ~= 'sale' then return false end
-
-    if not CanOwnAnotherProperty(player.PlayerData.citizenid) then
-        exports.qbx_core:Notify(source, 'You already own the maximum number of properties.', 'error')
+    if not listing or listing.listing_type ~= 'sale' then
+        exports.qbx_core:Notify(source, 'That listing is no longer available.', 'error')
         return false
     end
 
-    local property = MySQL.single.await('SELECT coords, owner FROM properties WHERE id = ?', {listing.property_id})
-    if not property or property.owner == player.PlayerData.citizenid then return false end
+    local property = MySQL.single.await('SELECT coords, owner, type FROM properties WHERE id = ?', {listing.property_id})
+    if not property then return false end
+
+    if property.owner == player.PlayerData.citizenid then
+        exports.qbx_core:Notify(source, 'This property is already yours.', 'error')
+        return false
+    end
+
+    if not CanOwnAnotherProperty(player.PlayerData.citizenid, property.type) then
+        exports.qbx_core:Notify(source, 'You already own the maximum number of properties of this type.', 'error')
+        return false
+    end
 
     local coords = json.decode(property.coords)
-    if #(GetEntityCoords(GetPlayerPed(source)) - vec3(coords.x, coords.y, coords.z)) > 30.0 then return false end
+    if #(GetEntityCoords(GetPlayerPed(source)) - vec3(coords.x, coords.y, coords.z)) > 30.0 then
+        exports.qbx_core:Notify(source, 'You are too far away — go to the property to buy it.', 'error')
+        return false
+    end
 
     if MySQL.update.await("UPDATE properties_listings SET status = 'finalizing' WHERE id = ? AND status = 'active'", {listingId}) ~= 1 then return false end
 
@@ -320,7 +331,8 @@ lib.callback.register('qbx_properties:callback:placeOffer', function(source, lis
     if not player or not listingId or not amount then return false, 'Invalid offer.' end
 
     local citizenId = player.PlayerData.citizenid
-    if not CanOwnAnotherProperty(citizenId) then return false, 'You already own the maximum number of properties.' end
+    local offerType = MySQL.scalar.await('SELECT p.type FROM properties_listings l JOIN properties p ON p.id = l.property_id WHERE l.id = ?', {listingId})
+    if not CanOwnAnotherProperty(citizenId, offerType) then return false, 'You already own the maximum number of properties of this type.' end
 
     local listing = getActiveListing(listingId)
     if not listing or listing.listing_type ~= 'offer' then return false, 'Listing not found.' end
@@ -420,7 +432,9 @@ local executeBidLocked
 local function executeBid(playerSource, citizenId, listingId, amount)
     amount = ToId(amount)
     if not amount or amount <= 0 then return false, 'Invalid bid amount.' end
-    if not CanOwnAnotherProperty(citizenId) then return false, 'You already own the maximum number of properties.' end
+
+    local propertyType = MySQL.scalar.await('SELECT p.type FROM properties_listings l JOIN properties p ON p.id = l.property_id WHERE l.id = ?', {listingId})
+    if not CanOwnAnotherProperty(citizenId, propertyType) then return false, 'You already own the maximum number of properties of this type.' end
 
     if bidLocks[listingId] then return false, 'Another bid is being processed, try again.' end
     bidLocks[listingId] = true

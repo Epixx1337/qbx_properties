@@ -68,7 +68,7 @@ RegisterNetEvent('qbx_properties:server:respondToOffer', function(accepted)
         return
     end
 
-    local property = MySQL.single.await('SELECT id, owner, property_name FROM properties WHERE id = ?', {offer.propertyId})
+    local property = MySQL.single.await('SELECT id, owner, property_name, type FROM properties WHERE id = ?', {offer.propertyId})
     local stillValid = property ~= nil and (property.owner == offer.sellerCid or property.owner == nil)
 
     if not stillValid then
@@ -77,9 +77,9 @@ RegisterNetEvent('qbx_properties:server:respondToOffer', function(accepted)
         return
     end
 
-    if not CanOwnAnotherProperty(buyer.PlayerData.citizenid) then
-        exports.qbx_core:Notify(playerSource, 'You already own the maximum number of properties.', 'error')
-        if sellerOnline then exports.qbx_core:Notify(offer.sellerSource, 'The buyer already owns the maximum number of properties.', 'error') end
+    if not CanOwnAnotherProperty(buyer.PlayerData.citizenid, property.type) then
+        exports.qbx_core:Notify(playerSource, 'You already own the maximum number of properties of this type.', 'error')
+        if sellerOnline then exports.qbx_core:Notify(offer.sellerSource, 'The buyer already owns the maximum number of properties of this type.', 'error') end
         return
     end
 

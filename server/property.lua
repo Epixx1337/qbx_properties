@@ -458,12 +458,30 @@ function GetPropertyPayments(propertyId, kind)
 end
 
 ---@param citizenId string
+---@param propertyType string?
 ---@return boolean
-function CanOwnAnotherProperty(citizenId)
-    local limit = ToId(sharedConfig.propertyLimit)
+function CanOwnAnotherProperty(citizenId, propertyType)
+    local limits = sharedConfig.propertyLimit
+    if not limits then return true end
+
+    if type(limits) ~= 'table' then
+        local limit = ToId(limits)
+        if not limit or limit <= 0 then return true end
+        local count = MySQL.scalar.await('SELECT COUNT(*) FROM properties WHERE owner = ? AND building IS NULL', {citizenId}) or 0
+        return count < limit
+    end
+
+    propertyType = propertyType or 'residential'
+    local limit = ToId(limits[propertyType])
     if not limit or limit <= 0 then return true end
 
-    local count = MySQL.scalar.await('SELECT COUNT(*) FROM properties WHERE owner = ? AND building IS NULL', {citizenId}) or 0
+    local count
+    if propertyType == 'residential' then
+        count = MySQL.scalar.await("SELECT COUNT(*) FROM properties WHERE owner = ? AND building IS NULL AND (type IS NULL OR type = 'residential')", {citizenId}) or 0
+    else
+        count = MySQL.scalar.await('SELECT COUNT(*) FROM properties WHERE owner = ? AND building IS NULL AND type = ?', {citizenId, propertyType}) or 0
+    end
+
     return count < limit
 end
 
@@ -1100,14 +1118,14 @@ RegisterNetEvent('qbx_properties:server:rentProperty', function(propertyId)
     propertyId = ToId(propertyId)
     if not player or not propertyId then return end
     local playerCoords = GetEntityCoords(GetPlayerPed(playerSource))
-    local property = MySQL.single.await('SELECT owner, price, property_name, coords, rent_interval, garage FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT owner, price, property_name, coords, rent_interval, garage, type FROM properties WHERE id = ?', {propertyId})
     if not property or type(property.price) ~= 'number' or property.price <= 0 then return end
     local propertyCoords = json.decode(property.coords)
     if #(playerCoords - vec3(propertyCoords.x, propertyCoords.y, propertyCoords.z)) > 8.0 then return end
     if property.owner then return end
     if not property.rent_interval then return end
 
-    if not CanOwnAnotherProperty(player.PlayerData.citizenid) then
+    if not CanOwnAnotherProperty(player.PlayerData.citizenid, property.type) then
         exports.qbx_core:Notify(playerSource, 'You already own the maximum number of properties.', 'error')
         return
     end
@@ -1141,13 +1159,13 @@ RegisterNetEvent('qbx_properties:server:buyProperty', function(propertyId)
     propertyId = ToId(propertyId)
     if not player or not propertyId then return end
     local playerCoords = GetEntityCoords(GetPlayerPed(playerSource))
-    local property = MySQL.single.await('SELECT owner, price, property_name, coords, garage FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT owner, price, property_name, coords, garage, type FROM properties WHERE id = ?', {propertyId})
     if not property or type(property.price) ~= 'number' or property.price <= 0 then return end
     local propertyCoords = json.decode(property.coords)
 
     if #(playerCoords - vec3(propertyCoords.x, propertyCoords.y, propertyCoords.z)) > 8.0 or property.owner then return end
 
-    if not CanOwnAnotherProperty(player.PlayerData.citizenid) then
+    if not CanOwnAnotherProperty(player.PlayerData.citizenid, property.type) then
         exports.qbx_core:Notify(playerSource, 'You already own the maximum number of properties.', 'error')
         return
     end

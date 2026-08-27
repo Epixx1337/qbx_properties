@@ -14,7 +14,12 @@ return {
     },
 
     -- Ownership
-    propertyLimit = 0, -- max houses/warehouses/etc one citizenid may own, apartments never count, 0 = unlimited
+    propertyLimit = { -- max owned properties per citizenid for each type, apartments never count, 0 = unlimited
+        residential = 1,
+        commercial = 1,
+        warehouse = 1,
+        gang = 1,
+    },
 
     -- Identifier prefixes for stashes, doors and garages registered with ox_inventory, ox_doorlock and the garage system.
     -- Changing these on a live server orphans everything created under the old prefix: stash contents, door records

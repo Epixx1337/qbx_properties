@@ -283,7 +283,7 @@ With the key left empty, the Take photo button reports that uploads are not conf
 Options worth knowing about:
 
 - `realtorJobs` / `realtorRequiresDuty` (shared) — which jobs and grades get the realtor tabs, and whether they must be on duty.
-- `propertyLimit` (shared) — how many houses/warehouses/etc one character may own at once, enforced on every purchase path (buy, rent-to-own, auctions, offers, player sales). Apartments never count. `0` = unlimited.
+- `propertyLimit` (shared) — how many properties one character may own at once, **per property type** (residential, commercial, warehouse, gang), enforced on every purchase path (buy, rent-to-own, auctions, offers, player sales). Apartments never count. `0` = unlimited for that type; a plain number instead of the table acts as one shared limit across all types.
 - `prefixes` (shared) — the identifier prefixes used for ox_inventory stashes, ox_doorlock doors and garage names. Only change these on a fresh server: on a live one everything created under the old prefix (stash contents, door records, parked vehicles) keeps its old name and becomes unreachable.
 - `logging` (server) — set `logging.discordWebhook` to a Discord webhook url and every action log goes there as an embed instead of ox_lib's logger.
 - `logoutEnabled` (shared) — beds and logout points let players switch character; `false` hides them everywhere.
