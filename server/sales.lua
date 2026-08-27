@@ -77,6 +77,12 @@ RegisterNetEvent('qbx_properties:server:respondToOffer', function(accepted)
         return
     end
 
+    if not CanOwnAnotherProperty(buyer.PlayerData.citizenid) then
+        exports.qbx_core:Notify(playerSource, 'You already own the maximum number of properties.', 'error')
+        if sellerOnline then exports.qbx_core:Notify(offer.sellerSource, 'The buyer already owns the maximum number of properties.', 'error') end
+        return
+    end
+
     local account = buyer.PlayerData.money.cash >= offer.price and 'cash' or 'bank'
     if buyer.PlayerData.money[account] < offer.price then
         exports.qbx_core:Notify(playerSource, 'You do not have enough money for this property.', 'error')
@@ -117,7 +123,7 @@ RegisterNetEvent('qbx_properties:server:respondToOffer', function(accepted)
 
     TriggerClientEvent('qbx_properties:client:refreshTargets', -1)
 
-    lib.logger(playerSource, 'qbx_properties:server:sellProperty', string.format('%s sold %s to %s for $%d', offer.sellerCid, property.property_name, buyer.PlayerData.citizenid, offer.price))
+    LogAction(playerSource, 'qbx_properties:server:sellProperty', string.format('%s sold %s to %s for $%d', offer.sellerCid, property.property_name, buyer.PlayerData.citizenid, offer.price))
 end)
 
 AddEventHandler('playerDropped', function()

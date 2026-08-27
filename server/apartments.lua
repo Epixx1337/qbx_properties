@@ -127,7 +127,7 @@ RegisterNetEvent('qbx_properties:server:releaseUnit', function(propertyId)
 
     ReleaseRooms(property.owner)
 
-    lib.logger(playerSource, 'qbx_properties:server:releaseUnit', string.format('%s released %s from %s', player.PlayerData.citizenid, property.property_name, property.owner))
+    LogAction(playerSource, 'qbx_properties:server:releaseUnit', string.format('%s released %s from %s', player.PlayerData.citizenid, property.property_name, property.owner))
 
     exports.qbx_core:Notify(playerSource, string.format('%s is now free.', property.property_name), 'success')
 end)
@@ -223,12 +223,14 @@ RegisterNetEvent('qbx_properties:server:ringUnit', function(buildingKey, floor, 
     local property = MySQL.single.await('SELECT id, owner FROM properties WHERE building = ? AND floor = ? AND room = ?', {buildingKey, floor, room})
     if not property or not property.owner then return end
 
-    local owner = exports.qbx_core:GetPlayerByCitizenId(property.owner)
-    if not owner then return end
+    RegisterRinger(property.id, playerSource)
 
-    local caller = exports.qbx_core:GetPlayer(playerSource)
-    exports.qbx_core:Notify(owner.PlayerData.source, string.format('%s is at your door.',
-        caller and string.format('%s %s', caller.PlayerData.charinfo.firstname, caller.PlayerData.charinfo.lastname) or 'Someone'), 'inform')
+    local owner = exports.qbx_core:GetPlayerByCitizenId(property.owner)
+    if owner and not lib.table.contains(GetPropertyOccupants(property.id), owner.PlayerData.source) then
+        local caller = exports.qbx_core:GetPlayer(playerSource)
+        exports.qbx_core:Notify(owner.PlayerData.source, string.format('%s is at your door.',
+            caller and string.format('%s %s', caller.PlayerData.charinfo.firstname, caller.PlayerData.charinfo.lastname) or 'Someone'), 'inform')
+    end
 end)
 
 RegisterNetEvent('qbx_properties:server:setCurrentUnit', function(buildingKey, floor, room)
@@ -425,7 +427,7 @@ RegisterNetEvent('qbx_properties:server:moveIn', function(buildingKey)
 
     exports.qbx_core:Notify(playerSource, string.format('You moved into %s.', building.label), 'success')
 
-    lib.logger(playerSource, 'qbx_properties:server:moveIn', string.format('%s moved into %s (room id %d)', player.PlayerData.citizenid, buildingKey, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:moveIn', string.format('%s moved into %s (room id %d)', player.PlayerData.citizenid, buildingKey, propertyId))
 end)
 
 RegisterNetEvent('qbx_properties:server:moveOut', function()
@@ -464,7 +466,7 @@ RegisterNetEvent('qbx_properties:server:createUnits', function(buildingKey, floo
 
     exports.qbx_core:Notify(playerSource, string.format('Created %d units on floor %d of %s', created, floor, building.label), 'success')
 
-    lib.logger(playerSource, 'qbx_properties:server:createUnits', string.format('%s created %d units on %s floor %d', player.PlayerData.citizenid, created, buildingKey, floor))
+    LogAction(playerSource, 'qbx_properties:server:createUnits', string.format('%s created %d units on %s floor %d', player.PlayerData.citizenid, created, buildingKey, floor))
 end)
 
 lib.callback.register('qbx_properties:callback:getMyUnit', function(source)
@@ -563,7 +565,7 @@ RegisterNetEvent('qbx_properties:server:chooseMigration', function(buildingKey)
 
     player.Functions.SetMetaData('apartmentMigration', buildingKey)
     exports.qbx_core:Notify(playerSource, ('You now live in %s. Take the %s to find your new room.'):format(building.label, building.stairsOnly and 'stairs' or 'elevator'), 'success')
-    lib.logger(playerSource, 'qbx_properties:server:chooseMigration', string.format('%s migrated to %s (room id %d)', player.PlayerData.citizenid, buildingKey, id))
+    LogAction(playerSource, 'qbx_properties:server:chooseMigration', string.format('%s migrated to %s (room id %d)', player.PlayerData.citizenid, buildingKey, id))
 end)
 
 lib.addCommand('saveroom', {
@@ -596,5 +598,5 @@ lib.addCommand('saveroom', {
     end
 
     exports.qbx_core:Notify(source, ('Saved %d piece(s) as the default loadout for the %s layout.'):format(#rows, layout), 'success')
-    lib.logger(source, 'qbx_properties:server:saveroom', string.format('saved %d default piece(s) for layout %s', #rows, layout))
+    LogAction(source, 'qbx_properties:server:saveroom', string.format('saved %d default piece(s) for layout %s', #rows, layout))
 end)

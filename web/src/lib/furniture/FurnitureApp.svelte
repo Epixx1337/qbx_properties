@@ -32,7 +32,23 @@
   let mode = $state('catalog')
   let placedSearch = $state('')
 
-  const categories = $derived(Object.keys(furniture.categories))
+  const categories = $derived(
+    Object.keys(furniture.categories).sort((a, b) => {
+      if (a === 'utility') return -1
+      if (b === 'utility') return 1
+      return a.localeCompare(b)
+    })
+  )
+
+  const modelTypes = $derived.by(() => {
+    const map = {}
+    for (const name of Object.keys(furniture.categories)) {
+      for (const entry of furniture.categories[name] ?? []) {
+        if (entry.type) map[entry.object] = entry.type
+      }
+    }
+    return map
+  })
 
   const placedItems = $derived(
     furniture.placed.filter(
@@ -59,8 +75,10 @@
 
   function isFirstFree(item) {
     if (!item.firstFree || !item.price) return false
-    if (furniture.placed.some((p) => p.model === item.object)) return false
-    return !furniture.cart.some((c) => c.model === item.object)
+    const group = item.type
+    const taken = (model) => model === item.object || (group && modelTypes[model] === group)
+    if (furniture.placed.some((p) => taken(p.model))) return false
+    return !furniture.cart.some((c) => taken(c.model))
   }
 
   function backToWorld() {
@@ -91,7 +109,7 @@
       </div>
 
       {#if !furniture.search.trim()}
-        <div class="tabs scroll">
+        <div class="tabs">
           {#each categories as name}
             <button
               class="tab"
@@ -593,10 +611,11 @@
 
   .tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     padding: 10px 16px;
-    overflow-x: auto;
     border-bottom: 1px solid var(--dark-4);
+    flex: none;
   }
 
   .tab {

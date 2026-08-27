@@ -36,11 +36,22 @@ return {
             },
             {
                 object = 'cdx_intercom_prop',
+                label = 'Housing Intercom',
+                type = 'tablet',
+                price = 500,
+                firstFree = true,
+                power = 20,
+                tint = true, -- body recolours through the wall palette, tint 0 is the white default
+            },
+            {
+                object = 'reh_prop_reh_tablet_01a',
                 label = 'Housing Tablet',
                 type = 'tablet',
                 price = 500,
                 firstFree = true,
                 power = 20,
+                screenshotCameraOffset = vec3(0.0, -1.66, 5.0),
+                screenshotFov = 4.0,
             },
             {
                 object = 'apa_v_ilev_fh_bedrmdoor',

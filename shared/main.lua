@@ -146,6 +146,7 @@ local function buildFurnitureIndex()
                 maxWeight = entry.maxWeight,
                 price = sharedConfig.furnitureShop ~= false and tonumber(entry.price) or nil,
                 firstFree = entry.firstFree == true,
+                targetZone = entry.targetZone == true,
             }
         end
     end
@@ -170,6 +171,7 @@ function RegisterFurniture(entry)
         maxWeight = entry.maxWeight,
         price = sharedConfig.furnitureShop ~= false and tonumber(entry.price) or nil,
         firstFree = entry.firstFree == true,
+        targetZone = entry.targetZone == true,
         item = entry.item,
         image = entry.image,
         durability = tonumber(entry.durability),
@@ -181,8 +183,6 @@ function RegisterFurniture(entry)
 end
 
 exports('registerFurniture', RegisterFurniture)
-
-RegisterFurniture({ object = 'reh_prop_reh_tablet_01a', label = 'Housing Tablet', type = 'tablet', power = 20 })
 
 ---@return table<string, string>
 function GetFurnitureTypes()
@@ -258,13 +258,40 @@ function SplitCommission(amount, kind)
     return commission, amount - commission
 end
 
+---@param kind string
+---@param fallback number
+---@return number
+function TargetDistance(kind, fallback)
+    local distances = sharedConfig.targetDistances
+    return distances and tonumber(distances[kind]) or fallback
+end
+
+function GetStashPrefix()
+    return sharedConfig.prefixes and sharedConfig.prefixes.stash or 'qbx_properties_'
+end
+
+function GetDoorPrefix()
+    return sharedConfig.prefixes and sharedConfig.prefixes.door or 'qbx_properties:'
+end
+
+function GetGaragePrefix()
+    return sharedConfig.prefixes and sharedConfig.prefixes.garage or 'property_'
+end
+
+---@param value string
+---@return string
+function EscapePattern(value)
+    return (value:gsub('%W', '%%%0'))
+end
+
 ---@param property table
 ---@param index integer? zero based; nil or 0 is the primary stash
 ---@return string
 function GetStashId(property, index)
+    local prefix = GetStashPrefix()
     local base = (property.building and property.owner)
-        and string.format('qbx_properties_apartment_%s', property.owner)
-        or string.format('qbx_properties_%s', property.property_name)
+        and string.format('%sapartment_%s', prefix, property.owner)
+        or string.format('%s%s', prefix, property.property_name)
 
     if not index or index == 0 then return base end
     return string.format('%s_%d', base, index)

@@ -95,7 +95,9 @@ export const tablet = $state({
   isUpgradeOwner: false,
   garageSpots: 0,
   garageLimit: 0,
-  tenancy: null,
+  rent: null,
+  doorcam: null,
+  doorcamView: false,
 })
 
 export const placement = $state({

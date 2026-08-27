@@ -23,7 +23,7 @@ local function selectBuildingUnit(playerSource, player, buildingKey)
         return false
     end
 
-    lib.logger(playerSource, 'qbx_properties:server:apartmentSelect', locale('logs.apartment_selected', player.PlayerData.citizenid, building.label, id))
+    LogAction(playerSource, 'qbx_properties:server:apartmentSelect', locale('logs.apartment_selected', player.PlayerData.citizenid, building.label, id))
 
     TriggerClientEvent('qbx_properties:client:addProperty', -1, building.entrance)
     EnterProperty(playerSource, id, true)
@@ -126,7 +126,7 @@ RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentInde
         json.encode(stashData),
     })
 
-    lib.logger(playerSource, 'qbx_properties:server:apartmentSelect', locale('logs.apartment_selected', player.PlayerData.citizenid, option.label, apartmentNumber))
+    LogAction(playerSource, 'qbx_properties:server:apartmentSelect', locale('logs.apartment_selected', player.PlayerData.citizenid, option.label, apartmentNumber))
 
     TriggerClientEvent('qbx_properties:client:addProperty', -1, option.enter)
     EnterProperty(playerSource, id, true)

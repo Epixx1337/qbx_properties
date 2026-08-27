@@ -100,7 +100,9 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - Pooled IPL apartments (Del Perro, Integrity Way, Richard Majestic, Tinsel Towers) plus multi-unit apartment buildings with per-floor rooms, doorbells and shared parking garages — the Wiwang Hotel, the four Prodigy towers ([docs/prp-apartments.md](docs/prp-apartments.md)) and the Starlite Motel ([docs/starlite-motel.md](docs/starlite-motel.md)) ship preconfigured
 - Garages register with qbx_garages by default or bridge to jg-advancedgarages, cd_garage or okokGarage through one config option — see [docs/garage-systems.md](docs/garage-systems.md)
 - Phone home apps hook in through secured exports (list homes, waypoint, lock doors, manage keys) — drop-in lb-phone files and an sd-phone adapter ship in [docs/phone-integrations.md](docs/phone-integrations.md)
-- Property types (residential, commercial, warehouse, gang with group access), per-type purchasable upgrades (stash and key limits, wiring, security alerts, a second garage), breaker tripping with electrician repairs, owner-to-player leasing, escrowed offers and realtor-placed mailboxes — see [docs/upgrades-and-types.md](docs/upgrades-and-types.md)
+- Property types (residential, commercial, warehouse, gang with group access), per-type purchasable upgrades (stash and key limits, wiring, security alerts, a second garage), breaker tripping with electrician repairs, escrowed offers and realtor-placed mailboxes — see [docs/upgrades-and-types.md](docs/upgrades-and-types.md)
+- Owner-to-player leasing from the tablet's Rent tab: contract periods, the first payment charged on acceptance, prepayable rent, a payment history, roommate permissions for rent and utilities, and eviction notices when the owner ends a lease
+- Doorbell and doorcam: visitors ring at MLO doors, shell entrances and apartment unit doors; everyone inside gets notified, sees who is outside on the tablet's Doorcam tab, can watch a live camera over the door, and lets them in — teleported inside for shells and apartments, a 10-second door unlock for MLOs
 - Tenants can relocate between buildings, gated by config: free moves at the reception, plus a one-time migration offer on login whenever new buildings open with free rooms
 - Admins can furnish a unit and run `/saveroom` to save it as the default loadout for that room layout — every fresh tenant starts with those pieces already placed and fully editable
 - Standalone properties using interior shells, IPL interiors or real MLO houses
@@ -124,6 +126,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - Other players inside the property (or garden) see furniture being moved live while you edit
 - Stash furniture registers real ox_inventory stashes with persistent slots, so removing and replacing a stash reconnects its contents
 - Wardrobe and logout furniture (logout can be disabled in config)
+- Two housing tablet props ship — the wall intercom and the classic tablet — and either opens the tablet; the intercom's body recolours through the same tint palette as the structural props, and custom props without collision get their ox_target through an automatic fallback
 
 **Economy**
 - Market with direct sales, auctions (configurable durations, anti-snipe) and open-to-offer listings with full escrow, plus saved listings and a recently-viewed strip
@@ -280,6 +283,9 @@ With the key left empty, the Take photo button reports that uploads are not conf
 Options worth knowing about:
 
 - `realtorJobs` / `realtorRequiresDuty` (shared) — which jobs and grades get the realtor tabs, and whether they must be on duty.
+- `propertyLimit` (shared) — how many houses/warehouses/etc one character may own at once, enforced on every purchase path (buy, rent-to-own, auctions, offers, player sales). Apartments never count. `0` = unlimited.
+- `prefixes` (shared) — the identifier prefixes used for ox_inventory stashes, ox_doorlock doors and garage names. Only change these on a fresh server: on a live one everything created under the old prefix (stash contents, door records, parked vehicles) keeps its old name and becomes unreachable.
+- `logging` (server) — set `logging.discordWebhook` to a Discord webhook url and every action log goes there as an embed instead of ox_lib's logger.
 - `logoutEnabled` (shared) — beds and logout points let players switch character; `false` hides them everywhere.
 - `furnitureShop` (shared) — `false` ignores all furniture prices, so everything places instantly for free and the cart never appears.
 - `furnitureImageSource` (shared) — `'cdn'` lazy-loads the furniture catalog thumbnails from uploaded CDN copies instead of resource files, see "Regenerating catalog images".
@@ -291,6 +297,7 @@ Options worth knowing about:
 - `stairsOnly` (buildings) — marks an apartment building without elevators, like the Starlite Motel: elevator fields are skipped and move-in messages point at the stairs.
 - `targetInteractions` (shared) — MLO furniture uses ox_target labels instead of floating interaction points.
 - `targetShellInteractions` (shared) — `true` replaces the floating drawtext on shell and IPL properties with ox_target zones, both on the interaction points inside (stash, exit, clothing, logout) and on the entrance outside.
+- `targetDistances` (shared) — how close a player must stand (in metres) before each target or drawtext activates: entrances, interior interaction points, placed furniture, mailboxes, doorbells and door forcing are all tunable separately.
 - `propertySizes` (shared) — each size sets the power allowance (W) and the monthly utility cost; realtors pick the size on creation.
 - `propertyTypes` / `upgrades` / `keyholderLimit` / `electricity` / `mailbox` / `rentGraceHours` (shared) — property types, the upgrade catalog, breaker tripping and mailbox settings, see [docs/upgrades-and-types.md](docs/upgrades-and-types.md).
 - `utilities` (shared) — billing period, grace period, and the humidity model (base level, effect per kilowatt, comfort threshold).

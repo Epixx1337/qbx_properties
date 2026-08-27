@@ -121,7 +121,10 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
     if not ToId(objectId) then
         local existing
         if IsFirstFreeFurniture(hash) then
-            existing = MySQL.scalar.await('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model = ? AND garden = 1', {propertyId, hash})
+            local models, placeholders = FirstFreeModels(hash)
+            local params = { propertyId }
+            for i = 1, #models do params[#params + 1] = models[i] end
+            existing = MySQL.scalar.await(('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model IN (%s) AND garden = 1'):format(placeholders), params)
         end
 
         local ok, usedCredit = ConsumeFurnitureCredit(playerSource, hash, existing)
@@ -168,7 +171,7 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
         tint = tint,
     })
 
-    lib.logger(playerSource, 'qbx_properties:server:addGardenDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, hash, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:addGardenDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, hash, propertyId))
 end)
 
 RegisterNetEvent('qbx_properties:server:removeGardenDecoration', function(objectId)
@@ -186,5 +189,5 @@ RegisterNetEvent('qbx_properties:server:removeGardenDecoration', function(object
 
     TriggerClientEvent('qbx_properties:client:gardenDecoration', -1, propertyId, { id = objectId, removed = true })
 
-    lib.logger(playerSource, 'qbx_properties:server:removeGardenDecoration', locale('logs.remove_decoration', player.PlayerData.citizenid, objectId, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:removeGardenDecoration', locale('logs.remove_decoration', player.PlayerData.citizenid, objectId, propertyId))
 end)

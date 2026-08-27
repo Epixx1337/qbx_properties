@@ -75,7 +75,7 @@ lib.callback.register('qbx_properties:callback:repairBreaker', function(source, 
     MySQL.update.await('UPDATE properties_utilities SET powered = 1 WHERE property_id = ?', {propertyId})
     RefreshUtilities(propertyId)
     exports.qbx_core:Notify(source, 'The breaker hums back to life.', 'success')
-    lib.logger(source, 'qbx_properties:server:repairBreaker', string.format('%s repaired the breaker of property %d', player.PlayerData.citizenid, propertyId))
+    LogAction(source, 'qbx_properties:server:repairBreaker', string.format('%s repaired the breaker of property %d', player.PlayerData.citizenid, propertyId))
 
     return true
 end)
@@ -113,9 +113,9 @@ lib.callback.register('qbx_properties:callback:getUtilities', function(source, p
     propertyId = ToId(propertyId)
     if not player or not propertyId then return end
 
-    local property = MySQL.single.await('SELECT id, owner, building, size, power_limit, UNIX_TIMESTAMP(utilities_paid_until) AS paidUntil FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT id, owner, building, size, power_limit, keyholders, type, group_name, tenant, UNIX_TIMESTAMP(utilities_paid_until) AS paidUntil FROM properties WHERE id = ?', {propertyId})
     if not property then return end
-    if not HasPropertyAccess(player.PlayerData.citizenid, property, 'furniture') then return end
+    if not HasPropertyAccess(player.PlayerData.citizenid, property, 'utilities') then return end
 
     local state = RefreshUtilities(propertyId)
     if not state then return end
@@ -137,6 +137,7 @@ lib.callback.register('qbx_properties:callback:getUtilities', function(source, p
         poweredItems = poweredItems,
         humidityMax = utilities.humidity.max,
         humidityThreshold = utilities.humidity.comfortable,
+        history = GetPropertyPayments(propertyId, 'utilities'),
     }
 end)
 
@@ -146,8 +147,11 @@ RegisterNetEvent('qbx_properties:server:payUtilities', function(propertyId)
     propertyId = ToId(propertyId)
     if not player or not propertyId then return end
 
-    local property = MySQL.single.await('SELECT id, owner, building, size, property_name, UNIX_TIMESTAMP(utilities_paid_until) AS paidUntil FROM properties WHERE id = ?', {propertyId})
-    if not property or property.owner ~= player.PlayerData.citizenid then return end
+    local property = MySQL.single.await('SELECT id, owner, building, size, property_name, keyholders, type, group_name, tenant, UNIX_TIMESTAMP(utilities_paid_until) AS paidUntil FROM properties WHERE id = ?', {propertyId})
+    if not property or not property.owner then return end
+
+    local citizenId = player.PlayerData.citizenid
+    if not HasPropertyAccess(citizenId, property, 'utilities') then return end
 
     local cost = GetUtilityCost(property)
     if cost <= 0 then return end
@@ -164,6 +168,14 @@ RegisterNetEvent('qbx_properties:server:payUtilities', function(propertyId)
     end
 
     PayAccount(config.governmentAccount, cost, reason)
+    RecordPropertyPayment(propertyId, 'utilities', citizenId, cost)
+
+    if property.owner ~= citizenId then
+        local owner = exports.qbx_core:GetPlayerByCitizenId(property.owner)
+        if owner then
+            exports.qbx_core:Notify(owner.PlayerData.source, string.format('The utilities for %s were paid.', property.property_name), 'success')
+        end
+    end
 
     MySQL.update.await([[
         UPDATE properties SET utilities_paid_until = DATE_ADD(GREATEST(COALESCE(utilities_paid_until, NOW()), NOW()), INTERVAL ? DAY) WHERE id = ?
@@ -174,7 +186,7 @@ RegisterNetEvent('qbx_properties:server:payUtilities', function(propertyId)
 
     exports.qbx_core:Notify(playerSource, 'Utilities paid.', 'success')
 
-    lib.logger(playerSource, 'qbx_properties:server:payUtilities', string.format('%s paid utilities for %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(playerSource, 'qbx_properties:server:payUtilities', string.format('%s paid utilities for %s', player.PlayerData.citizenid, property.property_name))
 end)
 
 lib.addCommand('power', {

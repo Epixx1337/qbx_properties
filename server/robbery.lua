@@ -69,7 +69,7 @@ lib.callback.register('qbx_properties:callback:robDoor', function(source, proper
     if robbery.removeOnSuccess then exports.ox_inventory:RemoveItem(source, robbery.item, 1) end
     attempts[propertyId] = nil
 
-    lib.logger(source, 'qbx_properties:server:robDoor', string.format('%s forced the door of %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:robDoor', string.format('%s forced the door of %s', player.PlayerData.citizenid, property.property_name))
 
     return property.property_name
 end)

@@ -66,7 +66,7 @@ lib.callback.register('qbx_properties:callback:setWallColor', function(source, p
 
     lib.triggerClientEvent('qbx_properties:client:wallColor', GetPropertyOccupants(propertyId), propertyId, colorIndex)
 
-    lib.logger(source, 'qbx_properties:server:setWallColor', string.format('%s set wall colour %d on %s', player.PlayerData.citizenid, colorIndex, property.property_name))
+    LogAction(source, 'qbx_properties:server:setWallColor', string.format('%s set wall colour %d on %s', player.PlayerData.citizenid, colorIndex, property.property_name))
 
     return true
 end)

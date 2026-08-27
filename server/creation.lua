@@ -186,7 +186,7 @@ lib.callback.register('qbx_properties:callback:createProperty', function(source,
         CreateListingInternal(source, player, propertyId, data.listing)
     end
 
-    lib.logger(source, 'qbx_properties:server:createProperty', string.format('%s created %s (%s)', player.PlayerData.citizenid, propertyName, data.kind))
+    LogAction(source, 'qbx_properties:server:createProperty', string.format('%s created %s (%s)', player.PlayerData.citizenid, propertyName, data.kind))
 
     return true
 end)
@@ -320,7 +320,7 @@ lib.callback.register('qbx_properties:callback:updateProperty', function(source,
 
     MySQL.update.await('UPDATE properties SET price = ?, size = ?, rent_interval = ?, description = ? WHERE id = ?', {price, size, rentInterval, description, propertyId})
 
-    lib.logger(source, 'qbx_properties:server:updateProperty', string.format('%s updated %s (price %d, size %s)', player.PlayerData.citizenid, property.property_name, price, size))
+    LogAction(source, 'qbx_properties:server:updateProperty', string.format('%s updated %s (price %d, size %s)', player.PlayerData.citizenid, property.property_name, price, size))
 
     return true
 end)
@@ -354,7 +354,7 @@ lib.callback.register('qbx_properties:callback:updatePropertyZones', function(so
         TriggerClientEvent('qbx_properties:client:registerGarden', -1, propertyId, garden)
     end
 
-    lib.logger(source, 'qbx_properties:server:updatePropertyZones', string.format('%s updated zones on %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:updatePropertyZones', string.format('%s updated zones on %s', player.PlayerData.citizenid, property.property_name))
 
     return true
 end)
@@ -428,7 +428,7 @@ lib.callback.register('qbx_properties:callback:savePropertyPoints', function(sou
         end
     end
 
-    lib.logger(source, 'qbx_properties:server:savePropertyPoints', string.format('%s updated interaction points on %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:savePropertyPoints', string.format('%s updated interaction points on %s', player.PlayerData.citizenid, property.property_name))
 
     return true
 end)
@@ -520,7 +520,7 @@ lib.callback.register('qbx_properties:callback:addPropertyImage', function(sourc
     images[#images + 1] = { url = url, path = storagePath }
     MySQL.update.await('UPDATE properties SET images = ? WHERE id = ?', {json.encode(images), propertyId})
 
-    lib.logger(source, 'qbx_properties:server:addPropertyImage', string.format('%s added a photo to %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:addPropertyImage', string.format('%s added a photo to %s', player.PlayerData.citizenid, property.property_name))
 
     return true
 end)
@@ -590,7 +590,7 @@ lib.callback.register('qbx_properties:callback:recaptureInterior', function(sour
     TriggerClientEvent('qbx_properties:client:invalidateUnitAccess', -1)
     TriggerClientEvent('qbx_properties:client:refreshBlips', -1)
 
-    lib.logger(source, 'qbx_properties:server:recaptureInterior', string.format('%s re-captured the interior point of %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:recaptureInterior', string.format('%s re-captured the interior point of %s', player.PlayerData.citizenid, property.property_name))
 
     return true
 end)
@@ -613,7 +613,7 @@ lib.callback.register('qbx_properties:callback:addPropertyDoor', function(source
 
     if SyncPropertyDoors then SyncPropertyDoors(propertyId, doors) end
 
-    lib.logger(source, 'qbx_properties:server:addPropertyDoor', string.format('%s added a door to %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:addPropertyDoor', string.format('%s added a door to %s', player.PlayerData.citizenid, property.property_name))
 
     return true
 end)

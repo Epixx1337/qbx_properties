@@ -16,6 +16,7 @@ local schemaFiles = {
     'property_apartment_layouts.sql',
     'property_layout_defaults.sql',
     'property_upgrades.sql',
+    'property_payments.sql',
 }
 
 local columns = {
@@ -56,6 +57,13 @@ local columns = {
         tenant_rent = 'INT DEFAULT NULL',
         tenant_interval = 'INT DEFAULT NULL',
         tenant_last_paid = 'DATETIME DEFAULT NULL',
+        tenant_paid_until = 'DATETIME DEFAULT NULL',
+        tenant_contract_end = 'DATETIME DEFAULT NULL',
+        tenant_notice_end = 'DATETIME DEFAULT NULL',
+    },
+    properties_access = {
+        utilities = 'TINYINT(1) NOT NULL DEFAULT 0',
+        rent = 'TINYINT(1) NOT NULL DEFAULT 0',
     },
     properties_raids = {
         assigned_room = 'TINYINT(1) NOT NULL DEFAULT 0',

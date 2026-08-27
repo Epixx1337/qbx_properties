@@ -22,13 +22,13 @@ local function propertyDoorNames(row)
         local building = Buildings[row.building]
         local doors = building and building.roomLayout and building.roomLayout.doors
         for i = 1, doors and #doors or 0 do
-            names[#names + 1] = ('qbx_properties:%d:%d'):format(row.id, i)
+            names[#names + 1] = ('%s%d:%d'):format(GetDoorPrefix(), row.id, i)
         end
     elseif row.door_data then
         local ok, doors = pcall(json.decode, row.door_data)
         if ok and type(doors) == 'table' then
             for i = 1, #doors do
-                names[#names + 1] = ('qbx_properties:%d:d%d'):format(row.id, i)
+                names[#names + 1] = ('%s%d:d%d'):format(GetDoorPrefix(), row.id, i)
             end
         end
     end
@@ -232,7 +232,7 @@ lib.callback.register('qbx_properties:callback:phoneAddKeyholder', function(sour
 
     if not addKeyholder(row, targetCid) then return false end
     exports.qbx_core:Notify(target.PlayerData.source, locale('notify.added_as_keyholder'))
-    lib.logger(source, 'qbx_properties:phone:addKeyholder', locale('logs.added_keyholder', targetCid, row.id))
+    LogAction(source, 'qbx_properties:phone:addKeyholder', locale('logs.added_keyholder', targetCid, row.id))
     return true
 end)
 
@@ -243,7 +243,7 @@ lib.callback.register('qbx_properties:callback:phoneRemoveKeyholder', function(s
     if row.owner ~= player.PlayerData.citizenid then return false end
 
     if not removeKeyholder(row, citizenid) then return false end
-    lib.logger(source, 'qbx_properties:phone:removeKeyholder', locale('logs.removed_keyholder', citizenid, row.id))
+    LogAction(source, 'qbx_properties:phone:removeKeyholder', locale('logs.removed_keyholder', citizenid, row.id))
     return true
 end)
 

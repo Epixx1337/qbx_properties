@@ -70,7 +70,7 @@ CreateThread(function()
                 name = 'qbx_properties_force_door',
                 label = 'Force lock',
                 icon = 'fa-solid fa-screwdriver',
-                distance = 1.5,
+                distance = TargetDistance('robbery', 2.0),
                 canInteract = function(entity)
                     if not ResolveDoorProperty then return false end
 
@@ -102,7 +102,7 @@ CreateThread(function()
                     name = 'qbx_properties_entry_force',
                     label = 'Force lock',
                     icon = 'fa-solid fa-screwdriver',
-                    distance = 2.0,
+                    distance = TargetDistance('robbery', 2.0),
                     canInteract = function()
                         return (exports.ox_inventory:GetItemCount(robbery.item) or 0) > 0
                     end,

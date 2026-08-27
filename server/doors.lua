@@ -2,7 +2,8 @@ local sharedConfig = require 'config.shared'
 
 if not sharedConfig.dynamicApartments then return end
 
-local DOOR_PREFIX = 'qbx_properties:'
+local DOOR_PREFIX = GetDoorPrefix()
+local DOOR_PATTERN = EscapePattern(DOOR_PREFIX)
 local runtimeDoors = false
 
 ---@param propertyId integer
@@ -130,7 +131,7 @@ CreateThread(function()
     end
 
     exports.ox_doorlock:registerHook('doorAuthorization', function(payload)
-        local propertyId = ToId(payload.door.name:match('^' .. DOOR_PREFIX .. '(%d+):'))
+        local propertyId = ToId(payload.door.name:match('^' .. DOOR_PATTERN .. '(%d+):'))
         if not propertyId then return end
 
         local player = exports.qbx_core:GetPlayer(payload.source)
@@ -145,7 +146,7 @@ CreateThread(function()
 
         return HasPropertyAccess(player.PlayerData.citizenid, property, 'door')
     end, {
-        nameFilter = '^' .. DOOR_PREFIX,
+        nameFilter = '^' .. DOOR_PATTERN,
     })
 
     local units = MySQL.query.await('SELECT id, building, floor, room FROM properties WHERE building IS NOT NULL')
@@ -158,6 +159,40 @@ CreateThread(function()
         lib.print.info(('registered %d apartment door(s)'):format(created))
     end
 end)
+
+---@param propertyId integer
+---@param seconds integer?
+---@return boolean
+function UnlockPropertyDoorsTemporarily(propertyId, seconds)
+    if not runtimeDoors then return false end
+
+    local prefix = string.format('%s%d:', DOOR_PREFIX, propertyId)
+    local doors = exports.ox_doorlock:getAllDoors()
+    if not doors then return false end
+
+    local affected = {}
+    for i = 1, #doors do
+        local door = doors[i]
+        if door.name and door.name:sub(1, #prefix) == prefix and door.state == 1 then
+            affected[#affected + 1] = door.id
+        end
+    end
+
+    if #affected == 0 then return false end
+
+    for i = 1, #affected do
+        pcall(function() exports.ox_doorlock:setDoorState(affected[i], 0) end)
+    end
+
+    SetTimeout((seconds or 10) * 1000, function()
+        if IsBreached and IsBreached(propertyId) then return end
+        for i = 1, #affected do
+            pcall(function() exports.ox_doorlock:setDoorState(affected[i], 1) end)
+        end
+    end)
+
+    return true
+end
 
 ---@param propertyId integer
 ---@param breached boolean

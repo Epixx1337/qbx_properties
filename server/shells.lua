@@ -36,7 +36,7 @@ lib.callback.register('qbx_properties:callback:setShellCoords', function(source,
 
     TriggerClientEvent('qbx_properties:client:registerShell', -1, propertyId, tonumber(property.interior), coords)
 
-    lib.logger(source, 'qbx_properties:server:setShellCoords', string.format('%s placed the shell for %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:setShellCoords', string.format('%s placed the shell for %s', player.PlayerData.citizenid, property.property_name))
 
     return true
 end)

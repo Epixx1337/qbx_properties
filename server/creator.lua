@@ -225,7 +225,7 @@ lib.callback.register('qbx_properties:callback:saveBuilding', function(source, p
 
     Buildings[payload.key] = building
 
-    lib.logger(source, 'qbx_properties:server:saveBuilding', string.format('%s saved building %s (%d rooms, %d floors)', GetPlayerName(source), payload.key, #building.rooms, building.floors.count))
+    LogAction(source, 'qbx_properties:server:saveBuilding', string.format('%s saved building %s (%d rooms, %d floors)', GetPlayerName(source), payload.key, #building.rooms, building.floors.count))
 
     exports.qbx_core:Notify(source, 'Building saved. Restart the resource to apply it fully.', 'success')
     return true

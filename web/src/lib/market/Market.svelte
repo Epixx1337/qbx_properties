@@ -92,10 +92,8 @@
         <div class="grid">
           {#each visible as listing (listing.id)}
             <button class="card" onclick={() => select(listing)}>
-              <div class="photo">
-                {#if listing.images?.length}
-                  <img src={listing.images[0]} alt="" loading="lazy" />
-                {:else}
+              <div class="photo" style={listing.images?.length ? `background-image: url("${listing.images[0]}"); background-size: cover; background-position: center` : ''}>
+                {#if !listing.images?.length}
                   <span class="photo-label">NO PHOTOS YET</span>
                 {/if}
                 <span class="badge-floating type {listing.listing_type}">{typeLabel(listing)}</span>
@@ -244,19 +242,12 @@
 
   .photo {
     position: relative;
+    width: 100%;
     height: 136px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: repeating-linear-gradient(135deg, var(--dark-5) 0 9px, var(--dark-6) 9px 18px);
-  }
-
-  .photo img {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
   }
 
   .photo-label {
@@ -319,6 +310,7 @@
     display: flex;
     flex-direction: column;
     gap: 9px;
+    width: 100%;
     padding: 12px 13px 14px;
   }
 
@@ -326,6 +318,8 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
+    width: 100%;
+    text-align: left;
   }
 
   .name {
@@ -344,6 +338,7 @@
     align-items: baseline;
     justify-content: space-between;
     gap: 8px;
+    width: 100%;
     padding-top: 9px;
     border-top: 1px solid var(--dark-4);
   }

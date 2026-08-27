@@ -13,11 +13,31 @@ return {
         rent = 0.10,
     },
 
+    -- Ownership
+    propertyLimit = 0, -- max houses/warehouses/etc one citizenid may own, apartments never count, 0 = unlimited
+
+    -- Identifier prefixes for stashes, doors and garages registered with ox_inventory, ox_doorlock and the garage system.
+    -- Changing these on a live server orphans everything created under the old prefix: stash contents, door records
+    -- and parked vehicles keep the old names and become unreachable until renamed by hand.
+    prefixes = {
+        stash = 'qbx_properties_', -- ox_inventory stash ids; apartments append 'apartment_', mailboxes 'mail_'
+        door = 'qbx_properties:', -- ox_doorlock door names
+        garage = 'property_', -- garage names registered for properties
+    },
+
     -- Interaction & UI
     housingCommand = true, -- false removes /housing, open it through the openHousing export or an embedded app instead
     logoutEnabled = true, -- beds and logout points let players switch character, false hides them everywhere
     targetInteractions = true, -- MLO furniture uses ox_target labels instead of floating interaction points
-    targetShellInteractions = false, -- shell and IPL interaction points (stash, exit, clothing, logout) use ox_target instead of drawtext
+    targetShellInteractions = true, -- shell and IPL properties use ox_target instead of drawtext, on the entrance outside and the interaction points inside
+    targetDistances = { -- how close a player must stand (metres) before each target or drawtext can be used
+        entrance = 2.0, -- View Property at shell and IPL entrances
+        interaction = 2.0, -- stash, exit, wardrobe and logout points inside shells and IPLs
+        furniture = 1.5, -- targets on placed furniture: stashes, tablets, wardrobes and beds
+        mailbox = 2.0,
+        doorbell = 1.5, -- Ring doorbell on MLO doors and apartment unit doors
+        robbery = 2.0, -- forcing doors with a lockpick
+    },
     freecamRange = 10.0, -- how far the decorating freecam may drift from the player
     nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
     furnitureShop = true, -- false ignores furniture prices, everything places instantly for free
@@ -199,6 +219,7 @@ return {
 
     -- Rent
     rentGraceHours = 24, -- hours after a failed rent payment before the eviction lands, 0 evicts immediately
+    rentEvictionNoticeDays = 14, -- when the owner ends a lease the tenant keeps access this many days, 0 ends it on the spot
 
     -- Property sizes
     propertySizes = {

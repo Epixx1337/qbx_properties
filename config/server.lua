@@ -16,6 +16,10 @@ return {
         },
     },
 
+    logging = {
+        discordWebhook = '', -- set a Discord webhook url to send all action logs there instead of ox_lib's logger
+    },
+
     apartmentStash = {
         slots = 50,
         maxWeight = 150000

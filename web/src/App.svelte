@@ -7,6 +7,7 @@
   import FurnitureApp from './lib/furniture/FurnitureApp.svelte'
   import HousingApp from './lib/HousingApp.svelte'
   import TabletApp from './lib/tablet/TabletApp.svelte'
+  import DoorcamOverlay from './lib/tablet/DoorcamOverlay.svelte'
   import PreviewApp from './lib/PreviewApp.svelte'
   import PlacementHud from './lib/PlacementHud.svelte'
 
@@ -21,7 +22,7 @@
 
   onMessage('furniture:init', (data) => {
     furniture.categories = data.categories ?? {}
-    furniture.category = Object.keys(furniture.categories)[0] ?? null
+    furniture.category = furniture.categories.utility ? 'utility' : Object.keys(furniture.categories)[0] ?? null
     furniture.propertyName = data.propertyName ?? ''
     furniture.palette = data.palette ?? []
     furniture.shopEnabled = data.shopEnabled ?? true
@@ -160,7 +161,9 @@
     tablet.utilities = null
     tablet.upgrades = null
     tablet.isUpgradeOwner = false
-    tablet.tenancy = null
+    tablet.rent = null
+    tablet.doorcam = null
+    tablet.doorcamView = false
   })
 
   onMessage('tablet:upgrades', (data) => {
@@ -170,8 +173,16 @@
     tablet.garageLimit = data?.garageLimit ?? 0
   })
 
-  onMessage('tablet:tenancy', (data) => {
-    tablet.tenancy = data ?? null
+  onMessage('tablet:rent', (data) => {
+    tablet.rent = data ?? null
+  })
+
+  onMessage('tablet:doorcam', (data) => {
+    tablet.doorcam = data ?? null
+  })
+
+  onMessage('doorcam:view', (data) => {
+    tablet.doorcamView = data === true
   })
 
   onMessage('theme', (data) => { applyTheme(data?.color, data?.shade) })
@@ -280,7 +291,11 @@
 {:else if app.view === 'housing'}
   <HousingApp />
 {:else if app.view === 'tablet'}
-  <TabletApp />
+  {#if tablet.doorcamView}
+    <DoorcamOverlay />
+  {:else}
+    <TabletApp />
+  {/if}
 {:else if app.view === 'preview'}
   <PreviewApp />
 {/if}

@@ -163,7 +163,7 @@ RegisterNetEvent('qbx_properties:server:openMailbox', function(propertyId)
     local point = json.decode(property.mailbox)
     if #(GetEntityCoords(GetPlayerPed(playerSource)) - vec3(point.x, point.y, point.z)) > 5.0 then return end
 
-    local stashId = ('qbx_properties_mail_%d'):format(propertyId)
+    local stashId = ('%smail_%d'):format(GetStashPrefix(), propertyId)
     exports.ox_inventory:RegisterStash(stashId, string.format('Mailbox: %s', property.property_name), sharedConfig.mailbox.slots, sharedConfig.mailbox.maxWeight)
     exports.ox_inventory:forceOpenInventory(playerSource, 'stash', stashId)
 end)
@@ -184,7 +184,7 @@ lib.callback.register('qbx_properties:callback:setMailbox', function(source, pro
     MySQL.update.await('UPDATE properties SET mailbox = ? WHERE id = ?', {json.encode(payload), propertyId})
     TriggerClientEvent('qbx_properties:client:refreshMailboxes', -1)
 
-    lib.logger(source, 'qbx_properties:server:setMailbox', string.format('%s set the mailbox of property %d', player.PlayerData.citizenid, propertyId))
+    LogAction(source, 'qbx_properties:server:setMailbox', string.format('%s set the mailbox of property %d', player.PlayerData.citizenid, propertyId))
     return true
 end)
 
@@ -206,7 +206,7 @@ exports.ox_inventory:registerHook('openInventory', function(payload)
     local player = exports.qbx_core:GetPlayer(payload.source)
     if not player then return false end
 
-    local mailId = payload.inventoryId:match('^qbx_properties_mail_(%d+)$')
+    local mailId = payload.inventoryId:match('^' .. EscapePattern(GetStashPrefix()) .. 'mail_(%d+)$')
     if mailId then
         local mailProperty = MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant FROM properties WHERE id = ?', {tonumber(mailId)})
         return mailProperty ~= nil and HasPropertyAccess(player.PlayerData.citizenid, mailProperty, 'door')
@@ -227,7 +227,7 @@ exports.ox_inventory:registerHook('openInventory', function(payload)
     return HasPropertyAccess(player.PlayerData.citizenid, property, 'stash')
 end, {
     inventoryFilter = {
-        '^qbx_properties_',
+        '^' .. EscapePattern(GetStashPrefix()),
     }
 })
 
@@ -340,7 +340,7 @@ function EnterProperty(playerSource, id, isSpawn, inPlace)
     TriggerClientEvent('qbx_properties:client:updateInteractions', playerSource, interactions, property.interior, type(property.rent_interval) == 'number', id)
     TriggerClientEvent('qbx_properties:client:accessFlags', playerSource, GetAccessFlags(player.PlayerData.citizenid, property))
 
-    lib.logger(playerSource, 'qbx_properties:server:enterProperty', locale('logs.enter_property', player.PlayerData.citizenid, property.property_name))
+    LogAction(playerSource, 'qbx_properties:server:enterProperty', locale('logs.enter_property', player.PlayerData.citizenid, property.property_name))
 end
 
 ---@param playerSource integer
@@ -386,7 +386,7 @@ local function exitProperty(playerSource, isLogout)
 
     player.Functions.SetMetaData('currentPropertyId', nil)
 
-    lib.logger(playerSource, 'qbx_properties:server:exitProperty', locale('logs.exit_property', player.PlayerData.citizenid, logPropertyId))
+    LogAction(playerSource, 'qbx_properties:server:exitProperty', locale('logs.exit_property', player.PlayerData.citizenid, logPropertyId))
 end
 
 RegisterNetEvent('qbx_properties:server:exitProperty', function()
@@ -431,6 +431,40 @@ local function hasAccess(citizenId, propertyId, permission)
     if not property then return false end
 
     return HasPropertyAccess(citizenId, property, permission or 'door')
+end
+
+---@param propertyId integer
+---@param kind 'rent'|'utilities'
+---@param citizenId string
+---@param amount integer
+function RecordPropertyPayment(propertyId, kind, citizenId, amount)
+    local name = citizenId
+    local player = exports.qbx_core:GetPlayerByCitizenId(citizenId) or exports.qbx_core:GetOfflinePlayer(citizenId)
+    local charinfo = player and player.PlayerData.charinfo
+    if charinfo then name = string.format('%s %s', charinfo.firstname, charinfo.lastname) end
+
+    MySQL.insert('INSERT INTO properties_payments (property_id, kind, payer, payer_name, amount) VALUES (?, ?, ?, ?, ?)',
+        {propertyId, kind, citizenId, name, amount})
+end
+
+---@param propertyId integer
+---@param kind 'rent'|'utilities'
+---@return table
+function GetPropertyPayments(propertyId, kind)
+    return MySQL.query.await([[
+        SELECT payer, payer_name AS name, amount, UNIX_TIMESTAMP(created_at) AS paidAt
+        FROM properties_payments WHERE property_id = ? AND kind = ? ORDER BY id DESC LIMIT 10
+    ]], {propertyId, kind}) or {}
+end
+
+---@param citizenId string
+---@return boolean
+function CanOwnAnotherProperty(citizenId)
+    local limit = ToId(sharedConfig.propertyLimit)
+    if not limit or limit <= 0 then return true end
+
+    local count = MySQL.scalar.await('SELECT COUNT(*) FROM properties WHERE owner = ? AND building IS NULL', {citizenId}) or 0
+    return count < limit
 end
 
 lib.callback.register('qbx_properties:callback:getWalkInProperties', function()
@@ -552,16 +586,9 @@ RegisterNetEvent('qbx_properties:server:enterProperty', function(data)
     EnterProperty(playerSource, propertyId, isSpawn)
 end)
 
-RegisterNetEvent('qbx_properties:server:ringProperty', function(data)
-    local playerSource = source --[[@as number]]
-    local propertyId = type(data) == 'table' and ToId(data.id)
-    if not propertyId then return end
-    local property = MySQL.single.await('SELECT owner, coords FROM properties WHERE id = ?', {propertyId})
-    if not property or not property.owner then return end
-    local propertyCoords = json.decode(property.coords)
-    if #(GetEntityCoords(GetPlayerPed(playerSource)) - vec3(propertyCoords.x, propertyCoords.y, propertyCoords.z)) > 8.0 then return end
-    local owner = exports.qbx_core:GetPlayerByCitizenId(property.owner)
-
+---@param propertyId integer
+---@param playerSource integer
+function RegisterRinger(propertyId, playerSource)
     ring[propertyId] = ring[propertyId] or {}
     if not lib.table.contains(ring[propertyId], playerSource) then
         ring[propertyId][#ring[propertyId] + 1] = playerSource
@@ -576,9 +603,62 @@ RegisterNetEvent('qbx_properties:server:ringProperty', function(data)
             end
         end)
     end
-    if owner and enteredProperty[owner.PlayerData.source] == propertyId then
-        exports.qbx_core:Notify(owner.PlayerData.source, locale('notify.someone_at_door'))
+
+    local occupants = insideProperty[propertyId] or {}
+    for i = 1, #occupants do
+        exports.qbx_core:Notify(occupants[i], locale('notify.someone_at_door'))
+        TriggerClientEvent('qbx_properties:client:doorbellRang', occupants[i], propertyId)
     end
+end
+
+RegisterNetEvent('qbx_properties:server:ringProperty', function(data)
+    local playerSource = source --[[@as number]]
+    local propertyId = type(data) == 'table' and ToId(data.id)
+    if not propertyId then return end
+    local property = MySQL.single.await('SELECT owner, coords, interior, door_data FROM properties WHERE id = ?', {propertyId})
+    if not property or not property.owner then return end
+
+    local playerCoords = GetEntityCoords(GetPlayerPed(playerSource))
+    local propertyCoords = json.decode(property.coords)
+    local near = #(playerCoords - vec3(propertyCoords.x, propertyCoords.y, propertyCoords.z)) <= 8.0
+
+    if not near and property.interior == 'mlo' and property.door_data then
+        local ok, doors = pcall(json.decode, property.door_data)
+        if ok and type(doors) == 'table' then
+            for i = 1, #doors do
+                local leaves = doors[i].leaves or {}
+                for j = 1, #leaves do
+                    local leaf = leaves[j].coords
+                    if leaf and #(playerCoords - vec3(leaf.x, leaf.y, leaf.z)) <= 5.0 then
+                        near = true
+                        break
+                    end
+                end
+                if near then break end
+            end
+        end
+    end
+
+    if not near then return end
+
+    RegisterRinger(propertyId, playerSource)
+end)
+
+lib.callback.register('qbx_properties:callback:getRingPoints', function()
+    local rows = MySQL.query.await("SELECT id, door_data FROM properties WHERE interior = 'mlo' AND owner IS NOT NULL AND door_data IS NOT NULL") or {}
+    local result = {}
+    for i = 1, #rows do
+        local ok, doors = pcall(json.decode, rows[i].door_data)
+        if ok and type(doors) == 'table' then
+            for d = 1, #doors do
+                local leaf = doors[d].leaves and doors[d].leaves[1]
+                if leaf and leaf.coords then
+                    result[#result + 1] = { id = rows[i].id, coords = vec3(leaf.coords.x, leaf.coords.y, leaf.coords.z) }
+                end
+            end
+        end
+    end
+    return result
 end)
 
 lib.callback.register('qbx_properties:callback:requestKeyHolders', function(source)
@@ -625,12 +705,7 @@ lib.callback.register('qbx_properties:callback:requestPotentialKeyholders', func
     return insidePlayers
 end)
 
-lib.callback.register('qbx_properties:callback:requestRingers', function(source)
-    local propertyId = enteredProperty[source]
-    local owner = exports.qbx_core:GetPlayer(source)
-    local property = propertyId and MySQL.single.await('SELECT owner FROM properties WHERE id = ?', {propertyId})
-    if not owner or not property or owner.PlayerData.citizenid ~= property.owner then return {} end
-
+local function listRingers(propertyId)
     local players = ring[propertyId] or {}
     local ringers = {}
     for i = 1, #players do
@@ -643,6 +718,58 @@ lib.callback.register('qbx_properties:callback:requestRingers', function(source)
         end
     end
     return ringers
+end
+
+lib.callback.register('qbx_properties:callback:requestRingers', function(source)
+    local propertyId = enteredProperty[source]
+    local player = exports.qbx_core:GetPlayer(source)
+    local property = propertyId and MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant FROM properties WHERE id = ?', {propertyId})
+    if not player or not property or not HasPropertyAccess(player.PlayerData.citizenid, property, 'door') then return {} end
+
+    return listRingers(propertyId)
+end)
+
+local function doorcamPoint(property)
+    if property.building then
+        local building = Buildings and Buildings[property.building]
+        local layout = building and building.roomLayout
+        local anchor = GetRoomCoords and GetRoomCoords(property.building, property.floor, property.room)
+        local door = layout and layout.doors and layout.doors[1]
+        if anchor and door then
+            local coords = RotateOffset(anchor, door.coords)
+            local heading = door.heading or ((anchor.w + (door.headingOffset or 0.0)) % 360.0)
+            return { x = coords.x, y = coords.y, z = coords.z, w = heading, model = door.model }
+        end
+        return
+    end
+
+    if property.interior == 'mlo' then
+        if not property.door_data then return end
+        local ok, doors = pcall(json.decode, property.door_data)
+        local leaf = ok and type(doors) == 'table' and doors[1] and doors[1].leaves and doors[1].leaves[1]
+        if leaf and leaf.coords then
+            return { x = leaf.coords.x, y = leaf.coords.y, z = leaf.coords.z, w = (tonumber(leaf.heading) or 0.0) % 360.0, model = leaf.model }
+        end
+        return
+    end
+
+    local coords = json.decode(property.coords)
+    return { x = coords.x, y = coords.y, z = coords.z + 1.2, w = ((tonumber(coords.w) or 0.0) + 180.0) % 360.0 }
+end
+
+lib.callback.register('qbx_properties:callback:getDoorcamData', function(source)
+    local propertyId = enteredProperty[source]
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player or not propertyId then return end
+
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building, floor, room, type, group_name, tenant, interior, coords, door_data FROM properties WHERE id = ?', {propertyId})
+    if not property or not HasPropertyAccess(player.PlayerData.citizenid, property, 'door') then return end
+
+    return {
+        ringers = listRingers(propertyId),
+        mlo = property.interior == 'mlo',
+        cam = doorcamPoint(property),
+    }
 end)
 
 lib.callback.register('qbx_properties:callback:checkAccess', function(source)
@@ -658,9 +785,9 @@ RegisterNetEvent('qbx_properties:server:letRingerIn', function(visitorCid)
     local player = exports.qbx_core:GetPlayer(playerSource)
     local propertyId = enteredProperty[playerSource]
     if not player or not propertyId then return end
-    local result = MySQL.single.await('SELECT owner, interior FROM properties WHERE id = ?', {propertyId})
+    local result = MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant, interior FROM properties WHERE id = ?', {propertyId})
 
-    if not result or player.PlayerData.citizenid ~= result.owner then return end
+    if not result or not HasPropertyAccess(player.PlayerData.citizenid, result, 'door') then return end
 
     local visitor = exports.qbx_core:GetPlayerByCitizenId(visitorCid)
     if not visitor then return end
@@ -673,6 +800,17 @@ RegisterNetEvent('qbx_properties:server:letRingerIn', function(visitorCid)
     if not visitorIndex then return end
 
     table.remove(ringers, visitorIndex)
+
+    if result.interior == 'mlo' then
+        if UnlockPropertyDoorsTemporarily and UnlockPropertyDoorsTemporarily(propertyId, 10) then
+            exports.qbx_core:Notify(visitor.PlayerData.source, 'The door buzzes open.', 'success')
+            exports.qbx_core:Notify(playerSource, 'You buzzed them in — the door locks again in 10 seconds.', 'success')
+        else
+            exports.qbx_core:Notify(playerSource, 'The door could not be unlocked.', 'error')
+        end
+        return
+    end
+
     EnterProperty(visitor.PlayerData.source, propertyId)
 end)
 
@@ -708,7 +846,7 @@ RegisterNetEvent('qbx_properties:server:addKeyholder', function(keyholderCid)
     exports.qbx_core:Notify(playerSource, keyholder.PlayerData.charinfo.firstname.. locale('notify.keyholder'))
     exports.qbx_core:Notify(keyholder.PlayerData.source, locale('notify.added_as_keyholder'))
 
-    lib.logger(playerSource, 'qbx_properties:server:addKeyholder', locale('logs.added_keyholder', keyholderCid, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:addKeyholder', locale('logs.added_keyholder', keyholderCid, propertyId))
 end)
 
 RegisterNetEvent('qbx_properties:server:removeKeyholder', function(keyholderCid)
@@ -741,7 +879,7 @@ RegisterNetEvent('qbx_properties:server:removeKeyholder', function(keyholderCid)
         exports.qbx_core:Notify(playerSource, keyholder.PlayerData.charinfo.firstname.. locale('notify.removed_as_keyholder'))
     end
 
-    lib.logger(playerSource, 'qbx_properties:server:removeKeyholder', locale('logs.removed_keyholder', keyholderCid, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:removeKeyholder', locale('logs.removed_keyholder', keyholderCid, propertyId))
 end)
 
 RegisterNetEvent('qbx_properties:server:logoutProperty', function()
@@ -827,7 +965,7 @@ AddEventHandler('playerDropped', function ()
 end)
 
 local function registerGarage(propertyId, name, garage)
-    local garageName = 'property_' .. string.gsub(string.lower(name), ' ', '_')
+    local garageName = GetGaragePrefix() .. string.gsub(string.lower(name), ' ', '_')
     local points = NormalizeGaragePoints and NormalizeGaragePoints(garage) or { garage }
     if #points == 0 then return end
 
@@ -841,7 +979,7 @@ local function registerGarage(propertyId, name, garage)
         for i = 1, #points do
             spots[i] = vec4(points[i].x, points[i].y, points[i].z, points[i].w)
         end
-        RegisterCustomGarage('property_' .. propertyId, {
+        RegisterCustomGarage(GetGaragePrefix() .. propertyId, {
             name = garageName,
             label = name,
             spots = spots,
@@ -969,6 +1107,11 @@ RegisterNetEvent('qbx_properties:server:rentProperty', function(propertyId)
     if property.owner then return end
     if not property.rent_interval then return end
 
+    if not CanOwnAnotherProperty(player.PlayerData.citizenid) then
+        exports.qbx_core:Notify(playerSource, 'You already own the maximum number of properties.', 'error')
+        return
+    end
+
     if player.PlayerData.money.bank < property.price then
         exports.qbx_core:Notify(playerSource, 'Not enough money to rent property.', 'error')
         return
@@ -989,7 +1132,7 @@ RegisterNetEvent('qbx_properties:server:rentProperty', function(propertyId)
     exports.qbx_core:Notify(playerSource, string.format('Successfully started renting %s', property.property_name), 'success')
     startRentThread(propertyId)
 
-    lib.logger(playerSource, 'qbx_properties:server:rentProperty', locale('logs.rent_property', player.PlayerData.citizenid, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:rentProperty', locale('logs.rent_property', player.PlayerData.citizenid, propertyId))
 end)
 
 RegisterNetEvent('qbx_properties:server:buyProperty', function(propertyId)
@@ -1003,6 +1146,11 @@ RegisterNetEvent('qbx_properties:server:buyProperty', function(propertyId)
     local propertyCoords = json.decode(property.coords)
 
     if #(playerCoords - vec3(propertyCoords.x, propertyCoords.y, propertyCoords.z)) > 8.0 or property.owner then return end
+
+    if not CanOwnAnotherProperty(player.PlayerData.citizenid) then
+        exports.qbx_core:Notify(playerSource, 'You already own the maximum number of properties.', 'error')
+        return
+    end
 
     local account = player.PlayerData.money.cash >= property.price and 'cash' or 'bank'
     if not player.Functions.RemoveMoney(account, property.price, string.format('Purchased %s', property.property_name)) then
@@ -1022,7 +1170,7 @@ RegisterNetEvent('qbx_properties:server:buyProperty', function(propertyId)
     TriggerClientEvent('qbx_properties:client:refreshBlips', -1)
     exports.qbx_core:Notify(playerSource, string.format('Successfully purchased %s for $%s', property.property_name, property.price))
 
-    lib.logger(playerSource, 'qbx_properties:server:buyProperty', locale('logs.buy_property', player.PlayerData.citizenid, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:buyProperty', locale('logs.buy_property', player.PlayerData.citizenid, propertyId))
 end)
 
 Citizen.CreateThreadNow(function()
@@ -1046,7 +1194,7 @@ RegisterNetEvent('qbx_properties:server:stopRenting', function()
     exports.qbx_core:Notify(player.PlayerData.source, string.format('You stopped your rental contract for %s', property.property_name), 'success')
     evictProperty(propertyId)
 
-    lib.logger(player.PlayerData.source, 'qbx_properties:server:stopRenting', locale('logs.stop_renting', player.PlayerData.citizenid, propertyId))
+    LogAction(player.PlayerData.source, 'qbx_properties:server:stopRenting', locale('logs.stop_renting', player.PlayerData.citizenid, propertyId))
 end)
 
 RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, rotation, objectId, tint)
@@ -1064,9 +1212,16 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
     if not objectId then
         local existing
         if IsFirstFreeFurniture(hash) then
-            existing = property.building
-                and MySQL.scalar.await('SELECT COUNT(*) FROM properties_apartment_decorations WHERE citizenid = ? AND model = ? AND layout = ?', {property.owner, hash, GetBuildingLayout(property.building)})
-                or MySQL.scalar.await('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model = ? AND IFNULL(garden, 0) = 0', {propertyId, hash})
+            local models, placeholders = FirstFreeModels(hash)
+            local params = { property.building and property.owner or propertyId }
+            for i = 1, #models do params[#params + 1] = models[i] end
+
+            if property.building then
+                params[#params + 1] = GetBuildingLayout(property.building)
+                existing = MySQL.scalar.await(('SELECT COUNT(*) FROM properties_apartment_decorations WHERE citizenid = ? AND model IN (%s) AND layout = ?'):format(placeholders), params)
+            else
+                existing = MySQL.scalar.await(('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model IN (%s) AND IFNULL(garden, 0) = 0'):format(placeholders), params)
+            end
         end
 
         local ok, usedCredit = ConsumeFurnitureCredit(playerSource, hash, existing)
@@ -1176,7 +1331,7 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
     end
 
     if RefreshUtilities then RefreshUtilities(propertyId) end
-    lib.logger(player.PlayerData.source, 'qbx_properties:server:addDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, hash, propertyId))
+    LogAction(player.PlayerData.source, 'qbx_properties:server:addDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, hash, propertyId))
 end)
 
 ---@param player table
@@ -1215,7 +1370,7 @@ lib.callback.register('qbx_properties:callback:payFurniture', function(source, m
     end
     furnitureCredits[source] = credits
 
-    lib.logger(source, 'qbx_properties:server:payFurniture', string.format('%s paid $%d for furniture', player.PlayerData.citizenid, total))
+    LogAction(source, 'qbx_properties:server:payFurniture', string.format('%s paid $%d for furniture', player.PlayerData.citizenid, total))
 
     return true
 end)
@@ -1241,6 +1396,22 @@ end
 function IsFirstFreeFurniture(model)
     local spec = GetFurnitureSpecs()[model]
     return spec ~= nil and (spec.price or 0) > 0 and spec.firstFree == true
+end
+
+---@param model string
+---@return string[] models, string placeholders
+function FirstFreeModels(model)
+    local spec = GetFurnitureSpecs()[model]
+    local models = { model }
+
+    if spec and spec.type then
+        models = {}
+        for object, entry in pairs(GetFurnitureSpecs()) do
+            if entry.type == spec.type then models[#models + 1] = object end
+        end
+    end
+
+    return models, string.rep('?', #models, ',')
 end
 
 local movingAuth = {}
@@ -1303,7 +1474,7 @@ RegisterNetEvent('qbx_properties:server:removeDecoration', function(objectId)
     end
 
     if RefreshUtilities then RefreshUtilities(propertyId) end
-    lib.logger(player.PlayerData.source, 'qbx_properties:server:removeDecoration', locale('logs.remove_decoration', player.PlayerData.citizenid, objectId, propertyId))
+    LogAction(player.PlayerData.source, 'qbx_properties:server:removeDecoration', locale('logs.remove_decoration', player.PlayerData.citizenid, objectId, propertyId))
 end)
 
 lib.callback.register('qbx_properties:callback:getMyBlips', function(source)
@@ -1409,7 +1580,7 @@ RegisterNetEvent('qbx_properties:server:placeItemDecoration', function(item, slo
     })
 
     if RefreshUtilities then RefreshUtilities(propertyId) end
-    lib.logger(playerSource, 'qbx_properties:server:placeItemDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, model, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:placeItemDecoration', locale('logs.add_decoration', player.PlayerData.citizenid, model, propertyId))
 end)
 
 RegisterNetEvent('qbx_properties:server:pickupDecoration', function(objectId)
@@ -1491,7 +1662,7 @@ RegisterNetEvent('qbx_properties:server:pickupDecoration', function(objectId)
     deleteDecoration()
 
     if propertyId and RefreshUtilities then RefreshUtilities(propertyId) end
-    lib.logger(playerSource, 'qbx_properties:server:pickupDecoration', locale('logs.remove_decoration', player.PlayerData.citizenid, objectId, propertyId or gardenId))
+    LogAction(playerSource, 'qbx_properties:server:pickupDecoration', locale('logs.remove_decoration', player.PlayerData.citizenid, objectId, propertyId or gardenId))
 end)
 
 RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
@@ -1523,14 +1694,14 @@ RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
         pcall(function() exports.ox_inventory:ClearInventory(GetStashId(property, slots[i].stash_slot)) end)
     end
 
-    pcall(function() exports.ox_doorlock:removeDoorByName(string.format('qbx_properties:%d:', propertyId)) end)
+    pcall(function() exports.ox_doorlock:removeDoorByName(string.format('%s%d:', GetDoorPrefix(), propertyId)) end)
 
     if property.images and DeletePropertyImagesRemote then
         local ok, images = pcall(json.decode, property.images)
         if ok and type(images) == 'table' then DeletePropertyImagesRemote(images) end
     end
 
-    local garageName = 'property_' .. string.gsub(string.lower(property.property_name), ' ', '_')
+    local garageName = GetGaragePrefix() .. string.gsub(string.lower(property.property_name), ' ', '_')
     pcall(MySQL.update.await, 'UPDATE player_vehicles SET state = 2 WHERE garage = ?', {garageName})
 
     pcall(MySQL.update.await, 'DELETE FROM properties_access WHERE property_id = ?', {propertyId})
@@ -1544,7 +1715,7 @@ RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
     TriggerClientEvent('qbx_properties:client:invalidateUnitAccess', -1)
     TriggerClientEvent('qbx_properties:client:refreshBlips', -1)
 
-    lib.logger(playerSource, 'qbx_properties:server:deleteProperty', string.format('%s deleted property %s (id %d)', player.PlayerData.citizenid, property.property_name, propertyId))
+    LogAction(playerSource, 'qbx_properties:server:deleteProperty', string.format('%s deleted property %s (id %d)', player.PlayerData.citizenid, property.property_name, propertyId))
     exports.qbx_core:Notify(playerSource, string.format('%s deleted.', property.property_name), 'success')
 end)
 

@@ -8,10 +8,19 @@
   let leaseTarget = $state('')
   let leaseRent = $state(500)
   let leaseInterval = $state(24)
+  let leaseContract = $state(0)
+  let payPeriods = $state(1)
+
+  const rentInfo = $derived(tablet.rent)
+
+  const dateFmt = (ts) => new Date(ts * 1000).toLocaleDateString()
+  const dateTimeFmt = (ts) => new Date(ts * 1000).toLocaleString()
 
   const tabs = $derived([
-    ['access', 'Room management'],
-    ['utilities', 'Utilities'],
+    ['access', 'Housing Management'],
+    ...(tablet.utilities ? [['utilities', 'Utilities']] : []),
+    ...(tablet.rent ? [['rent', 'Rent']] : []),
+    ...(tablet.doorcam ? [['doorcam', 'Doorcam']] : []),
     ...(tablet.upgrades?.length ? [['upgrades', 'Upgrades']] : []),
     ...(tablet.wallColors ? [['walls', 'Wall colour']] : []),
   ])
@@ -20,7 +29,13 @@
     ['door', 'Door', 'Unlock and lock the front door'],
     ['stash', 'Stash', 'Open every stash in the property'],
     ['furniture', 'Furniture', 'Place, move and remove furniture'],
-    ...(tablet.apartment ? [] : [['garage', 'Garage', 'Store and retrieve vehicles']]),
+    ...(tablet.apartment
+      ? [['utilities', 'Utilities', 'See the utilities tab']]
+      : [
+          ['garage', 'Garage', 'Store and retrieve vehicles'],
+          ['utilities', 'Utilities', 'See and pay the utility bill'],
+          ['rent', 'Rent', 'See and pay the rent'],
+        ]),
   ])
 
   const util = $derived(tablet.utilities)
@@ -37,14 +52,14 @@
 
   function grant() {
     if (!citizenid.trim()) return
-    fetchNui('tablet:setAccess', { citizenid: citizenid.trim(), door: true, stash: false, furniture: false, garage: false })
+    fetchNui('tablet:setAccess', { citizenid: citizenid.trim(), door: true, stash: false, furniture: false, garage: false, utilities: false, rent: false })
     modalCid = citizenid.trim()
     citizenid = ''
   }
 
   function revoke(entry) {
     if (modalCid === entry.citizenid) modalCid = null
-    fetchNui('tablet:setAccess', { citizenid: entry.citizenid, door: false, stash: false, furniture: false, garage: false })
+    fetchNui('tablet:setAccess', { citizenid: entry.citizenid, door: false, stash: false, furniture: false, garage: false, utilities: false, rent: false })
   }
 
   function toggle(entry, key) {
@@ -79,7 +94,7 @@
 
   function rentOut() {
     if (!leaseTarget) return
-    fetchNui('tablet:rentOut', { citizenid: leaseTarget, rent: leaseRent, interval: leaseInterval })
+    fetchNui('tablet:rentOut', { citizenid: leaseTarget, rent: leaseRent, interval: leaseInterval, contract: leaseContract > 0 ? leaseContract : null })
     leaseTarget = ''
   }
 
@@ -147,32 +162,6 @@
           {/each}
 
           <span class="hint">Granting starts with door access only — the pencil opens the full permission list.</span>
-
-          {#if tablet.tenancy?.role === 'owner'}
-            <div class="section-title">Tenancy</div>
-            {#if tablet.tenancy.tenant}
-              <div class="tenancy-bar">
-                <span class="tenancy-info">
-                  <span class="tenancy-name">Rented to {tablet.tenancy.tenant}</span>
-                  <span class="tenancy-sub">{formatMoney(tablet.tenancy.rent)} every {tablet.tenancy.interval}h, paid from their bank</span>
-                </span>
-                <button class="end-btn" onclick={() => fetchNui('tablet:endTenancy')}>End tenancy</button>
-              </div>
-            {:else}
-              <span class="hint">Rent this property out — the tenant gets full access and pays you automatically. Missed rent ends the lease.</span>
-              <div class="lease-row">
-                <select class="select grow" bind:value={leaseTarget} onfocus={() => fetchNui('tablet:getNearby')}>
-                  <option value="">Nearby person...</option>
-                  {#each tablet.nearby as person (person.citizenid)}
-                    <option value={person.citizenid}>{person.name}</option>
-                  {/each}
-                </select>
-                <input class="input mono slim" type="number" min="1" bind:value={leaseRent} placeholder="Rent" />
-                <input class="input mono slim" type="number" min="1" max="168" bind:value={leaseInterval} placeholder="Hours" />
-                <button class="btn" disabled={!leaseTarget} onclick={rentOut}>Offer lease</button>
-              </div>
-            {/if}
-          {/if}
         </div>
       </div>
     {:else if tab === 'utilities' && util}
@@ -232,17 +221,6 @@
           <button class="btn wide" onclick={() => fetchNui('tablet:repairBreaker')}>Repair breaker</button>
         {/if}
 
-        {#if tablet.tenancy?.role === 'tenant'}
-          <div class="section-title">Your rent</div>
-          <div class="draw-row">
-            <span class="draw-name">{formatMoney(tablet.tenancy.rent)} every {tablet.tenancy.interval}h</span>
-            <span class="draw-watts">
-              {tablet.tenancy.nextDue ? new Date(tablet.tenancy.nextDue * 1000).toLocaleString() : ''}
-            </span>
-          </div>
-          <span class="hint">Taken from your bank automatically — a missed payment ends the lease.</span>
-        {/if}
-
         {#if util.draws?.length}
           <div class="section-title">Biggest draws</div>
           <div class="draws">
@@ -255,9 +233,155 @@
             {/each}
           </div>
         {/if}
+
+        {#if util.history?.length}
+          <div class="section-title">Payments</div>
+          <div class="draws">
+            {#each util.history as entry, i (i)}
+              <div class="draw-row">
+                <span class="draw-name">{entry.name ?? entry.payer}</span>
+                <span class="pay-date">{dateFmt(entry.paidAt)}</span>
+                <span class="draw-watts">{formatMoney(entry.amount)}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
-    {:else if tab === 'utilities'}
-      <div class="empty">Loading utilities...</div>
+    {:else if tab === 'rent' && rentInfo}
+      <div class="scroll body">
+        {#if rentInfo.tenant}
+          <div class="stat-grid">
+            <div class="stat-card">
+              <span class="stat-label">RENT</span>
+              <span class="stat-line">
+                <span class="stat-big">{formatMoney(rentInfo.rent)}</span>
+                <span class="stat-unit">/ {rentInfo.interval}h</span>
+              </span>
+              <span class="fine">{rentInfo.role === 'owner' ? `Paid to you by ${rentInfo.tenant}` : `Paid to ${rentInfo.ownerName}`}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">PAID UNTIL</span>
+              <span class="stat-line">
+                <span class="stat-big date-big">{rentInfo.paidUntil ? dateTimeFmt(rentInfo.paidUntil) : '—'}</span>
+              </span>
+              <span class="fine">{rentInfo.contractEnd ? `Contract ends ${dateFmt(rentInfo.contractEnd)}` : 'Open-ended lease'}</span>
+            </div>
+          </div>
+
+          {#if rentInfo.canPay}
+            <div class="bill-card">
+              <span class="bill-info">
+                <span class="bill-title">Pay rent ahead</span>
+                <span class="bill-sub">{payPeriods} payment{payPeriods === 1 ? '' : 's'} of {formatMoney(rentInfo.rent)} — pushes the next automatic charge back</span>
+              </span>
+              <span class="pay-controls">
+                <button class="stepper" onclick={() => (payPeriods = Math.max(1, payPeriods - 1))}>−</button>
+                <span class="pay-count">{payPeriods}</span>
+                <button class="stepper" onclick={() => (payPeriods = Math.min(12, payPeriods + 1))}>+</button>
+                <button class="btn" onclick={() => fetchNui('tablet:payRent', { periods: payPeriods })}>Pay {formatMoney(rentInfo.rent * payPeriods)}</button>
+              </span>
+            </div>
+          {/if}
+
+          {#if rentInfo.noticeEnd}
+            <div class="trip-note">
+              Eviction notice served — the lease ends {dateTimeFmt(rentInfo.noticeEnd)}.
+            </div>
+          {/if}
+
+          {#if rentInfo.role === 'owner' || rentInfo.role === 'tenant'}
+            <div class="tenancy-bar">
+              <span class="tenancy-info">
+                <span class="tenancy-name">{rentInfo.role === 'owner' ? `Rented to ${rentInfo.tenant}` : `You rent this from ${rentInfo.ownerName}`}</span>
+                <span class="tenancy-sub">A missed automatic payment ends the lease{rentInfo.contractEnd ? '; the contract ends on its date' : ''}.</span>
+              </span>
+              {#if rentInfo.role === 'tenant'}
+                <button class="end-btn" onclick={() => fetchNui('tablet:endTenancy')}>End tenancy</button>
+              {:else if !rentInfo.noticeEnd}
+                <button class="end-btn" onclick={() => fetchNui('tablet:endTenancy')}>
+                  {rentInfo.noticeDays > 0 ? `Serve eviction notice (${rentInfo.noticeDays}d)` : 'End tenancy'}
+                </button>
+              {/if}
+            </div>
+          {/if}
+        {:else if rentInfo.role === 'owner'}
+          <div class="section-title">Offer a lease</div>
+          <span class="hint">Rent this property out — the tenant gets full access and pays you automatically from their bank. The first payment is taken the moment they accept.</span>
+          <div class="lease-row">
+            <select class="select grow" bind:value={leaseTarget} onfocus={() => fetchNui('tablet:getNearby')}>
+              <option value="">Nearby person...</option>
+              {#each tablet.nearby as person (person.citizenid)}
+                <option value={person.citizenid}>{person.name}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="lease-row">
+            <span class="lease-field">
+              <span class="mini-label">Rent</span>
+              <span class="money-wrap">
+                <span class="money-sign">$</span>
+                <input class="input mono money-input" type="number" min="1" bind:value={leaseRent} />
+              </span>
+            </span>
+            <span class="lease-field">
+              <span class="mini-label">Every (hours)</span>
+              <input class="input mono" type="number" min="1" max="168" bind:value={leaseInterval} />
+            </span>
+            <span class="lease-field">
+              <span class="mini-label">Contract (0 = open)</span>
+              <input class="input mono" type="number" min="0" max="104" bind:value={leaseContract} />
+            </span>
+            <button class="btn lease-btn" disabled={!leaseTarget} onclick={rentOut}>Offer lease</button>
+          </div>
+          <span class="hint">A contract of 12 with 24h payments runs the lease for 12 days, then it ends on its own.</span>
+        {/if}
+
+        {#if rentInfo.history?.length}
+          <div class="section-title">Payments</div>
+          <div class="draws">
+            {#each rentInfo.history as entry, i (i)}
+              <div class="draw-row">
+                <span class="draw-name">{entry.name ?? entry.payer}</span>
+                <span class="pay-date">{dateFmt(entry.paidAt)}</span>
+                <span class="draw-watts">{formatMoney(entry.amount)}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {:else if tab === 'doorcam' && tablet.doorcam}
+      <div class="scroll body">
+        <div class="doorcam-head">
+          <span class="section-title">At the door</span>
+          <span class="doorcam-actions">
+            <button class="btn subtle" onclick={() => fetchNui('tablet:getDoorcam')}>Refresh</button>
+            {#if tablet.doorcam.cam}
+              <button class="btn" onclick={() => fetchNui('tablet:showDoorcam')}>Show doorcam</button>
+            {/if}
+          </span>
+        </div>
+
+        {#if tablet.doorcam.ringers?.length}
+          {#each tablet.doorcam.ringers as ringer (ringer.citizenid)}
+            <div class="entry">
+              <span class="entry-main">
+                <span class="entry-name">{ringer.name}</span>
+                <span class="entry-summary">Rang the doorbell</span>
+              </span>
+              <button class="btn" onclick={() => fetchNui('tablet:letIn', { citizenid: ringer.citizenid })}>
+                {tablet.doorcam.mlo ? 'Buzz in' : 'Let in'}
+              </button>
+            </div>
+          {/each}
+          <span class="hint">
+            {tablet.doorcam.mlo
+              ? 'Buzzing someone in unlocks the front door for 10 seconds, then it locks again.'
+              : 'Letting someone in brings them straight inside.'}
+          </span>
+        {:else}
+          <div class="empty">Nobody is at the door</div>
+        {/if}
+      </div>
     {:else if tab === 'upgrades'}
       <div class="scroll body">
         <div class="upgrade-grid">
@@ -626,12 +750,106 @@
 
   .lease-row {
     display: flex;
+    align-items: flex-end;
     gap: 8px;
   }
 
-  .slim {
-    width: 90px;
+  .lease-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mini-label {
+    font-size: 11px;
+    color: var(--dark-2);
+  }
+
+  .lease-btn {
     flex: none;
+  }
+
+  .money-wrap {
+    position: relative;
+    display: block;
+    width: 100%;
+  }
+
+  .money-sign {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
+    color: var(--dark-2);
+    pointer-events: none;
+  }
+
+  .money-input {
+    padding-left: 22px;
+  }
+
+  .doorcam-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex: none;
+  }
+
+  .doorcam-actions {
+    display: flex;
+    gap: 7px;
+  }
+
+  .pay-controls {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: none;
+  }
+
+  .stepper {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--dark-0);
+    background: var(--dark-5);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .stepper:hover {
+    background: var(--dark-4);
+    color: #fff;
+  }
+
+  .pay-count {
+    min-width: 20px;
+    text-align: center;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .pay-date {
+    flex: none;
+    font-size: 11px;
+    color: var(--dark-3);
+  }
+
+  .date-big {
+    font-size: 15px;
   }
 
   .mono {

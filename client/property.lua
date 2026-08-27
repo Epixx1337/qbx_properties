@@ -345,6 +345,9 @@ local function createInteractionTargets()
         local builder = targetOptions[interactions[i].type]
         local options = builder and builder()
         if options then
+            for j = 1, #options do
+                options[j].distance = TargetDistance('interaction', 2.0)
+            end
             interactionZones[#interactionZones + 1] = exports.ox_target:addSphereZone({
                 coords = interactions[i].coords,
                 radius = 1.0,
@@ -376,7 +379,7 @@ end)
 RegisterNetEvent('qbx_properties:client:updateInteractions', function(interactionsData, interiorString, isRental, propertyId)
     if propertyId then CurrentPropertyId = propertyId end
 
-    if IsRealtor(QBX.PlayerData.job) and CurrentPropertyId then
+    if IsRealtor(QBX.PlayerData.job) and CurrentPropertyId and interiorString ~= 'mlo' then
         AddPropertyRadial('qbx_properties_points', {
             label = 'Interaction points',
             icon = 'location-dot',
@@ -594,6 +597,7 @@ local function refreshEntranceZones()
                 {
                     label = label,
                     icon = 'fas fa-house',
+                    distance = TargetDistance('entrance', 2.0),
                     onSelect = function()
                         PreparePropertyMenu(coords)
                     end,
@@ -624,7 +628,7 @@ CreateThread(function()
         local sleep = 800
         local playerCoords = GetEntityCoords(cache.ped)
         for i = 1, #properties do
-            if #(playerCoords - properties[i].xyz) < 1.6 then
+            if #(playerCoords - properties[i].xyz) < TargetDistance('entrance', 2.0) then
                 sleep = 0
                 qbx.drawText3d({ coords = properties[i].xyz, text = locale('drawtext.view_property') })
                 if IsControlJustPressed(0, 38) then
@@ -705,6 +709,45 @@ RegisterNetEvent('qbx_properties:client:addProperty', function(propertyCoords)
     if sharedConfig.targetShellInteractions then refreshEntranceZones() end
 end)
 
+local ringZones = {}
+
+local function refreshRingZones()
+    for i = 1, #ringZones do
+        exports.ox_target:removeZone(ringZones[i])
+    end
+    table.wipe(ringZones)
+
+    local points = lib.callback.await('qbx_properties:callback:getRingPoints', false) or {}
+    for i = 1, #points do
+        local entry = points[i]
+        ringZones[#ringZones + 1] = exports.ox_target:addSphereZone({
+            coords = entry.coords,
+            radius = 1.2,
+            options = {
+                {
+                    name = string.format('qbx_properties_ring_%d_%d', entry.id, i),
+                    label = 'Ring doorbell',
+                    icon = 'fas fa-bell',
+                    distance = TargetDistance('doorbell', 1.5),
+                    onSelect = function()
+                        TriggerServerEvent('qbx_properties:server:ringProperty', { id = entry.id })
+                        lib.notify({ type = 'info', description = 'You rang the doorbell.' })
+                    end,
+                },
+            },
+        })
+    end
+end
+
+RegisterNetEvent('qbx_properties:client:refreshBlips', refreshRingZones)
+RegisterNetEvent('qbx_properties:client:invalidateUnitAccess', refreshRingZones)
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', refreshRingZones)
+
+AddEventHandler('onResourceStart', function(resource)
+    if resource ~= cache.resource then return end
+    if LocalPlayer.state.isLoggedIn then refreshRingZones() end
+end)
+
 local mailboxZones = {}
 
 local function refreshMailboxes()
@@ -725,6 +768,7 @@ local function refreshMailboxes()
                 {
                     label = 'Mailbox',
                     icon = 'fas fa-envelope',
+                    distance = TargetDistance('mailbox', 2.0),
                     onSelect = function()
                         TriggerServerEvent('qbx_properties:server:openMailbox', entry.id)
                     end,

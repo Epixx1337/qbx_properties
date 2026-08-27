@@ -180,7 +180,7 @@ lib.callback.register('qbx_properties:callback:startRaid', function(source, buil
             assigned_room = VALUES(assigned_room), assigned_building = VALUES(assigned_building)
     ]], {property.id, player.PlayerData.citizenid, citizenId, assignedRoom and 1 or 0, assignedBuilding and 1 or 0})
 
-    lib.logger(source, 'qbx_properties:server:startRaid', string.format('%s opened a raid on %s (%s)', player.PlayerData.citizenid, property.property_name, citizenId))
+    LogAction(source, 'qbx_properties:server:startRaid', string.format('%s opened a raid on %s (%s)', player.PlayerData.citizenid, property.property_name, citizenId))
 
     pushRaidState(property.id)
     return true, property.property_name, property.floor, property.room
@@ -254,7 +254,7 @@ function EndRaid(propertyId, source)
     pushAccessFlags(propertyId)
     pushRaidState(propertyId)
 
-    lib.logger(source or 0, 'qbx_properties:server:endRaid', string.format('Raid on property %d ended', propertyId))
+    LogAction(source or 0, 'qbx_properties:server:endRaid', string.format('Raid on property %d ended', propertyId))
 
     return true
 end
@@ -279,7 +279,7 @@ lib.callback.register('qbx_properties:callback:breachDoor', function(source, pro
     if not raids[propertyId] and property.building then return false end
     if not MarkBreached(propertyId, player.PlayerData.citizenid) then return false end
 
-    lib.logger(source, 'qbx_properties:server:breachDoor', string.format('%s breached %s', player.PlayerData.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:breachDoor', string.format('%s breached %s', player.PlayerData.citizenid, property.property_name))
 
     return true
 end)
@@ -306,7 +306,7 @@ lib.callback.register('qbx_properties:callback:lockdownProperty', function(sourc
     pushAccessFlags(propertyId)
     pushRaidState(propertyId)
 
-    lib.logger(source, 'qbx_properties:server:lockdownProperty', string.format('%s locked down %s (owner %s)', player.PlayerData.citizenid, property.property_name, property.owner))
+    LogAction(source, 'qbx_properties:server:lockdownProperty', string.format('%s locked down %s (owner %s)', player.PlayerData.citizenid, property.property_name, property.owner))
 
     return true
 end)

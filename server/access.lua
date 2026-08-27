@@ -1,6 +1,7 @@
 local config = require 'config.server'
 
-local PERMISSIONS = { door = true, stash = true, furniture = true, garage = true }
+local PERMISSIONS = { door = true, stash = true, furniture = true, garage = true, utilities = true, rent = true }
+local BUILDING_EXCLUDED = { garage = true, rent = true }
 local BREACH_OPEN = { door = true, stash = true }
 
 ---@param property table needs id, owner and building
@@ -17,7 +18,7 @@ end
 ---@return boolean
 local function appliesTo(property, permission)
     if not PERMISSIONS[permission] then return false end
-    return not (permission == 'garage' and property.building)
+    return not (BUILDING_EXCLUDED[permission] and property.building)
 end
 
 ---@param citizenId string
@@ -67,15 +68,15 @@ end
 ---@param property table
 ---@return table
 function GetAccessFlags(citizenId, property)
-    local garage = not property.building
+    local house = not property.building
     local flags
 
     if property.owner == citizenId or property.tenant == citizenId or isKeyholder(citizenId, property) or isGroupMember(citizenId, property) then
-        flags = { door = true, stash = true, furniture = true, garage = garage }
+        flags = { door = true, stash = true, furniture = true, garage = house, utilities = true, rent = house }
     else
         local key = accessKey(property)
         local row = key.value and MySQL.single.await(
-            string.format('SELECT door, stash, furniture, garage FROM properties_access WHERE `%s` = ? AND citizenid = ?', key.column),
+            string.format('SELECT door, stash, furniture, garage, utilities, rent FROM properties_access WHERE `%s` = ? AND citizenid = ?', key.column),
             {key.value, citizenId}
         )
 
@@ -83,8 +84,10 @@ function GetAccessFlags(citizenId, property)
             door = ToBool(row.door),
             stash = ToBool(row.stash),
             furniture = ToBool(row.furniture),
-            garage = garage and ToBool(row.garage),
-        } or { door = false, stash = false, furniture = false, garage = false }
+            garage = house and ToBool(row.garage),
+            utilities = ToBool(row.utilities),
+            rent = house and ToBool(row.rent),
+        } or { door = false, stash = false, furniture = false, garage = false, utilities = false, rent = false }
     end
 
     return flags
@@ -97,7 +100,7 @@ function GetPropertyAccessList(property)
     if not key.value then return {} end
 
     local rows = MySQL.query.await(string.format([[
-        SELECT a.citizenid, a.door, a.stash, a.furniture, a.garage, p.charinfo
+        SELECT a.citizenid, a.door, a.stash, a.furniture, a.garage, a.utilities, a.rent, p.charinfo
         FROM properties_access a
         LEFT JOIN players p ON p.citizenid = a.citizenid
         WHERE a.`%s` = ?
@@ -113,6 +116,8 @@ function GetPropertyAccessList(property)
             stash = ToBool(rows[i].stash),
             furniture = ToBool(rows[i].furniture),
             garage = ToBool(rows[i].garage),
+            utilities = ToBool(rows[i].utilities),
+            rent = ToBool(rows[i].rent),
         }
     end
     return result
@@ -123,8 +128,11 @@ lib.callback.register('qbx_properties:callback:getAccessList', function(source, 
     propertyId = ToId(propertyId)
     if not player or not propertyId then return {} end
 
-    local property = MySQL.single.await('SELECT id, owner, building FROM properties WHERE id = ?', {propertyId})
-    if not property or property.owner ~= player.PlayerData.citizenid then return {} end
+    local property = MySQL.single.await('SELECT id, owner, building, tenant FROM properties WHERE id = ?', {propertyId})
+    if not property then return {} end
+
+    local citizenId = player.PlayerData.citizenid
+    if property.owner ~= citizenId and property.tenant ~= citizenId then return {} end
 
     return { access = GetPropertyAccessList(property), apartment = property.building ~= nil }
 end)
@@ -136,9 +144,12 @@ lib.callback.register('qbx_properties:callback:setAccess', function(source, data
     local propertyId = ToId(data.propertyId)
     if not propertyId or type(data.citizenid) ~= 'string' then return false end
 
-    local property = MySQL.single.await('SELECT id, owner, building, property_name FROM properties WHERE id = ?', {propertyId})
-    if not property or property.owner ~= player.PlayerData.citizenid then return false end
-    if data.citizenid == property.owner then return false end
+    local property = MySQL.single.await('SELECT id, owner, building, tenant, property_name FROM properties WHERE id = ?', {propertyId})
+    if not property then return false end
+
+    local citizenId = player.PlayerData.citizenid
+    if property.owner ~= citizenId and property.tenant ~= citizenId then return false end
+    if data.citizenid == property.owner or data.citizenid == property.tenant then return false end
 
     if not MySQL.scalar.await('SELECT citizenid FROM players WHERE citizenid = ?', {data.citizenid}) then return false end
 
@@ -149,17 +160,19 @@ lib.callback.register('qbx_properties:callback:setAccess', function(source, data
     local stash = data.stash and 1 or 0
     local furniture = data.furniture and 1 or 0
     local garage = (data.garage and not property.building) and 1 or 0
+    local utilities = data.utilities and 1 or 0
+    local rent = (data.rent and not property.building) and 1 or 0
 
-    if door + stash + furniture + garage == 0 then
+    if door + stash + furniture + garage + utilities + rent == 0 then
         MySQL.update.await(string.format('DELETE FROM properties_access WHERE `%s` = ? AND citizenid = ?', key.column), {key.value, data.citizenid})
     else
         MySQL.update.await(string.format([[
-            INSERT INTO properties_access (`%s`, citizenid, door, stash, furniture, garage) VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE door = VALUES(door), stash = VALUES(stash), furniture = VALUES(furniture), garage = VALUES(garage)
-        ]], key.column), {key.value, data.citizenid, door, stash, furniture, garage})
+            INSERT INTO properties_access (`%s`, citizenid, door, stash, furniture, garage, utilities, rent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE door = VALUES(door), stash = VALUES(stash), furniture = VALUES(furniture), garage = VALUES(garage), utilities = VALUES(utilities), rent = VALUES(rent)
+        ]], key.column), {key.value, data.citizenid, door, stash, furniture, garage, utilities, rent})
     end
 
-    lib.logger(source, 'qbx_properties:server:setAccess', string.format('%s updated access for %s on %s', player.PlayerData.citizenid, data.citizenid, property.property_name))
+    LogAction(source, 'qbx_properties:server:setAccess', string.format('%s updated access for %s on %s', player.PlayerData.citizenid, data.citizenid, property.property_name))
 
     TriggerClientEvent('qbx_properties:client:invalidateUnitAccess', -1)
     return true

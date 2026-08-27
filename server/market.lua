@@ -51,6 +51,7 @@ end
 local function transferProperty(propertyId, buyerCid, amount)
     local property = MySQL.single.await('SELECT owner, property_name FROM properties WHERE id = ?', {propertyId})
     if not property then return false end
+    if not CanOwnAnotherProperty(buyerCid) then return false end
 
     MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT() WHERE id = ?', {buyerCid, propertyId})
 
@@ -131,7 +132,7 @@ RegisterNetEvent('qbx_properties:server:repossess', function(propertyId)
 
     MySQL.update.await('UPDATE properties SET owner = NULL, keyholders = JSON_OBJECT(), wall_color = NULL WHERE id = ?', {propertyId})
 
-    lib.logger(playerSource, 'qbx_properties:server:repossess', string.format('%s repossessed %s from %s', player.PlayerData.citizenid, property.property_name, property.owner))
+    LogAction(playerSource, 'qbx_properties:server:repossess', string.format('%s repossessed %s from %s', player.PlayerData.citizenid, property.property_name, property.owner))
 
     exports.qbx_core:Notify(playerSource, string.format('%s repossessed.', property.property_name), 'success')
 end)
@@ -235,7 +236,7 @@ lib.callback.register('qbx_properties:callback:createListing', function(source, 
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ]], {propertyId, player.PlayerData.citizenid, data.listingType, price, reserve, increment or market.minIncrement, auctionEnd})
 
-    lib.logger(source, 'qbx_properties:server:createListing', string.format('%s listed %s as %s for $%d', player.PlayerData.citizenid, property.property_name, data.listingType, price))
+    LogAction(source, 'qbx_properties:server:createListing', string.format('%s listed %s as %s for $%d', player.PlayerData.citizenid, property.property_name, data.listingType, price))
 
     return listingId ~= nil
 end)
@@ -261,7 +262,7 @@ lib.callback.register('qbx_properties:callback:cancelListing', function(source, 
 
     refundActiveBids(listingId, 'cancelled')
 
-    lib.logger(source, 'qbx_properties:server:cancelListing', string.format('%s cancelled listing %d', player.PlayerData.citizenid, listingId))
+    LogAction(source, 'qbx_properties:server:cancelListing', string.format('%s cancelled listing %d', player.PlayerData.citizenid, listingId))
 
     return true
 end)
@@ -273,6 +274,11 @@ lib.callback.register('qbx_properties:callback:buyListing', function(source, lis
 
     local listing = getActiveListing(listingId)
     if not listing or listing.listing_type ~= 'sale' then return false end
+
+    if not CanOwnAnotherProperty(player.PlayerData.citizenid) then
+        exports.qbx_core:Notify(source, 'You already own the maximum number of properties.', 'error')
+        return false
+    end
 
     local property = MySQL.single.await('SELECT coords, owner FROM properties WHERE id = ?', {listing.property_id})
     if not property or property.owner == player.PlayerData.citizenid then return false end
@@ -297,7 +303,7 @@ lib.callback.register('qbx_properties:callback:buyListing', function(source, lis
 
     MySQL.update.await("UPDATE properties_listings SET status = 'sold' WHERE id = ?", {listingId})
 
-    lib.logger(source, 'qbx_properties:server:buyListing', string.format('%s bought listing %d for $%d', player.PlayerData.citizenid, listingId, listing.price))
+    LogAction(source, 'qbx_properties:server:buyListing', string.format('%s bought listing %d for $%d', player.PlayerData.citizenid, listingId, listing.price))
 
     return true
 end)
@@ -314,6 +320,8 @@ lib.callback.register('qbx_properties:callback:placeOffer', function(source, lis
     if not player or not listingId or not amount then return false, 'Invalid offer.' end
 
     local citizenId = player.PlayerData.citizenid
+    if not CanOwnAnotherProperty(citizenId) then return false, 'You already own the maximum number of properties.' end
+
     local listing = getActiveListing(listingId)
     if not listing or listing.listing_type ~= 'offer' then return false, 'Listing not found.' end
     if listing.listed_by == citizenId then return false, 'You cannot make an offer on your own listing.' end
@@ -334,7 +342,7 @@ lib.callback.register('qbx_properties:callback:placeOffer', function(source, lis
 
     MySQL.insert.await("INSERT INTO `properties_bids` (`listing_id`, `bidder`, `amount`) VALUES (?, ?, ?)", {listingId, citizenId, amount})
 
-    lib.logger(source, 'qbx_properties:server:placeOffer', string.format('%s offered $%d on listing %d', citizenId, amount, listingId))
+    LogAction(source, 'qbx_properties:server:placeOffer', string.format('%s offered $%d on listing %d', citizenId, amount, listingId))
 
     return true
 end)
@@ -364,7 +372,7 @@ local function settleOffer(source, listingId, bidId, accept)
         if bidder then
             exports.qbx_core:Notify(bidder.PlayerData.source, 'Your property offer was declined and refunded.', 'error')
         end
-        lib.logger(source, 'qbx_properties:server:declineOffer', string.format('declined offer %d on listing %d', bid.id, listingId))
+        LogAction(source, 'qbx_properties:server:declineOffer', string.format('declined offer %d on listing %d', bid.id, listingId))
         return true
     end
 
@@ -376,6 +384,12 @@ local function settleOffer(source, listingId, bidId, accept)
         MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ?", {bid.id})
         payOut(bid.bidder, bid.amount, string.format('Offer failed (listing %d)', listingId))
         MySQL.update.await("UPDATE properties_listings SET status = 'active' WHERE id = ?", {listingId})
+
+        local bidder = exports.qbx_core:GetPlayerByCitizenId(bid.bidder)
+        if bidder then
+            exports.qbx_core:Notify(bidder.PlayerData.source, 'Your offer could not be completed and was refunded — you may own the maximum number of properties.', 'error')
+        end
+        exports.qbx_core:Notify(source, 'The sale could not be completed, the buyer may own too many properties already.', 'error')
         return false
     end
 
@@ -387,7 +401,7 @@ local function settleOffer(source, listingId, bidId, accept)
         exports.qbx_core:Notify(buyer.PlayerData.source, string.format('Your offer of $%d was accepted, the property is yours.', bid.amount), 'success')
     end
 
-    lib.logger(source, 'qbx_properties:server:acceptOffer', string.format('%s accepted offer %d ($%d) on listing %d', player.PlayerData.citizenid, bid.id, bid.amount, listingId))
+    LogAction(source, 'qbx_properties:server:acceptOffer', string.format('%s accepted offer %d ($%d) on listing %d', player.PlayerData.citizenid, bid.id, bid.amount, listingId))
 
     return true
 end
@@ -406,6 +420,7 @@ local executeBidLocked
 local function executeBid(playerSource, citizenId, listingId, amount)
     amount = ToId(amount)
     if not amount or amount <= 0 then return false, 'Invalid bid amount.' end
+    if not CanOwnAnotherProperty(citizenId) then return false, 'You already own the maximum number of properties.' end
 
     if bidLocks[listingId] then return false, 'Another bid is being processed, try again.' end
     bidLocks[listingId] = true
@@ -458,7 +473,7 @@ executeBidLocked = function(playerSource, citizenId, listingId, amount)
         })
     end
 
-    lib.logger(playerSource, 'qbx_properties:server:placeBid', string.format('%s bid $%d on listing %d', citizenId, amount, listingId))
+    LogAction(playerSource, 'qbx_properties:server:placeBid', string.format('%s bid $%d on listing %d', citizenId, amount, listingId))
 
     return true
 end
@@ -579,14 +594,25 @@ local function finalizeAuctions()
             if MySQL.update.await("UPDATE properties_listings SET status = 'sold' WHERE id = ? AND status = 'finalizing'", {listing.id}) ~= 1 then return end
 
             MySQL.update.await("UPDATE properties_bids SET status = 'won' WHERE id = ?", {top.id})
-            transferProperty(listing.property_id, top.bidder, top.amount)
+
+            if not transferProperty(listing.property_id, top.bidder, top.amount) then
+                MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ?", {top.id})
+                payOut(top.bidder, top.amount, string.format('Auction refund (listing %d)', listing.id))
+                MySQL.update.await("UPDATE properties_listings SET status = 'expired' WHERE id = ?", {listing.id})
+
+                local refunded = exports.qbx_core:GetPlayerByCitizenId(top.bidder)
+                if refunded then
+                    exports.qbx_core:Notify(refunded.PlayerData.source, 'You already own the maximum number of properties — your winning bid was refunded.', 'error')
+                end
+                return
+            end
 
             local winner = exports.qbx_core:GetPlayerByCitizenId(top.bidder)
             if winner then
                 exports.qbx_core:Notify(winner.PlayerData.source, string.format('You won the auction for $%d.', top.amount), 'success')
             end
 
-            lib.logger(0, 'qbx_properties:server:auctionWon', string.format('%s won listing %d for $%d', top.bidder, listing.id, top.amount))
+            LogAction(0, 'qbx_properties:server:auctionWon', string.format('%s won listing %d for $%d', top.bidder, listing.id, top.amount))
         end)
 
         if not ok then lib.print.warn(('failed to finalize listing %d: %s'):format(listing.id, err)) end

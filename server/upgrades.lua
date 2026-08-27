@@ -162,7 +162,7 @@ lib.callback.register('qbx_properties:callback:placeOwnGarage', function(source,
     RegisterPropertyGarage(propertyId, property.property_name, points)
     TriggerClientEvent('qbx_properties:client:refreshBlips', -1)
 
-    lib.logger(source, 'qbx_properties:server:placeOwnGarage', string.format('%s placed garage spot %d for property %d', player.PlayerData.citizenid, #points, propertyId))
+    LogAction(source, 'qbx_properties:server:placeOwnGarage', string.format('%s placed garage spot %d for property %d', player.PlayerData.citizenid, #points, propertyId))
     return true
 end)
 
@@ -195,7 +195,7 @@ lib.callback.register('qbx_properties:callback:buyUpgrade', function(source, pro
     if entry.powerBonus and RefreshUtilities then RefreshUtilities(propertyId) end
 
     exports.qbx_core:Notify(source, string.format('%s purchased.', entry.label), 'success')
-    lib.logger(source, 'qbx_properties:server:buyUpgrade', string.format('%s bought upgrade %s for property %d', player.PlayerData.citizenid, name, propertyId))
+    LogAction(source, 'qbx_properties:server:buyUpgrade', string.format('%s bought upgrade %s for property %d', player.PlayerData.citizenid, name, propertyId))
 
     return true
 end)

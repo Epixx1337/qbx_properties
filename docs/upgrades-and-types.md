@@ -34,7 +34,15 @@ Apartments never trip: they run on the flat included power cap and simply recove
 
 ## Renting out
 
-Owners can lease their house to another player from the tablet's **Room management** tab: pick a nearby person, set the rent and the billing interval, and they confirm the lease in game. Tenants get full access (door, stash, furniture), pay the owner automatically from their bank each interval, and see the rent, interval and next payment on the tablet's **Utilities** page. A missed payment ends the lease on the spot; either side can end it manually.
+Owners lease their house from the tablet's **Rent** tab: pick a nearby person, set the rent, the billing interval and an optional contract length in payments (0 = open-ended). The other player confirms the agreement in a popup — **the first payment is charged the moment they accept**, and if they cannot afford it both sides are told the lease fell through. Tenants get full access, the automatic charge runs each interval from their bank, and an open contract runs until someone ends it while a fixed contract ends itself on its last day.
+
+The Rent tab shows the rate per interval, the paid-until date, the contract end and the **last 10 payments** with who paid and when. Tenants (and roommates given the **Rent** permission) can pay from there too, including several payments ahead — prepaying pushes the automatic charge back and shows up on the owner's tab immediately. A missed automatic payment still ends the lease on the spot.
+
+Tenants can walk away at any time, but when the **owner** ends the lease the tenant gets an eviction notice instead of an instant eviction: they keep full access for `rentEvictionNoticeDays` (default 14) and the lease ends by itself when the notice runs out, with both sides notified up front. Set the option to `0` to end owner-terminated leases immediately.
+
+## Roommate permissions
+
+The permission editor on the **Housing Management** tab has two extra toggles per person: **Utilities** shows them the utilities tab and lets them pay the bill, **Rent** shows them the rent tab and lets them pay the rent. Both tabs log every payment with name, amount and date, so it is always visible who paid what.
 
 ## Offers
 

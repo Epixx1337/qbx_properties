@@ -35,16 +35,16 @@ RegisterNetEvent('qbx_properties:client:utilityState', function(propertyId, stat
     SetPropertyPowered(state.powered)
 end)
 
-local function addInteraction(entity, decoration)
-    if not sharedConfig.targetInteractions or not decoration.interaction then return end
+local targetProxies = {}
 
+local function interactionOptions(decoration)
     if decoration.interaction == 'wardrobe' then
-        exports.ox_target:addLocalEntity(entity, {
+        return {
             {
                 name = 'qbx_properties_wardrobe_' .. decoration.id,
                 label = 'Change clothing',
                 icon = 'fa-solid fa-shirt',
-                distance = 1.5,
+                distance = TargetDistance('furniture', 1.5),
                 onSelect = function()
                     exports['illenium-appearance']:startPlayerCustomization(function(appearance)
                         if appearance then
@@ -59,50 +59,89 @@ local function addInteraction(entity, decoration)
                     })
                 end
             }
-        })
+        }
     elseif decoration.interaction == 'tablet' then
-        exports.ox_target:addLocalEntity(entity, {
+        return {
             {
                 name = 'qbx_properties_tablet_' .. decoration.id,
                 label = 'Housing tablet',
                 icon = 'fa-solid fa-tablet-screen-button',
-                distance = 1.5,
+                distance = TargetDistance('furniture', 1.5),
                 onSelect = function() OpenTablet() end
             }
-        })
+        }
     elseif decoration.interaction == 'logout' then
         if not sharedConfig.logoutEnabled then return end
 
-        exports.ox_target:addLocalEntity(entity, {
+        return {
             {
                 name = 'qbx_properties_logout_' .. decoration.id,
                 label = 'Log out',
                 icon = 'fa-solid fa-bed',
-                distance = 1.5,
+                distance = TargetDistance('furniture', 1.5),
                 onSelect = function()
                     DoScreenFadeOut(1000)
                     while not IsScreenFadedOut() do Wait(0) end
                     TriggerServerEvent('qbx_properties:server:logoutProperty')
                 end
             }
-        })
+        }
     elseif decoration.interaction == 'stash' then
         local index = decoration.stashIndex or 0
-        exports.ox_target:addLocalEntity(entity, {
+        return {
             {
                 name = 'qbx_properties_stash_' .. decoration.id,
                 label = string.format('Open stash %d', index),
                 icon = 'fa-solid fa-box-archive',
-                distance = 1.5,
+                distance = TargetDistance('furniture', 1.5),
                 canInteract = function() return PropertyAccess.stash or (IsPropertyBreached and IsPropertyBreached(CurrentPropertyId)) end,
                 onSelect = function() TriggerServerEvent('qbx_properties:server:openStash', index) end
             }
-        })
-    else
-        return
+        }
     end
+end
 
-    targeted[decoration.id] = entity
+local PROXY_MODEL <const> = `prop_cs_tablet`
+
+local function removeInteraction(id)
+    local proxy = targetProxies[id]
+    if proxy then
+        if DoesEntityExist(proxy) then
+            exports.ox_target:removeLocalEntity(proxy)
+            DeleteEntity(proxy)
+        end
+        targetProxies[id] = nil
+    end
+end
+
+local function addInteraction(entity, decoration)
+    if not sharedConfig.targetInteractions or not decoration.interaction then return end
+
+    local options = interactionOptions(decoration)
+    if not options then return end
+
+    local spec = GetFurnitureSpecs()[decoration.model]
+    local useProxy = (spec and spec.targetZone) or not DoesEntityHavePhysics(entity)
+
+    if useProxy then
+        local model = lib.requestModel(PROXY_MODEL, 10000)
+        if not model then return end
+
+        local coords = GetEntityCoords(entity)
+        local rotation = GetEntityRotation(entity, 2)
+        local proxy = CreateObjectNoOffset(model, coords.x, coords.y, coords.z, false, false, false)
+        SetEntityRotation(proxy, rotation.x, rotation.y, rotation.z, 2, false)
+        SetEntityAlpha(proxy, 0, false)
+        SetEntityInvincible(proxy, true)
+        FreezeEntityPosition(proxy, true)
+        SetModelAsNoLongerNeeded(model)
+
+        exports.ox_target:addLocalEntity(proxy, options)
+        targetProxies[decoration.id] = proxy
+    else
+        exports.ox_target:addLocalEntity(entity, options)
+        targeted[decoration.id] = entity
+    end
 end
 
 ---@param decoration table
@@ -117,6 +156,11 @@ function SpawnDecoration(decoration)
         SetObjectTextureVariation(existing, 0)
         if decoration.tint and decoration.tint > 0 then
             SetObjectTextureVariation(existing, decoration.tint)
+        end
+        local proxy = targetProxies[decoration.id]
+        if proxy and DoesEntityExist(proxy) then
+            SetEntityCoordsNoOffset(proxy, decoration.coords.x, decoration.coords.y, decoration.coords.z, false, false, false)
+            SetEntityRotation(proxy, decoration.rotation.x, decoration.rotation.y, decoration.rotation.z, 2, false)
         end
         if IsDecorating then PushPlacedDecorations() end
         return existing
@@ -182,6 +226,7 @@ function DespawnDecoration(id)
         DeleteEntity(entity)
     end
 
+    removeInteraction(id)
     targeted[id] = nil
     lightEntities[entity] = nil
     DecorationObjects[id] = nil

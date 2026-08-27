@@ -13,9 +13,19 @@ local function pushUpgrades()
     SendUI('tablet:upgrades', lib.callback.await('qbx_properties:callback:getUpgrades', false, CurrentPropertyId))
 end
 
-local function pushTenancy()
+local function pushRent()
     if not CurrentPropertyId then return end
-    SendUI('tablet:tenancy', lib.callback.await('qbx_properties:callback:getTenancy', false, CurrentPropertyId))
+    SendUI('tablet:rent', lib.callback.await('qbx_properties:callback:getRentData', false, CurrentPropertyId))
+end
+
+local doorcamPoint
+local activeDoorcam
+
+local function pushDoorcam()
+    if not CurrentPropertyId then return end
+    local data = lib.callback.await('qbx_properties:callback:getDoorcamData', false)
+    doorcamPoint = data and data.cam or nil
+    SendUI('tablet:doorcam', data)
 end
 
 local function placeOwnGarage()
@@ -48,18 +58,103 @@ function OpenTablet()
     pushAccess()
     pushUtilities()
     pushUpgrades()
-    pushTenancy()
+    pushRent()
+    pushDoorcam()
 end
+
+RegisterNetEvent('qbx_properties:client:doorbellRang', function(propertyId)
+    if CurrentPropertyId ~= propertyId then return end
+    pushDoorcam()
+end)
+
+RegisterNUICallback('tablet:getDoorcam', function(_, cb)
+    cb(1)
+    pushDoorcam()
+end)
+
+RegisterNUICallback('tablet:letIn', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or type(data.citizenid) ~= 'string' or not CurrentPropertyId then return end
+
+    TriggerServerEvent('qbx_properties:server:letRingerIn', data.citizenid)
+    Wait(400)
+    pushDoorcam()
+end)
+
+RegisterNUICallback('tablet:showDoorcam', function(_, cb)
+    cb(1)
+    if not doorcamPoint then
+        lib.notify({ type = 'error', description = 'There is no doorcam for this property.' })
+        return
+    end
+
+    local position = vec3(doorcamPoint.x, doorcamPoint.y, doorcamPoint.z)
+    local heading = doorcamPoint.w or 0.0
+
+    if doorcamPoint.model then
+        SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
+        local deadline = GetGameTimer() + 2000
+        local entity = 0
+        while entity == 0 and GetGameTimer() < deadline do
+            entity = GetClosestObjectOfType(position.x, position.y, position.z, 2.0, doorcamPoint.model, false, false, false)
+            if entity == 0 then Wait(50) end
+        end
+
+        if entity ~= 0 then
+            local min, max = GetModelDimensions(GetEntityModel(entity))
+            local center = GetOffsetFromEntityInWorldCoords(entity, (min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2)
+            position = vec3(center.x, center.y, center.z)
+            heading = GetEntityHeading(entity)
+        end
+    end
+
+    position = position + vec3(0.0, 0.0, 0.2)
+    heading = (heading + 180.0) % 360.0
+
+    SetUIFocus(false)
+    SendUI('doorcam:view', true)
+
+    local cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', position.x, position.y, position.z, -18.0, 0.0, heading, 75.0, false, 2)
+    activeDoorcam = cam
+    SetCamActive(cam, true)
+    RenderScriptCams(true, true, 400, true, true)
+    SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
+
+    local deadline = GetGameTimer() + 60000
+    while GetGameTimer() < deadline do
+        Wait(0)
+        DisableControlAction(0, 47, true)
+        if IsDisabledControlJustPressed(0, 47) then break end
+    end
+
+    SendUI('doorcam:view', false)
+    RenderScriptCams(false, true, 400, true, true)
+    DestroyCam(cam, false)
+    activeDoorcam = nil
+    ClearFocus()
+    SetUIFocus(true)
+    pushDoorcam()
+end)
+
+AddEventHandler('onResourceStop', function(resource)
+    if resource ~= cache.resource then return end
+    if not activeDoorcam then return end
+
+    RenderScriptCams(false, false, 0, true, true)
+    DestroyCam(activeDoorcam, false)
+    activeDoorcam = nil
+    ClearFocus()
+end)
 
 RegisterNUICallback('tablet:rentOut', function(data, cb)
     cb(1)
     if type(data) ~= 'table' or not CurrentPropertyId then return end
 
-    local ok = lib.callback.await('qbx_properties:callback:rentOut', false, CurrentPropertyId, data.citizenid, data.rent, data.interval)
+    local ok = lib.callback.await('qbx_properties:callback:rentOut', false, CurrentPropertyId, data.citizenid, data.rent, data.interval, data.contract)
     if not ok then
         lib.notify({ type = 'error', description = 'Could not offer the lease.' })
     end
-    pushTenancy()
+    pushRent()
 end)
 
 RegisterNUICallback('tablet:endTenancy', function(_, cb)
@@ -67,13 +162,29 @@ RegisterNUICallback('tablet:endTenancy', function(_, cb)
     if not CurrentPropertyId then return end
 
     lib.callback.await('qbx_properties:callback:endTenancy', false, CurrentPropertyId)
-    pushTenancy()
+    pushRent()
+end)
+
+RegisterNUICallback('tablet:payRent', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not CurrentPropertyId then return end
+
+    local ok, err = lib.callback.await('qbx_properties:callback:payRent', false, CurrentPropertyId, data.periods)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Rent paid.' or err or 'Could not pay the rent.',
+    })
+    pushRent()
 end)
 
 RegisterNetEvent('qbx_properties:client:tenancyRequest', function(data)
+    local terms = data.contract
+        and string.format('The contract runs for **%s payments**.', data.contract)
+        or 'The lease is open-ended.'
+
     local confirm = lib.alertDialog({
         header = 'Lease offer',
-        content = string.format('**%s** offers you **%s** for **$%s** every **%sh**, billed from your bank.', data.owner, data.property, data.rent, data.interval),
+        content = string.format('**%s** offers you **%s** for **$%s** every **%sh**, billed from your bank. %s The first payment is taken when you accept.', data.owner, data.property, data.rent, data.interval, terms),
         centered = true,
         cancel = true,
     })

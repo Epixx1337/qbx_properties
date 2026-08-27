@@ -59,7 +59,7 @@ CreateThread(function()
                 name = 'qbx_properties_doorbell',
                 label = 'Ring doorbell',
                 icon = 'fa-solid fa-bell',
-                distance = 1.5,
+                distance = TargetDistance('doorbell', 1.5),
                 canInteract = function(entity) return lacksKey(entity) end,
                 onSelect = function(data)
                     local buildingKey, floor, room = resolveDoorUnit(data.entity)

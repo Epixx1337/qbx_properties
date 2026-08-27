@@ -194,11 +194,15 @@ local function effectivePrice(model, spec)
     if not spec or (spec.price or 0) <= 0 then return 0 end
 
     if spec.firstFree then
+        local types = GetFurnitureTypes()
+        local group = spec.type
+
         for _, placedModel in pairs(PlacedDecorations) do
-            if placedModel == model then return spec.price end
+            if placedModel == model or (group and types[placedModel] == group) then return spec.price end
         end
         for i = 1, #cart do
-            if cart[i].model == model then return spec.price end
+            local entryModel = cart[i].model
+            if entryModel == model or (group and types[entryModel] == group) then return spec.price end
         end
         return 0
     end
@@ -667,6 +671,8 @@ local function setDecoratingPose(active)
         SetEntityInvincible(cache.ped, false)
         FreezeEntityPosition(cache.ped, false)
         clearScenarioProps()
+        SetTimeout(250, clearScenarioProps)
+        SetTimeout(1000, clearScenarioProps)
     end
 end
 
