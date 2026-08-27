@@ -278,7 +278,7 @@ lib.callback.register('qbx_properties:callback:buyListing', function(source, lis
         return false
     end
 
-    local property = MySQL.single.await('SELECT coords, owner, type FROM properties WHERE id = ?', {listing.property_id})
+    local property = MySQL.single.await('SELECT owner, type FROM properties WHERE id = ?', {listing.property_id})
     if not property then return false end
 
     if property.owner == player.PlayerData.citizenid then
@@ -288,12 +288,6 @@ lib.callback.register('qbx_properties:callback:buyListing', function(source, lis
 
     if not CanOwnAnotherProperty(player.PlayerData.citizenid, property.type) then
         exports.qbx_core:Notify(source, 'You already own the maximum number of properties of this type.', 'error')
-        return false
-    end
-
-    local coords = json.decode(property.coords)
-    if #(GetEntityCoords(GetPlayerPed(source)) - vec3(coords.x, coords.y, coords.z)) > 30.0 then
-        exports.qbx_core:Notify(source, 'You are too far away — go to the property to buy it.', 'error')
         return false
     end
 
