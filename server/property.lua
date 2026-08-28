@@ -1052,7 +1052,7 @@ AddEventHandler('playerDropped', function ()
 end)
 
 local function registerGarage(propertyId, name, garage)
-    local garageName = GetGaragePrefix() .. string.gsub(string.lower(name), ' ', '_')
+    local garageName = GetPropertyGarageName(name)
     local points = NormalizeGaragePoints and NormalizeGaragePoints(garage) or { garage }
     if #points == 0 then return end
 
@@ -1819,7 +1819,7 @@ RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
         if ok and type(images) == 'table' then DeletePropertyImagesRemote(images) end
     end
 
-    local garageName = GetGaragePrefix() .. string.gsub(string.lower(property.property_name), ' ', '_')
+    local garageName = GetPropertyGarageName(property.property_name)
     pcall(MySQL.update.await, 'UPDATE player_vehicles SET state = 2 WHERE garage = ?', {garageName})
 
     pcall(MySQL.update.await, 'DELETE FROM properties_access WHERE property_id = ?', {propertyId})

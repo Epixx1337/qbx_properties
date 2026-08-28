@@ -290,6 +290,15 @@ function GetGaragePrefix()
     return sharedConfig.prefixes and sharedConfig.prefixes.garage or 'property_'
 end
 
+---@param propertyName string
+---@return string
+function GetPropertyGarageName(propertyName)
+    if sharedConfig.garageSystem ~= 'qbx' and sharedConfig.prettyGarageNames then
+        return propertyName
+    end
+    return GetGaragePrefix() .. string.gsub(string.lower(propertyName), ' ', '_')
+end
+
 ---@param value string
 ---@return string
 function EscapePattern(value)

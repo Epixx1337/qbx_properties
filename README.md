@@ -316,7 +316,7 @@ Options worth knowing about:
 - `freeApartmentMoves` (shared) — `false` locks tenants to their apartment building; the reception refuses switching.
 - `migrationOffer` (shared) — `false` disables the one-time relocation offer shown on login when other buildings have free rooms.
 - `housingCommand` (shared) — `false` removes the `/housing` command; the UI stays reachable through the `openHousing` export or an embedded app, see [docs/third-party-ui.md](docs/third-party-ui.md).
-- `garageSystem` (shared) — `'qbx'` uses qbx_garages; other values bridge property and apartment garages to third-party garage scripts, see [docs/garage-systems.md](docs/garage-systems.md).
+- `garageSystem` (shared) — `'qbx'` uses qbx_garages; other values bridge property and apartment garages to third-party garage scripts, see [docs/garage-systems.md](docs/garage-systems.md). `prettyGarageNames` makes bridged systems show the plain property name instead of `property_fudge_ln_4`-style ids — fresh servers only, see the doc for the migration note.
 - `stairsOnly` (buildings) — marks an apartment building without elevators, like the Starlite Motel: elevator fields are skipped and move-in messages point at the stairs.
 - `targetInteractions` (shared) — MLO furniture uses ox_target labels instead of floating interaction points.
 - `targetShellInteractions` (shared) — `true` replaces the floating drawtext on shell and IPL properties with ox_target zones, both on the interaction points inside (stash, exit, clothing, logout) and on the entrance outside.

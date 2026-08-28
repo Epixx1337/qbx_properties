@@ -56,6 +56,12 @@ return {
 
     -- Garages
     garageSystem = 'qbx', -- 'qbx' registers with qbx_garages, any other value must match an adapter in config/garages.lua
+    -- Third-party garage systems like jg-advancedgarages display the garage identifier as its name, so
+    -- 'property_fudge_ln_4' shows verbatim. true uses the plain property name ('Fudge Ln 4') as the identifier
+    -- instead. Only flip this on a live server after renaming already-parked vehicles in the garage system's
+    -- own table, e.g. UPDATE player_vehicles SET garage = 'Fudge Ln 4' WHERE garage = 'property_fudge_ln_4';
+    -- vehicles under the old name are unreachable otherwise. Ignored by qbx_garages, which shows a label anyway.
+    prettyGarageNames = false,
     apartmentGarageBlip = { sprite = 357, color = 3 },
     apartmentGarageUseRadius = 1.5, -- each bay doubles as the menu and the park point; keep under half the tightest bay spacing (3.41m at Wiwang)
     apartmentGarages = { -- one garage per complex, every bay is an access point so tenants never queue for the same spot
