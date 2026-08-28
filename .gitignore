@@ -8,3 +8,4 @@ yarn.lock
 web/node_modules/
 
 screenshots/_cdn.json
+screenshots/house_*.webp

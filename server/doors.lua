@@ -158,6 +158,23 @@ CreateThread(function()
     if created > 0 then
         lib.print.info(('registered %d apartment door(s)'):format(created))
     end
+
+    local standalone = MySQL.query.await('SELECT id, door_data FROM properties WHERE building IS NULL AND door_data IS NOT NULL') or {}
+    local synced = 0
+    for i = 1, #standalone do
+        local first = string.format('%s%d:d1', DOOR_PREFIX, standalone[i].id)
+        if not exports.ox_doorlock:getDoorFromName(first) then
+            local ok, doors = pcall(json.decode, standalone[i].door_data)
+            if ok and type(doors) == 'table' and #doors > 0 then
+                SyncPropertyDoors(standalone[i].id, doors)
+                synced += 1
+            end
+        end
+    end
+
+    if synced > 0 then
+        lib.print.info(('registered the doors of %d propert(ies)'):format(synced))
+    end
 end)
 
 ---@param propertyId integer

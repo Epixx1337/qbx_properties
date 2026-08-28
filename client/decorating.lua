@@ -690,6 +690,7 @@ function ToggleDecorating()
         OpenUI('furniture')
         SendUI('furniture:init', {
             categories = config.furniture,
+            categoryMeta = config.furnitureCategories or {},
             propertyName = CurrentPropertyName or '',
             palette = sharedConfig.wallColors.enabled and sharedConfig.wallColors.palette or {},
             shopEnabled = sharedConfig.furnitureShop ~= false,

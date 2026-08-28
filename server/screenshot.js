@@ -40,6 +40,19 @@ on('qbx_properties:internal:shotList', (id) => {
   }
 });
 
+on('qbx_properties:internal:shotDelete', (id, filename) => {
+  try {
+    if (typeof filename !== 'string' || !/^[\w-]+\.webp$/.test(filename)) {
+      return reply(id, { ok: false, error: 'unsafe filename' });
+    }
+    const filePath = path.join(SCREENSHOTS_DIR, filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    reply(id, { ok: true });
+  } catch (err) {
+    reply(id, { ok: false, error: String(err) });
+  }
+});
+
 const TUNING_PATH = path.join(SCREENSHOTS_DIR, '_tuning.json');
 
 on('qbx_properties:internal:getTuning', (id) => {
@@ -122,7 +135,7 @@ async function uploadFile(relPath, provider) {
   const storagePath = provider.storagePath ? responseField(json, provider.storagePath) : undefined;
   cdnMap[relPath] = storagePath ? { url, path: storagePath } : { url };
   saveCdnMap();
-  return { ok: true, url };
+  return { ok: true, url, path: storagePath };
 }
 
 on('qbx_properties:internal:cdnUpload', (id, relPath, provider) => {

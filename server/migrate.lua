@@ -1,22 +1,13 @@
 local schemaFiles = {
-    'property.sql',
-    'decorations.sql',
-    'property_pool.sql',
-    'property_apartments.sql',
-    'property_apartment_walls.sql',
-    'property_market.sql',
-    'property_rent.sql',
-    'property_utilities.sql',
-    'property_garages.sql',
-    'property_raids.sql',
-    'property_images.sql',
-    'property_stash_slots.sql',
-    'property_tints.sql',
-    'property_item_furniture.sql',
-    'property_apartment_layouts.sql',
-    'property_layout_defaults.sql',
-    'property_upgrades.sql',
-    'property_payments.sql',
+    'schema.sql',
+}
+
+local statements = {
+    [[ALTER TABLE `properties_listings` MODIFY `listing_type` ENUM('sale', 'auction', 'offer') NOT NULL]],
+    [[ALTER TABLE `properties_payments` MODIFY `kind` ENUM('rent', 'utilities', 'maintenance') NOT NULL]],
+    [[UPDATE `properties` SET `type` = 'residential' WHERE `type` IS NULL]],
+    [[UPDATE `properties_apartment_decorations` SET `layout` = 'wiwang' WHERE `layout` IS NULL]],
+    [[DROP TABLE IF EXISTS `properties_projects`]],
 }
 
 local columns = {
@@ -26,6 +17,9 @@ local columns = {
         garden = 'TINYINT(1) NOT NULL DEFAULT 0',
         item = 'VARCHAR(100) DEFAULT NULL',
         item_metadata = 'LONGTEXT DEFAULT NULL',
+        health = 'INT NOT NULL DEFAULT 100',
+        lock_pin = 'VARCHAR(8) DEFAULT NULL',
+        lock_setter = 'VARCHAR(50) DEFAULT NULL',
     },
     properties_apartment_decorations = {
         stash_slot = 'INT DEFAULT NULL',
@@ -33,6 +27,9 @@ local columns = {
         item = 'VARCHAR(100) DEFAULT NULL',
         item_metadata = 'LONGTEXT DEFAULT NULL',
         layout = 'VARCHAR(50) DEFAULT NULL',
+        health = 'INT NOT NULL DEFAULT 100',
+        lock_pin = 'VARCHAR(8) DEFAULT NULL',
+        lock_setter = 'VARCHAR(50) DEFAULT NULL',
     },
     properties = {
         building = 'VARCHAR(50) DEFAULT NULL',
@@ -60,6 +57,10 @@ local columns = {
         tenant_paid_until = 'DATETIME DEFAULT NULL',
         tenant_contract_end = 'DATETIME DEFAULT NULL',
         tenant_notice_end = 'DATETIME DEFAULT NULL',
+        sale_authorized = 'TINYINT(1) NOT NULL DEFAULT 0',
+        timecycle = 'VARCHAR(50) DEFAULT NULL',
+        maintenance_paid_until = 'DATETIME DEFAULT NULL',
+        doorcam = 'JSON DEFAULT NULL',
     },
     properties_access = {
         utilities = 'TINYINT(1) NOT NULL DEFAULT 0',
@@ -113,6 +114,10 @@ MySQL.ready(function()
         lib.print.info(('migrated the database, %d column(s) added'):format(added))
     end
 
+    for i = 1, #statements do
+        pcall(MySQL.query.await, statements[i])
+    end
+
     local requiredTables = {
         'properties',
         'properties_decorations',
@@ -142,7 +147,7 @@ MySQL.ready(function()
     end
 
     if #missing > 0 then
-        lib.print.error(('the database schema is incomplete and things WILL misbehave: %s — check that the database user may CREATE and ALTER, or run the .sql files by hand'):format(table.concat(missing, ', ')))
+        lib.print.error(('the database schema is incomplete and things WILL misbehave: %s — check that the database user may CREATE and ALTER, or run schema.sql by hand'):format(table.concat(missing, ', ')))
     end
 
     migrated = true

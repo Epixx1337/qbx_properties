@@ -22,6 +22,7 @@ export const shot = $state({
 
 export const furniture = $state({
   categories: {},
+  categoryMeta: {},
   category: null,
   cdnMap: null,
   search: '',
@@ -51,6 +52,7 @@ export const market = $state({
   listings: [],
   sizes: {},
   sizeOrder: [],
+  rentIntervals: [],
   types: {},
   gardens: false,
   selected: null,
@@ -77,6 +79,9 @@ export const realtor = $state({
   interiors: [],
   buildings: [],
   properties: [],
+  propertiesTotal: 0,
+  propertiesPage: 1,
+  propertiesPages: 1,
   building: null,
   floor: 1,
   units: [],
@@ -88,6 +93,8 @@ export const tablet = $state({
   wallColors: null,
   wallColor: null,
   access: [],
+  accessJobs: null,
+  isAccessOwner: false,
   apartment: false,
   nearby: [],
   utilities: null,
@@ -98,6 +105,12 @@ export const tablet = $state({
   rent: null,
   doorcam: null,
   doorcamView: false,
+  maintenance: null,
+  layouts: null,
+  saleAuth: null,
+  timecycle: null,
+  timecycles: [],
+  rentIntervals: [],
 })
 
 export const placement = $state({
@@ -111,6 +124,7 @@ export const placement = $state({
   photo: false,
   capture: false,
   flying: false,
+  tour: false,
 })
 
 export const preview = $state({

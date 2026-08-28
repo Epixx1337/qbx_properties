@@ -22,17 +22,21 @@
 
   const details = $derived(realtor.details && selected && realtor.details.id === selected.id ? realtor.details : null)
 
-  const visible = $derived(
-    realtor.properties.filter((property) => {
-      if (filter === 'owned' && !property.owner) return false
-      if (filter === 'free' && property.owner) return false
-      if (search.trim()) {
-        const q = search.trim().toLowerCase()
-        if (!property.property_name.toLowerCase().includes(q) && !(ownerName(property) ?? '').toLowerCase().includes(q)) return false
-      }
-      return true
-    })
-  )
+  let searchTimer = null
+
+  function fetchPage(page) {
+    fetchNui('realtor:fetchProperties', { page, search: search.trim(), filter })
+  }
+
+  function onSearchInput() {
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => fetchPage(1), 300)
+  }
+
+  function setFilter(value) {
+    filter = value
+    fetchPage(1)
+  }
 
   function select(property) {
     if (selected?.id === property.id) return
@@ -60,11 +64,13 @@
   $effect(() => {
     if (!selected) return
     const fresh = realtor.properties.find((p) => p.id === selected.id)
-    if (fresh !== selected) selected = fresh ?? null
+    if (fresh && fresh !== selected) selected = fresh
   })
 
+  const saleAuthorized = $derived(selected ? selected.sale_authorized === 1 || selected.sale_authorized === true : false)
+
   $effect(() => {
-    if (selected && !selected.owner) {
+    if (selected && (!selected.owner || saleAuthorized)) {
       price = selected.price || market.config.minPrice
       minIncrement = market.config.minIncrement
       auctionHours = market.config.auctionHours
@@ -104,7 +110,7 @@
 
   const valid = $derived(
     selected !== null &&
-      !selected.owner &&
+      (!selected.owner || saleAuthorized) &&
       price >= market.config.minPrice &&
       price <= market.config.maxPrice &&
       (listingType === 'sale' ||
@@ -142,6 +148,8 @@
               ]
             : []),
           { label: 'Set mailbox', run: () => fetchNui('realtor:setMailbox', { propertyId: selected.id }) },
+          { label: details.hasDoorcam ? 'Re-place doorcam' : 'Set doorcam', run: () => fetchNui('realtor:setDoorcam', { propertyId: selected.id }) },
+          ...(details.hasDoorcam ? [{ label: 'Clear doorcam', run: () => fetchNui('realtor:clearDoorcam', { propertyId: selected.id }) }] : []),
           ...(selected.owner ? [] : [{ label: 'Enter property', run: () => fetchNui('realtor:enterProperty', { propertyId: selected.id }) }]),
         ]
   )
@@ -167,17 +175,17 @@
 
 <div class="manage">
   <div class="toolbar">
-    <input class="input grow" placeholder="Search properties or owners..." bind:value={search} />
+    <input class="input grow" placeholder="Search properties or owners..." bind:value={search} oninput={onSearchInput} />
     <div class="chips">
       {#each [['all', 'All'], ['free', 'Available'], ['owned', 'Owned']] as [value, label] (value)}
-        <button class="chip" class:active={filter === value} onclick={() => (filter = value)}>{label}</button>
+        <button class="chip" class:active={filter === value} onclick={() => setFilter(value)}>{label}</button>
       {/each}
     </div>
   </div>
 
   <div class="scroll body">
     <div class="grid">
-      {#each visible as property (property.id)}
+      {#each realtor.properties as property (property.id)}
         <button class="card" class:selected={selected?.id === property.id} onclick={() => select(property)}>
           <span class="thumb">
             {#if property.thumb}<img src={property.thumb} alt="" loading="lazy" />{/if}
@@ -194,6 +202,14 @@
         <div class="empty span-all">No properties match</div>
       {/each}
     </div>
+
+    {#if realtor.propertiesPages > 1}
+      <div class="pager">
+        <button class="chip" disabled={realtor.propertiesPage <= 1} onclick={() => fetchPage(realtor.propertiesPage - 1)}>‹ Prev</button>
+        <span class="pager-info">Page {realtor.propertiesPage} of {realtor.propertiesPages} · {realtor.propertiesTotal} properties</span>
+        <button class="chip" disabled={realtor.propertiesPage >= realtor.propertiesPages} onclick={() => fetchPage(realtor.propertiesPage + 1)}>Next ›</button>
+      </div>
+    {/if}
 
     {#if selected}
       <div class="detail">
@@ -219,12 +235,16 @@
                     <input class="input mono" type="number" bind:value={editPrice} min={market.config.minPrice} />
                   </div>
                   <div class="field">
-                    <span class="mini-label">Rent (hours)</span>
+                    <span class="mini-label">Rental billing</span>
                     <div class="rent-row">
                       <label class="check">
                         <input type="checkbox" bind:checked={editRental} />
                       </label>
-                      <input class="input mono" type="number" bind:value={editRentInterval} min="1" max="24" disabled={!editRental} />
+                      <select class="select" bind:value={editRentInterval} disabled={!editRental}>
+                        {#each market.rentIntervals as interval (interval.value)}
+                          <option value={interval.value}>{interval.label}</option>
+                        {/each}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -262,7 +282,7 @@
                 <div class="photos">
                   {#each details.images as image, i (image)}
                     <span class="photo">
-                      <img src={image} alt="Property" onclick={() => (lightboxIndex = i)} />
+                      <img src={image} alt="Property" loading="lazy" onclick={() => (lightboxIndex = i)} />
                       <button class="photo-remove" onclick={() => fetchNui('realtor:removeImage', { propertyId: selected.id, index: i + 1 })}>×</button>
                     </span>
                   {/each}
@@ -300,7 +320,11 @@
                 <span class="owner-name">{ownerName(selected)}</span>
                 <span class="owner-cid">{selected.owner}</span>
               </span>
-              <span class="hint grow">An owned property cannot be listed. End the tenancy to return it to the pool.</span>
+              <span class="hint grow">
+                {saleAuthorized
+                  ? 'The owner authorised realtor sales — listing proceeds go to them, minus commission.'
+                  : 'An owned property can only be listed once the owner authorises sales from their tablet.'}
+              </span>
               {#if selected.building}
                 <button class="delete-btn slim" onclick={() => { fetchNui('realtor:releaseUnit', { propertyId: selected.id, building: selected.building }); selected = null }}>
                   End tenancy
@@ -311,9 +335,10 @@
                 </button>
               {/if}
             </div>
-          {:else if selected.listed}
+          {/if}
+          {#if selected.listed}
             <span class="hint">This property already has an active listing. Cancel it from the Market tab first.</span>
-          {:else}
+          {:else if !selected.owner || saleAuthorized}
             <div class="listing">
               <span class="pane-title">Create listing</span>
               <div class="listing-row">
@@ -329,11 +354,11 @@
                 {#if listingType === 'auction'}
                   <div class="field">
                     <span class="mini-label">Duration</span>
-                    <div class="chips">
-                      {#each [24, 48, 72].filter((h) => h <= market.config.maxAuctionHours) as hours (hours)}
-                        <button class="chip" class:active={auctionHours === hours} onclick={() => (auctionHours = hours)}>{hours}h</button>
+                    <select class="select" bind:value={auctionHours}>
+                      {#each market.config.auctionDurations ?? [24, 48, 72] as hours (hours)}
+                        <option value={hours}>{hours} hours</option>
                       {/each}
-                    </div>
+                    </select>
                   </div>
                   <div class="field">
                     <span class="mini-label">Reserve (0 = none)</span>
@@ -745,5 +770,43 @@
     align-items: flex-end;
     gap: 10px;
     flex-wrap: wrap;
+  }
+
+  .listing-row > .chips {
+    flex: none;
+    align-self: flex-end;
+    padding-bottom: 1px;
+  }
+
+  .listing-row .field {
+    flex: 1;
+    min-width: 150px;
+  }
+
+  .listing-row .field .chips {
+    flex-wrap: nowrap;
+  }
+
+  .listing-row > .btn {
+    flex: none;
+    margin-left: auto;
+  }
+
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    flex: none;
+  }
+
+  .pager .chip:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .pager-info {
+    font-size: 12px;
+    color: var(--dark-2);
   }
 </style>

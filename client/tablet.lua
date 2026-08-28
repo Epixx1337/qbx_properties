@@ -18,13 +18,33 @@ local function pushRent()
     SendUI('tablet:rent', lib.callback.await('qbx_properties:callback:getRentData', false, CurrentPropertyId))
 end
 
-local doorcamPoint
+local function pushMaintenance()
+    if not CurrentPropertyId then return end
+    SendUI('tablet:maintenance', lib.callback.await('qbx_properties:callback:getMaintenance', false, CurrentPropertyId))
+end
+
+local function pushLayouts()
+    if not CurrentPropertyId then return end
+    SendUI('tablet:layouts', lib.callback.await('qbx_properties:callback:getLayouts', false))
+end
+
+local function pushSaleAuth()
+    if not CurrentPropertyId then return end
+    SendUI('tablet:saleAuth', lib.callback.await('qbx_properties:callback:getSaleAuthorized', false, CurrentPropertyId))
+end
+
+local function pushTimecycle()
+    if not CurrentPropertyId then return end
+    SendUI('tablet:timecycle', lib.callback.await('qbx_properties:callback:getTimecycle', false, CurrentPropertyId))
+end
+
+local doorcamPoints = {}
 local activeDoorcam
 
 local function pushDoorcam()
     if not CurrentPropertyId then return end
     local data = lib.callback.await('qbx_properties:callback:getDoorcamData', false)
-    doorcamPoint = data and data.cam or nil
+    doorcamPoints = data and data.cams or {}
     SendUI('tablet:doorcam', data)
 end
 
@@ -54,12 +74,18 @@ function OpenTablet()
         propertyName = CurrentPropertyName or '',
         wallColors = sharedConfig.wallColors.enabled and sharedConfig.wallColors.palette or nil,
         wallColor = lib.callback.await('qbx_properties:callback:getWallColor', false, CurrentPropertyId),
+        timecycles = sharedConfig.timecycles,
+        rentIntervals = sharedConfig.rentIntervals,
     })
     pushAccess()
     pushUtilities()
     pushUpgrades()
     pushRent()
     pushDoorcam()
+    pushMaintenance()
+    pushLayouts()
+    pushSaleAuth()
+    pushTimecycle()
 end
 
 RegisterNetEvent('qbx_properties:client:doorbellRang', function(propertyId)
@@ -81,40 +107,47 @@ RegisterNUICallback('tablet:letIn', function(data, cb)
     pushDoorcam()
 end)
 
-RegisterNUICallback('tablet:showDoorcam', function(_, cb)
+RegisterNUICallback('tablet:showDoorcam', function(data, cb)
     cb(1)
-    if not doorcamPoint then
+    local index = type(data) == 'table' and tonumber(data.index) or 1
+    local point = doorcamPoints[index] or doorcamPoints[1]
+    if not point then
         lib.notify({ type = 'error', description = 'There is no doorcam for this property.' })
         return
     end
 
-    local position = vec3(doorcamPoint.x, doorcamPoint.y, doorcamPoint.z)
-    local heading = doorcamPoint.w or 0.0
+    local position = vec3(point.x, point.y, point.z)
+    local heading = point.w or 0.0
+    local pitch = -18.0
 
-    if doorcamPoint.model then
-        SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
-        local deadline = GetGameTimer() + 2000
-        local entity = 0
-        while entity == 0 and GetGameTimer() < deadline do
-            entity = GetClosestObjectOfType(position.x, position.y, position.z, 2.0, doorcamPoint.model, false, false, false)
-            if entity == 0 then Wait(50) end
+    if point.custom then
+        pitch = point.p or -12.0
+    else
+        if point.model then
+            SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
+            local deadline = GetGameTimer() + 2000
+            local entity = 0
+            while entity == 0 and GetGameTimer() < deadline do
+                entity = GetClosestObjectOfType(position.x, position.y, position.z, 2.0, point.model, false, false, false)
+                if entity == 0 then Wait(50) end
+            end
+
+            if entity ~= 0 then
+                local min, max = GetModelDimensions(GetEntityModel(entity))
+                local center = GetOffsetFromEntityInWorldCoords(entity, (min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2)
+                position = vec3(center.x, center.y, center.z)
+                heading = GetEntityHeading(entity)
+            end
         end
 
-        if entity ~= 0 then
-            local min, max = GetModelDimensions(GetEntityModel(entity))
-            local center = GetOffsetFromEntityInWorldCoords(entity, (min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2)
-            position = vec3(center.x, center.y, center.z)
-            heading = GetEntityHeading(entity)
-        end
+        position = position + vec3(0.0, 0.0, 0.2)
+        heading = (heading + 180.0) % 360.0
     end
-
-    position = position + vec3(0.0, 0.0, 0.2)
-    heading = (heading + 180.0) % 360.0
 
     SetUIFocus(false)
     SendUI('doorcam:view', true)
 
-    local cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', position.x, position.y, position.z, -18.0, 0.0, heading, 75.0, false, 2)
+    local cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', position.x, position.y, position.z, pitch, 0.0, heading, 75.0, false, 2)
     activeDoorcam = cam
     SetCamActive(cam, true)
     RenderScriptCams(true, true, 400, true, true)
@@ -123,7 +156,8 @@ RegisterNUICallback('tablet:showDoorcam', function(_, cb)
     local deadline = GetGameTimer() + 60000
     while GetGameTimer() < deadline do
         Wait(0)
-        DisableControlAction(0, 47, true)
+        DisableAllControlActions(0)
+        HideHudAndRadarThisFrame()
         if IsDisabledControlJustPressed(0, 47) then break end
     end
 
@@ -177,6 +211,14 @@ RegisterNUICallback('tablet:payRent', function(data, cb)
     pushRent()
 end)
 
+local function intervalLabel(hours)
+    local sharedConfig = require 'config.shared'
+    for i = 1, #(sharedConfig.rentIntervals or {}) do
+        if sharedConfig.rentIntervals[i].value == hours then return sharedConfig.rentIntervals[i].label end
+    end
+    return string.format('%sh', hours)
+end
+
 RegisterNetEvent('qbx_properties:client:tenancyRequest', function(data)
     local terms = data.contract
         and string.format('The contract runs for **%s payments**.', data.contract)
@@ -184,7 +226,7 @@ RegisterNetEvent('qbx_properties:client:tenancyRequest', function(data)
 
     local confirm = lib.alertDialog({
         header = 'Lease offer',
-        content = string.format('**%s** offers you **%s** for **$%s** every **%sh**, billed from your bank. %s The first payment is taken when you accept.', data.owner, data.property, data.rent, data.interval, terms),
+        content = string.format('**%s** offers you **%s** for **$%s** every **%s**, billed from your bank. %s The first payment is taken when you accept.', data.owner, data.property, data.rent, intervalLabel(data.interval), terms),
         centered = true,
         cancel = true,
     })
@@ -208,6 +250,7 @@ RegisterNUICallback('tablet:buyUpgrade', function(data, cb)
     local ok = lib.callback.await('qbx_properties:callback:buyUpgrade', false, CurrentPropertyId, data.name)
     pushUpgrades()
     pushUtilities()
+    pushTimecycle()
 
     if ok and data.name == 'garage' then
         placeOwnGarage()
@@ -268,4 +311,93 @@ RegisterNUICallback('tablet:payUtilities', function(_, cb)
     TriggerServerEvent('qbx_properties:server:payUtilities', CurrentPropertyId)
     Wait(500)
     pushUtilities()
+end)
+
+RegisterNUICallback('tablet:payMaintenance', function(_, cb)
+    cb(1)
+    if not CurrentPropertyId then return end
+
+    TriggerServerEvent('qbx_properties:server:payMaintenance', CurrentPropertyId)
+    Wait(500)
+    pushMaintenance()
+end)
+
+RegisterNUICallback('tablet:saveLayout', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not CurrentPropertyId then return end
+
+    local ok, err = lib.callback.await('qbx_properties:callback:saveLayout', false, data.name)
+    if not ok then
+        lib.notify({ type = 'error', description = err or 'Could not save the layout.' })
+    else
+        lib.notify({ type = 'success', description = 'Layout saved.' })
+    end
+    pushLayouts()
+end)
+
+RegisterNUICallback('tablet:applyLayout', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not CurrentPropertyId then return end
+
+    local ok, err
+    if data.code then
+        ok, err = lib.callback.await('qbx_properties:callback:importLayout', false, data.code)
+    else
+        ok, err = lib.callback.await('qbx_properties:callback:applyLayout', false, data.id)
+    end
+
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Layout applied.' or err or 'Could not apply the layout.',
+    })
+    pushLayouts()
+end)
+
+RegisterNUICallback('tablet:previewLayoutCode', function(data, cb)
+    if type(data) ~= 'table' or not CurrentPropertyId then cb(false) return end
+    cb(lib.callback.await('qbx_properties:callback:previewLayoutCode', false, data.code) or false)
+end)
+
+RegisterNUICallback('tablet:deleteLayout', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not CurrentPropertyId then return end
+
+    lib.callback.await('qbx_properties:callback:deleteLayout', false, data.id)
+    pushLayouts()
+end)
+
+RegisterNUICallback('tablet:setSaleAuth', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not CurrentPropertyId then return end
+
+    local ok = lib.callback.await('qbx_properties:callback:setSaleAuthorized', false, CurrentPropertyId, data.enabled == true)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and (data.enabled and 'Realtors may now sell this property.' or 'Realtor sales revoked.') or 'Could not change the authorisation.',
+    })
+    pushSaleAuth()
+end)
+
+RegisterNUICallback('tablet:setJobAccess', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not CurrentPropertyId then return end
+
+    data.propertyId = CurrentPropertyId
+    local ok = lib.callback.await('qbx_properties:callback:setJobAccess', false, data)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Job access updated.' or 'Could not update job access.',
+    })
+    pushAccess()
+end)
+
+RegisterNUICallback('tablet:setTimecycle', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or not CurrentPropertyId then return end
+
+    local ok = lib.callback.await('qbx_properties:callback:setTimecycle', false, CurrentPropertyId, data.value)
+    if not ok then
+        lib.notify({ type = 'error', description = 'Could not change the lighting.' })
+    end
+    pushTimecycle()
 end)

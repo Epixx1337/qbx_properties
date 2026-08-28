@@ -29,8 +29,9 @@ function RefreshUtilities(propertyId)
 
     local limit = GetPowerLimit(property)
     local state = GetUtilities(property)
+    local wasPowered = ToBool(state.powered)
     local powered = property.building ~= nil and power <= limit
-        or property.building == nil and ToBool(state.powered) and power <= limit
+        or property.building == nil and wasPowered and power <= limit
 
     MySQL.update.await([[
         UPDATE properties_utilities SET power_used = ?, humidity = ?, powered = ? WHERE property_id = ?
@@ -42,6 +43,11 @@ function RefreshUtilities(propertyId)
         limit = limit,
         humidity = humidity,
     })
+
+    if not property.building and wasPowered and power > limit
+        and sharedConfig.electricity and sharedConfig.electricity.tripping and BreakPoweredFurniture then
+        BreakPoweredFurniture(propertyId)
+    end
 
     return { powered = powered, power = power, limit = limit, humidity = humidity }
 end

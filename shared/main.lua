@@ -226,6 +226,18 @@ function IsValidPropertySize(size)
     return type(size) == 'string' and sharedConfig.propertySizes[size] ~= nil
 end
 
+---@param value any hours
+---@return boolean
+function IsValidRentInterval(value)
+    local intervals = sharedConfig.rentIntervals
+    if not intervals then return type(value) == 'number' and value >= 1 and value <= 720 end
+
+    for i = 1, #intervals do
+        if intervals[i].value == value then return true end
+    end
+    return false
+end
+
 ---@param property table
 ---@return integer
 function GetPowerLimit(property)

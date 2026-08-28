@@ -421,6 +421,10 @@ RegisterNetEvent('qbx_properties:client:loadDecorations', function(decorations)
     end
 end)
 
+RegisterNetEvent('qbx_properties:client:reloadDecorations', function(decorations)
+    LoadRoomFurniture(decorations)
+end)
+
 RegisterNetEvent('qbx_properties:client:addDecoration', function(decoration)
     if type(decoration) ~= 'table' then return end
     SpawnDecoration(decoration)

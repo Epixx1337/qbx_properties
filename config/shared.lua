@@ -192,6 +192,7 @@ return {
         security_1 = { label = 'Security I', description = 'Harder locks, break-in alerts for you and your keyholders', price = 7500, securityTier = 1 },
         security_2 = { label = 'Security II', description = 'The hardest locks, alerts everyone and calls the police', price = 15000, requires = 'security_1', securityTier = 2 },
         garage = { label = 'Second Garage', description = 'Place one extra garage spot outside', price = 12500, garageSpots = 1 },
+        timecycle = { label = 'Mood Lighting', description = 'Pick an interior lighting theme from the tablet', price = 10000, timecycle = true },
     },
     typeUpgrades = { -- separate catalogs per property type, types without one use `upgrades`
         warehouse = {
@@ -201,6 +202,7 @@ return {
             power_1 = { label = 'Industrial Wiring', description = '+15kW breaker capacity', price = 20000, powerBonus = 15000 },
             security_1 = { label = 'Security I', description = 'Harder locks, break-in alerts for keyholders', price = 10000, securityTier = 1 },
             security_2 = { label = 'Security II', description = 'The hardest locks, alerts everyone and calls the police', price = 20000, requires = 'security_1', securityTier = 2 },
+            timecycle = { label = 'Work Lights', description = 'Pick an interior lighting theme from the tablet', price = 10000, timecycle = true },
         },
         gang = {
             storage_1 = { label = 'Stockpile I', description = '+3 stash placements', price = 12500, stashLimitBonus = 3 },
@@ -209,6 +211,7 @@ return {
             storage_4 = { label = 'Stockpile IV', description = '+12 stash placements', price = 15000, requires = 'storage_3', stashLimitBonus = 12 },
             security_1 = { label = 'Lookout', description = 'Harder locks, break-in alerts for the gang', price = 7500, securityTier = 1 },
             security_2 = { label = 'Fortified', description = 'The hardest locks, alerts everyone and calls the police', price = 15000, requires = 'security_1', securityTier = 2 },
+            timecycle = { label = 'Mood Lighting', description = 'Pick an interior lighting theme from the tablet', price = 10000, timecycle = true },
         },
     },
 
@@ -217,6 +220,59 @@ return {
         tripping = true, -- exceeding the power limit trips the breaker: stashes stay shut until someone repairs it
         repairJobs = { mechanic = 0 }, -- job grades allowed to repair, admins always can
         repairSkillCheck = { 'medium', 'medium', 'hard' },
+        burnout = true, -- an overload also burns out every powered furniture piece, each needs its own repair after the breaker
+    },
+
+    -- Fridges keep food fresh: degradable items decay this many times slower while stored inside one
+    fridges = {
+        decayMultiplier = 4.0,
+    },
+
+    -- Storage pin locks, set through the target on stash furniture; the setter opens without the pin
+    storagePins = true,
+
+    -- Maintenance, a recurring ownership fee on standalone properties; apartments are exempt
+    maintenance = {
+        enabled = true,
+        intervalDays = 7,
+        percent = 0.01, -- of the property price per interval
+        minimum = 500, -- the fee never drops below this
+        seizeAfterDays = 14, -- unpaid this long past the due date loses the property, 0 disables seizure
+    },
+
+    -- Furniture layouts, saved furnishing snapshots that can be re-applied or shared through import codes
+    layouts = {
+        enabled = true,
+        maxPerProperty = 10,
+    },
+
+    -- House photo tour (/housephotos)
+    housePhotos = {
+        hideDoorSprites = true, -- hide the ox_doorlock sprite on every property door while a tour runs, each door restored to how it was afterwards
+    },
+
+    -- Automatic doorbell camera placement for shell and IPL properties without a realtor-set doorcam;
+    -- realtors place exact cameras from the Manage tab, which always wins over these offsets
+    doorcam = {
+        height = 1.2, -- metres above the entrance point
+        rotate = 180.0, -- degrees added to the entrance heading so the camera faces visitors
+    },
+
+    -- Interior lighting themes, unlocked with the timecycle upgrade
+    timecycles = {
+        { label = 'Balanced', value = 'mp_garage_l' },
+        { label = 'Bright', value = 'ambientpush' },
+        { label = 'Studio', value = 'fib_interview' },
+        { label = 'Warm Bar', value = 'hicksbar' },
+        { label = 'Showroom', value = 'int_smshop' },
+        { label = 'Office Glow', value = 'lifeinvaderlod' },
+        { label = 'Gym', value = 'mpapart_h_01_gym' },
+        { label = 'Dawn', value = 'impexp_interior_01' },
+        { label = 'Soft Dawn', value = 'mpaparthigh_palnning' },
+        { label = 'Dark', value = 'fib_interview_optimise' },
+        { label = 'Dark Green', value = 'carpark_mp_exit' },
+        { label = 'Misty', value = 'fullambientmult_interior' },
+        { label = 'Metro', value = 'metro_platform' },
     },
 
     -- Mailboxes
@@ -225,15 +281,25 @@ return {
     -- Rent
     rentGraceHours = 24, -- hours after a failed rent payment before the eviction lands, 0 evicts immediately
     rentEvictionNoticeDays = 14, -- when the owner ends a lease the tenant keeps access this many days, 0 ends it on the spot
-
-    -- Property sizes
-    propertySizes = {
-        small = { label = 'Small', power = 5000, cost = 750 },
-        medium = { label = 'Medium', power = 10000, cost = 1500 },
-        large = { label = 'Large', power = 20000, cost = 3000 },
-        mansion = { label = 'Mansion', power = 40000, cost = 6000 },
+    rentIntervals = { -- billing periods offered for owner leases and realtor rentals
+        { label = '24 hours', value = 24 },
+        { label = '48 hours', value = 48 },
+        { label = '72 hours', value = 72 },
+        { label = '1 week', value = 168 },
+        { label = '2 weeks', value = 336 },
+        { label = '1 month', value = 720 },
     },
-    propertySizeOrder = { 'small', 'medium', 'large', 'mansion' },
+
+    -- Property sizes; stashes is the base stash placements for that size, storage upgrades add their bonus on top.
+    -- Properties without a stashes value fall back to the global stashLimit above.
+    propertySizes = {
+        tiny = { label = 'Tiny', power = 3000, cost = 500, stashes = 1 },
+        small = { label = 'Small', power = 5000, cost = 750, stashes = 2 },
+        medium = { label = 'Medium', power = 10000, cost = 1500, stashes = 3 },
+        large = { label = 'Large', power = 20000, cost = 3000, stashes = 4 },
+        mansion = { label = 'Mansion', power = 40000, cost = 6000, stashes = 6 },
+    },
+    propertySizeOrder = { 'tiny', 'small', 'medium', 'large', 'mansion' },
     defaultPropertySize = 'medium',
 
     -- Utilities

@@ -100,7 +100,9 @@ RegisterNetEvent('qbx_properties:server:respondToOffer', function(accepted)
         return
     end
 
-    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT() WHERE id = ?', {buyer.PlayerData.citizenid, offer.propertyId}) ~= 1 then
+    RecordPropertySale(offer.propertyId, property.owner, buyer.PlayerData.citizenid, offer.price)
+
+    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ?', {buyer.PlayerData.citizenid, offer.propertyId}) ~= 1 then
         buyer.Functions.AddMoney(account, offer.price, 'Property purchase refund')
         return
     end

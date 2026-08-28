@@ -42,6 +42,27 @@ local function isGroupMember(citizenId, property)
     return gang ~= nil and gang.name == property.group_name
 end
 
+local JOB_PERMISSIONS = { door = true, stash = true, furniture = true, garage = true }
+local JOB_ACCESS_TYPES = { commercial = true, warehouse = true }
+
+---@param citizenId string
+---@param property table needs type
+---@param permission string?
+---@return table? row matching the player's job, only for online players
+local function jobAccessRow(citizenId, property, permission)
+    if property.building or not JOB_ACCESS_TYPES[property.type] then return end
+    if permission and not JOB_PERMISSIONS[permission] then return end
+
+    local player = exports.qbx_core:GetPlayerByCitizenId(citizenId)
+    local job = player and player.PlayerData.job
+    if not job then return end
+
+    return MySQL.single.await(
+        'SELECT door, stash, furniture, garage FROM properties_job_access WHERE property_id = ? AND job_name = ? AND min_grade <= ?',
+        {property.id, job.name, job.grade.level}
+    )
+end
+
 ---@param citizenId string
 ---@param property table
 ---@param permission string
@@ -56,12 +77,13 @@ function HasPropertyAccess(citizenId, property, permission)
     if isGroupMember(citizenId, property) then return true end
 
     local key = accessKey(property)
-    if not key.value then return false end
-
-    return MySQL.scalar.await(
+    if key.value and MySQL.scalar.await(
         string.format('SELECT 1 FROM properties_access WHERE `%s` = ? AND citizenid = ? AND `%s` = 1', key.column, permission),
         {key.value, citizenId}
-    ) ~= nil
+    ) ~= nil then return true end
+
+    local jobRow = jobAccessRow(citizenId, property, permission)
+    return jobRow ~= nil and ToBool(jobRow[permission])
 end
 
 ---@param citizenId string
@@ -88,7 +110,17 @@ function GetAccessFlags(citizenId, property)
             utilities = ToBool(row.utilities),
             rent = house and ToBool(row.rent),
         } or { door = false, stash = false, furniture = false, garage = false, utilities = false, rent = false }
+
+        local jobRow = jobAccessRow(citizenId, property)
+        if jobRow then
+            flags.door = flags.door or ToBool(jobRow.door)
+            flags.stash = flags.stash or ToBool(jobRow.stash)
+            flags.furniture = flags.furniture or ToBool(jobRow.furniture)
+            flags.garage = flags.garage or (house and ToBool(jobRow.garage))
+        end
     end
+
+    flags.pins = house and GetSecurityTier ~= nil and GetSecurityTier(property.id) >= 2 or false
 
     return flags
 end
@@ -123,18 +155,86 @@ function GetPropertyAccessList(property)
     return result
 end
 
+---@param propertyId integer
+---@return table
+local function getJobAccessList(propertyId)
+    local rows = MySQL.query.await('SELECT job_name, min_grade, door, stash, furniture, garage FROM properties_job_access WHERE property_id = ? ORDER BY job_name', {propertyId}) or {}
+    local result = {}
+    for i = 1, #rows do
+        result[i] = {
+            job = rows[i].job_name,
+            grade = rows[i].min_grade,
+            door = ToBool(rows[i].door),
+            stash = ToBool(rows[i].stash),
+            furniture = ToBool(rows[i].furniture),
+            garage = ToBool(rows[i].garage),
+        }
+    end
+    return result
+end
+
 lib.callback.register('qbx_properties:callback:getAccessList', function(source, propertyId)
     local player = exports.qbx_core:GetPlayer(source)
     propertyId = ToId(propertyId)
     if not player or not propertyId then return {} end
 
-    local property = MySQL.single.await('SELECT id, owner, building, tenant FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT id, owner, building, tenant, type FROM properties WHERE id = ?', {propertyId})
     if not property then return {} end
 
     local citizenId = player.PlayerData.citizenid
     if property.owner ~= citizenId and property.tenant ~= citizenId then return {} end
 
-    return { access = GetPropertyAccessList(property), apartment = property.building ~= nil }
+    local activity = {}
+    local access = GetPropertyAccessList(property)
+    if #access > 0 then
+        local ids = {}
+        for i = 1, #access do ids[i] = access[i].citizenid end
+        local rows = MySQL.query.await(('SELECT citizenid, UNIX_TIMESTAMP(last_active) AS lastActive FROM properties_activity WHERE citizenid IN (%s)'):format(string.rep('?', #ids, ',')), ids) or {}
+        for i = 1, #rows do activity[rows[i].citizenid] = rows[i].lastActive end
+        for i = 1, #access do access[i].lastActive = activity[access[i].citizenid] end
+    end
+
+    return {
+        access = access,
+        apartment = property.building ~= nil,
+        jobs = property.building == nil and JOB_ACCESS_TYPES[property.type] and getJobAccessList(propertyId) or nil,
+        isOwner = property.owner == citizenId,
+    }
+end)
+
+lib.callback.register('qbx_properties:callback:setJobAccess', function(source, data)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player or type(data) ~= 'table' then return false end
+
+    local propertyId = ToId(data.propertyId)
+    if not propertyId or type(data.job) ~= 'string' then return false end
+
+    local job = data.job:lower():gsub('%s', '')
+    if #job < 2 or #job > 50 then return false end
+
+    local property = MySQL.single.await('SELECT id, owner, building, property_name, type FROM properties WHERE id = ?', {propertyId})
+    if not property or property.building or property.owner ~= player.PlayerData.citizenid then return false end
+    if not JOB_ACCESS_TYPES[property.type] then return false end
+
+    local door = data.door and 1 or 0
+    local stash = data.stash and 1 or 0
+    local furniture = data.furniture and 1 or 0
+    local garage = data.garage and 1 or 0
+    local grade = math.max(0, ToId(data.grade) or 0)
+
+    if door + stash + furniture + garage == 0 then
+        MySQL.update.await('DELETE FROM properties_job_access WHERE property_id = ? AND job_name = ?', {propertyId, job})
+    else
+        MySQL.update.await([[
+            INSERT INTO properties_job_access (property_id, job_name, min_grade, door, stash, furniture, garage) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE min_grade = VALUES(min_grade), door = VALUES(door), stash = VALUES(stash), furniture = VALUES(furniture), garage = VALUES(garage)
+        ]], {propertyId, job, grade, door, stash, furniture, garage})
+    end
+
+    LogAction(source, 'qbx_properties:server:setJobAccess', string.format('%s set job access %s (grade %d+) on %s', player.PlayerData.citizenid, job, grade, property.property_name))
+
+    TriggerClientEvent('qbx_properties:client:invalidateUnitAccess', -1)
+    return true
 end)
 
 lib.callback.register('qbx_properties:callback:setAccess', function(source, data)

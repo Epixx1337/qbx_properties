@@ -1,5 +1,6 @@
 <script>
   import './lib/theme.css'
+  import '@fortawesome/fontawesome-free/css/all.min.css'
   import { applyTheme } from './lib/mantine.js'
   import { onMessage, fetchNui, isEmbedded } from './lib/nui.js'
   import { app, furniture, market, realtor, creator, tablet, placement, preview, creation, creationFormDefaults, shot } from './lib/store.svelte.js'
@@ -22,6 +23,7 @@
 
   onMessage('furniture:init', (data) => {
     furniture.categories = data.categories ?? {}
+    furniture.categoryMeta = data.categoryMeta ?? {}
     furniture.category = furniture.categories.utility ? 'utility' : Object.keys(furniture.categories)[0] ?? null
     furniture.propertyName = data.propertyName ?? ''
     furniture.palette = data.palette ?? []
@@ -116,6 +118,7 @@
     if (data.sizes) market.sizes = data.sizes
     if (data.sizeOrder) market.sizeOrder = data.sizeOrder
     if (data.types) market.types = data.types
+    if (data.rentIntervals) market.rentIntervals = data.rentIntervals
     market.gardens = data.gardens ?? false
     market.selected = null
     market.bids = []
@@ -139,7 +142,11 @@
   onMessage('realtor:init', (data) => {
     realtor.interiors = data.interiors ?? []
     realtor.buildings = data.buildings ?? []
-    realtor.properties = data.properties ?? []
+    const props = data.properties
+    realtor.properties = Array.isArray(props) ? props : props?.rows ?? []
+    realtor.propertiesTotal = Array.isArray(props) ? props.length : props?.total ?? 0
+    realtor.propertiesPage = Array.isArray(props) ? 1 : props?.page ?? 1
+    realtor.propertiesPages = Array.isArray(props) ? 1 : props?.pages ?? 1
     realtor.building = null
     realtor.units = []
   })
@@ -149,14 +156,28 @@
   })
 
   onMessage('realtor:properties', (data) => {
-    realtor.properties = data ?? []
+    if (Array.isArray(data)) {
+      realtor.properties = data
+      realtor.propertiesTotal = data.length
+      realtor.propertiesPage = 1
+      realtor.propertiesPages = 1
+    } else {
+      realtor.properties = data?.rows ?? []
+      realtor.propertiesTotal = data?.total ?? realtor.properties.length
+      realtor.propertiesPage = data?.page ?? 1
+      realtor.propertiesPages = data?.pages ?? 1
+    }
   })
 
   onMessage('tablet:init', (data) => {
     tablet.propertyName = data?.propertyName ?? ''
     tablet.wallColors = data?.wallColors ?? null
     tablet.wallColor = data?.wallColor ?? null
+    tablet.timecycles = data?.timecycles ?? []
+    tablet.rentIntervals = data?.rentIntervals ?? []
     tablet.access = []
+    tablet.accessJobs = null
+    tablet.isAccessOwner = false
     tablet.nearby = []
     tablet.utilities = null
     tablet.upgrades = null
@@ -164,7 +185,16 @@
     tablet.rent = null
     tablet.doorcam = null
     tablet.doorcamView = false
+    tablet.maintenance = null
+    tablet.layouts = null
+    tablet.saleAuth = null
+    tablet.timecycle = null
   })
+
+  onMessage('tablet:maintenance', (data) => { tablet.maintenance = data ?? null })
+  onMessage('tablet:layouts', (data) => { tablet.layouts = data ?? null })
+  onMessage('tablet:saleAuth', (data) => { tablet.saleAuth = data ?? null })
+  onMessage('tablet:timecycle', (data) => { tablet.timecycle = data ?? null })
 
   onMessage('tablet:upgrades', (data) => {
     tablet.upgrades = data?.upgrades ?? []
@@ -190,6 +220,8 @@
   onMessage('tablet:access', (data) => {
     tablet.access = data?.access ?? []
     tablet.apartment = data?.apartment ?? false
+    tablet.accessJobs = data?.jobs ?? null
+    tablet.isAccessOwner = data?.isOwner ?? false
   })
   onMessage('tablet:nearby', (data) => { tablet.nearby = data ?? [] })
   onMessage('tablet:utilities', (data) => { tablet.utilities = data ?? null })
@@ -205,6 +237,7 @@
     placement.photo = data?.photo ?? false
     placement.capture = data?.capture ?? false
     placement.flying = data?.flying ?? false
+    placement.tour = data?.tour ?? false
   })
 
   onMessage('placement:hide', () => { placement.active = false })

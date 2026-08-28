@@ -32,13 +32,53 @@
   let mode = $state('catalog')
   let placedSearch = $state('')
 
-  const categories = $derived(
-    Object.keys(furniture.categories).sort((a, b) => {
-      if (a === 'utility') return -1
-      if (b === 'utility') return 1
-      return a.localeCompare(b)
-    })
-  )
+  const catMeta = (name) => {
+    const meta = furniture.categoryMeta?.[name] ?? {}
+    return {
+      icon: meta.icon ?? 'fa-solid fa-box-open',
+      label: meta.label ?? name.charAt(0).toUpperCase() + name.slice(1),
+      parent: meta.parent ?? null,
+      order: meta.order ?? 100,
+    }
+  }
+
+  const byOrder = (a, b) => {
+    const d = catMeta(a).order - catMeta(b).order
+    return d !== 0 ? d : a.localeCompare(b)
+  }
+
+  const allCategories = $derived(Object.keys(furniture.categories))
+
+  const topCategories = $derived.by(() => {
+    const names = new Set()
+    for (const name of allCategories) names.add(catMeta(name).parent ?? name)
+    return [...names].sort(byOrder)
+  })
+
+  const activeTop = $derived(furniture.category ? catMeta(furniture.category).parent ?? furniture.category : null)
+
+  const childrenOf = (top) => allCategories.filter((name) => catMeta(name).parent === top).sort(byOrder)
+
+  const subRow = $derived.by(() => {
+    if (!activeTop) return []
+    const children = childrenOf(activeTop)
+    if (!children.length) return []
+    const own = (furniture.categories[activeTop]?.length ?? 0) > 0 ? [activeTop] : []
+    return [...own, ...children]
+  })
+
+  const countOf = (name) =>
+    (furniture.categories[name]?.length ?? 0) +
+    childrenOf(name).reduce((sum, child) => sum + (furniture.categories[child]?.length ?? 0), 0)
+
+  function selectTop(name) {
+    const children = childrenOf(name)
+    if ((furniture.categories[name]?.length ?? 0) > 0 || !children.length) {
+      furniture.category = name
+    } else {
+      furniture.category = children[0]
+    }
+  }
 
   const modelTypes = $derived.by(() => {
     const map = {}
@@ -60,7 +100,7 @@
     const query = furniture.search.trim().toLowerCase()
 
     if (query) {
-      return categories
+      return allCategories
         .flatMap((name) => furniture.categories[name] ?? [])
         .filter((item) => item.label.toLowerCase().includes(query))
         .slice(0, 120)
@@ -109,18 +149,35 @@
       </div>
 
       {#if !furniture.search.trim()}
-        <div class="tabs">
-          {#each categories as name}
+        <div class="icon-tabs">
+          {#each topCategories as name (name)}
             <button
-              class="tab"
-              class:active={furniture.category === name}
-              onclick={() => (furniture.category = name)}
+              class="icon-tab"
+              class:active={activeTop === name}
+              data-tip="{catMeta(name).label} · {countOf(name)}"
+              aria-label={catMeta(name).label}
+              onclick={() => selectTop(name)}
             >
-              {name}
-              <span class="count">{furniture.categories[name].length}</span>
+              <i class={catMeta(name).icon}></i>
             </button>
           {/each}
         </div>
+
+        {#if subRow.length}
+          <div class="icon-tabs subs">
+            {#each subRow as name (name)}
+              <button
+                class="icon-tab small"
+                class:active={furniture.category === name}
+                data-tip="{catMeta(name).label} · {furniture.categories[name]?.length ?? 0}"
+                aria-label={catMeta(name).label}
+                onclick={() => (furniture.category = name)}
+              >
+                <i class={catMeta(name).icon}></i>
+              </button>
+            {/each}
+          </div>
+        {/if}
       {/if}
 
       <div class="grid scroll">
@@ -609,7 +666,7 @@
     color: #fff;
   }
 
-  .tabs {
+  .icon-tabs {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
@@ -618,29 +675,66 @@
     flex: none;
   }
 
-  .tab {
-    display: inline-flex;
+  .icon-tabs.subs {
+    padding-top: 8px;
+    background: var(--dark-8, rgba(0, 0, 0, 0.12));
+  }
+
+  .icon-tab {
+    position: relative;
+    display: flex;
     align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    padding: 6px 10px;
-    font-family: inherit;
-    font-size: 12px;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
     color: var(--dark-1);
     background: var(--dark-6);
-    border: 1px solid transparent;
+    border: 1px solid var(--dark-4);
     border-radius: var(--radius-sm);
     cursor: pointer;
   }
 
-  .tab:hover {
-    background: var(--dark-5);
+  .icon-tab.small {
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
   }
 
-  .tab.active {
+  .icon-tab:hover {
+    background: var(--dark-5);
+    color: #fff;
+  }
+
+  .icon-tab.active {
     color: #fff;
     background: var(--accent-15);
     border-color: var(--blue);
+  }
+
+  .icon-tab::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%) scale(0.94);
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    white-space: nowrap;
+    color: #fff;
+    background: var(--dark-8, #101113);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease, transform 0.1s ease;
+    z-index: 30;
+  }
+
+  .icon-tab:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
   }
 
   .count {

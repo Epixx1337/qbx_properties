@@ -1,2 +1,0 @@
-ALTER TABLE `properties` ADD COLUMN IF NOT EXISTS `images` LONGTEXT DEFAULT NULL AFTER `wall_color`;
-ALTER TABLE `properties` ADD COLUMN IF NOT EXISTS `description` TEXT DEFAULT NULL AFTER `images`;

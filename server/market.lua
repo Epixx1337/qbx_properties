@@ -53,7 +53,8 @@ local function transferProperty(propertyId, buyerCid, amount)
     if not property then return false end
     if not CanOwnAnotherProperty(buyerCid, property.type) then return false end
 
-    MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT() WHERE id = ?', {buyerCid, propertyId})
+    RecordPropertySale(propertyId, property.owner, buyerCid, amount)
+    MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ?', {buyerCid, propertyId})
 
     TriggerClientEvent('qbx_properties:client:refreshBlips', -1)
 
@@ -91,20 +92,56 @@ lib.callback.register('qbx_properties:callback:getListings', fetchListings)
 
 exports('GetListings', fetchListings)
 
-lib.callback.register('qbx_properties:callback:getRealtorProperties', function(source)
-    local player = exports.qbx_core:GetPlayer(source)
-    if not player or not IsRealtor(player.PlayerData.job) then return {} end
+local REALTOR_PAGE_SIZE <const> = 24
 
-    local rows = MySQL.query.await([[
-        SELECT p.id, p.property_name, p.owner, p.price, p.rent_interval, p.building, p.interior, p.images,
+lib.callback.register('qbx_properties:callback:getRealtorProperties', function(source, opts)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player or not IsRealtor(player.PlayerData.job) then return { rows = {}, total = 0, page = 1, pages = 1 } end
+
+    opts = type(opts) == 'table' and opts or {}
+    local page = math.max(1, ToId(opts.page) or 1)
+
+    local where = { 'p.building IS NULL' }
+    local params = {}
+
+    if opts.filter == 'free' then
+        where[#where + 1] = 'p.owner IS NULL'
+    elseif opts.filter == 'owned' then
+        where[#where + 1] = 'p.owner IS NOT NULL'
+    end
+
+    if type(opts.search) == 'string' and opts.search ~= '' then
+        local like = '%' .. opts.search:sub(1, 60):gsub('[%%_\\]', '\\%0') .. '%'
+        where[#where + 1] = '(p.property_name LIKE ? OR p.owner LIKE ? OR pl.charinfo LIKE ?)'
+        params[#params + 1] = like
+        params[#params + 1] = like
+        params[#params + 1] = like
+    end
+
+    local whereSql = table.concat(where, ' AND ')
+
+    local total = MySQL.scalar.await(([[
+        SELECT COUNT(*) FROM properties p LEFT JOIN players pl ON pl.citizenid = p.owner WHERE %s
+    ]]):format(whereSql), params) or 0
+
+    local pages = math.max(1, math.ceil(total / REALTOR_PAGE_SIZE))
+    if page > pages then page = pages end
+
+    local pageParams = { table.unpack(params) }
+    pageParams[#pageParams + 1] = REALTOR_PAGE_SIZE
+    pageParams[#pageParams + 1] = (page - 1) * REALTOR_PAGE_SIZE
+
+    local rows = MySQL.query.await(([[
+        SELECT p.id, p.property_name, p.owner, p.price, p.rent_interval, p.building, p.interior, p.images, p.sale_authorized,
                p.interior REGEXP '^-?[0-9]+$' AS shell,
                pl.charinfo AS owner_charinfo,
                EXISTS(SELECT 1 FROM properties_listings l WHERE l.property_id = p.id AND l.status IN ('active','finalizing')) AS listed
         FROM properties p
         LEFT JOIN players pl ON pl.citizenid = p.owner
+        WHERE %s
         ORDER BY p.property_name
-        LIMIT 500
-    ]])
+        LIMIT ? OFFSET ?
+    ]]):format(whereSql), pageParams) or {}
 
     for i = 1, #rows do
         local urls = PropertyImageUrls(rows[i].images)
@@ -112,7 +149,7 @@ lib.callback.register('qbx_properties:callback:getRealtorProperties', function(s
         rows[i].thumb = urls[1]
     end
 
-    return rows
+    return { rows = rows, total = total, page = page, pages = pages }
 end)
 
 RegisterNetEvent('qbx_properties:server:repossess', function(propertyId)
@@ -208,10 +245,10 @@ lib.callback.register('qbx_properties:callback:createListing', function(source, 
     if price < market.minPrice or price > market.maxPrice then return false end
     if data.listingType ~= 'sale' and data.listingType ~= 'auction' and data.listingType ~= 'offer' then return false end
 
-    local property = MySQL.single.await('SELECT id, property_name, owner FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT id, property_name, owner, sale_authorized FROM properties WHERE id = ?', {propertyId})
     if not property then return false end
-    if property.owner then
-        exports.qbx_core:Notify(source, 'That property already has an owner.', 'error')
+    if property.owner and not ToBool(property.sale_authorized) then
+        exports.qbx_core:Notify(source, 'The owner has not authorised selling this property.', 'error')
         return false
     end
 
@@ -239,6 +276,31 @@ lib.callback.register('qbx_properties:callback:createListing', function(source, 
     LogAction(source, 'qbx_properties:server:createListing', string.format('%s listed %s as %s for $%d', player.PlayerData.citizenid, property.property_name, data.listingType, price))
 
     return listingId ~= nil
+end)
+
+lib.callback.register('qbx_properties:callback:setSaleAuthorized', function(source, propertyId, enabled)
+    local player = exports.qbx_core:GetPlayer(source)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId then return false end
+
+    local property = MySQL.single.await('SELECT id, owner, building, property_name FROM properties WHERE id = ?', {propertyId})
+    if not property or property.building or property.owner ~= player.PlayerData.citizenid then return false end
+
+    MySQL.update.await('UPDATE properties SET sale_authorized = ? WHERE id = ?', {enabled and 1 or 0, propertyId})
+
+    LogAction(source, 'qbx_properties:server:setSaleAuthorized', string.format('%s %s realtor sales for %s', player.PlayerData.citizenid, enabled and 'authorised' or 'revoked', property.property_name))
+    return true
+end)
+
+lib.callback.register('qbx_properties:callback:getSaleAuthorized', function(source, propertyId)
+    local player = exports.qbx_core:GetPlayer(source)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId then return end
+
+    local property = MySQL.single.await('SELECT owner, building, sale_authorized FROM properties WHERE id = ?', {propertyId})
+    if not property or property.building or property.owner ~= player.PlayerData.citizenid then return end
+
+    return { authorized = ToBool(property.sale_authorized) }
 end)
 
 ---@param listingId integer

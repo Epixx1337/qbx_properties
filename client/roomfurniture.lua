@@ -2,20 +2,36 @@ local sharedConfig = require 'config.shared'
 
 DecorationTints = {}
 DecorationItems = {}
+DecorationHealth = {}
 
+local burnout = sharedConfig.electricity and sharedConfig.electricity.burnout == true
 local targeted = {}
 local lightEntities = {}
 local powered = true
 PlacedDecorations = {}
 
+---@param id integer
+---@return boolean
+local function isBroken(id)
+    return burnout and (DecorationHealth[id] or 100) <= 0
+end
+
+---@param entity number
+local function refreshLight(entity)
+    local id = lightEntities[entity]
+    local lit = powered and not (type(id) == 'number' and isBroken(id))
+    SetEntityLights(entity, not lit)
+end
+
 ---@param entity number
 ---@param model string
-local function applyPower(entity, model)
+---@param id integer?
+local function applyPower(entity, model, id)
     local spec = GetFurnitureSpecs()[model]
     if not spec or not spec.light then return end
 
-    lightEntities[entity] = true
-    SetEntityLights(entity, not powered)
+    lightEntities[entity] = id or true
+    refreshLight(entity)
 end
 
 function SetPropertyPowered(value)
@@ -23,7 +39,7 @@ function SetPropertyPowered(value)
 
     for entity in pairs(lightEntities) do
         if DoesEntityExist(entity) then
-            SetEntityLights(entity, not powered)
+            refreshLight(entity)
         else
             lightEntities[entity] = nil
         end
@@ -35,46 +51,104 @@ RegisterNetEvent('qbx_properties:client:utilityState', function(propertyId, stat
     SetPropertyPowered(state.powered)
 end)
 
+RegisterNetEvent('qbx_properties:client:furnitureHealth', function(propertyId, updates)
+    if CurrentPropertyId ~= propertyId or type(updates) ~= 'table' then return end
+
+    for id, health in pairs(updates) do
+        DecorationHealth[tonumber(id) or id] = health
+    end
+
+    for entity in pairs(lightEntities) do
+        if DoesEntityExist(entity) then refreshLight(entity) end
+    end
+end)
+
 local targetProxies = {}
 
+local function openLockedStash(decoration, index)
+    if index > 0 and sharedConfig.storagePins then
+        local state = lib.callback.await('qbx_properties:callback:stashLock', false, decoration.id)
+        if state and state.locked and not state.mine and not (IsPropertyBreached and IsPropertyBreached(CurrentPropertyId)) then
+            local input = lib.inputDialog('Storage pin', {
+                { type = 'input', label = 'Pin', password = true, required = true },
+            })
+            if not input then return end
+            TriggerServerEvent('qbx_properties:server:openStash', index, input[1])
+            return
+        end
+    end
+
+    TriggerServerEvent('qbx_properties:server:openStash', index)
+end
+
+local function manageStashLock(decoration)
+    local state = lib.callback.await('qbx_properties:callback:stashLock', false, decoration.id)
+    if not state then return end
+
+    if not state.canPin then
+        lib.notify({ type = 'error', description = 'The Security II upgrade is needed before locks can be fitted.' })
+        return
+    end
+
+    if state.locked and not state.mine then
+        lib.notify({ type = 'error', description = 'Only whoever set this pin can change it.' })
+        return
+    end
+
+    local input = lib.inputDialog(state.locked and 'Change pin' or 'Set pin', {
+        { type = 'input', label = 'Pin (4-8 digits, empty removes it)', password = true },
+    })
+    if not input then return end
+
+    local pin = input[1]
+    if pin == '' then pin = nil end
+    lib.callback.await('qbx_properties:callback:setStashPin', false, decoration.id, pin)
+end
+
+local function repairFurniture(decoration)
+    local success = lib.skillCheck(sharedConfig.electricity and sharedConfig.electricity.repairSkillCheck or { 'medium', 'medium' })
+    if not success then
+        lib.notify({ type = 'error', description = 'Sparks fly, try again.' })
+        return
+    end
+
+    lib.callback.await('qbx_properties:callback:repairFurniture', false, decoration.id)
+end
+
 local function interactionOptions(decoration)
+    local options = {}
+
     if decoration.interaction == 'wardrobe' then
-        return {
-            {
-                name = 'qbx_properties_wardrobe_' .. decoration.id,
-                label = 'Change clothing',
-                icon = 'fa-solid fa-shirt',
-                distance = TargetDistance('furniture', 1.5),
-                onSelect = function()
-                    exports['illenium-appearance']:startPlayerCustomization(function(appearance)
-                        if appearance then
-                            TriggerServerEvent('illenium-appearance:server:saveAppearance', appearance)
-                        end
-                    end, {
-                        components = true,
-                        componentConfig = { masks = true, upperBody = true, lowerBody = true, bags = true, shoes = true, scarfAndChains = true, bodyArmor = true, shirts = true, decals = true, jackets = true },
-                        props = true,
-                        propConfig = { hats = true, glasses = true, ear = true, watches = true, bracelets = true },
-                        allowExit = true,
-                    })
-                end
-            }
+        options[#options + 1] = {
+            name = 'qbx_properties_wardrobe_' .. decoration.id,
+            label = 'Change clothing',
+            icon = 'fa-solid fa-shirt',
+            distance = TargetDistance('furniture', 1.5),
+            onSelect = function()
+                exports['illenium-appearance']:startPlayerCustomization(function(appearance)
+                    if appearance then
+                        TriggerServerEvent('illenium-appearance:server:saveAppearance', appearance)
+                    end
+                end, {
+                    components = true,
+                    componentConfig = { masks = true, upperBody = true, lowerBody = true, bags = true, shoes = true, scarfAndChains = true, bodyArmor = true, shirts = true, decals = true, jackets = true },
+                    props = true,
+                    propConfig = { hats = true, glasses = true, ear = true, watches = true, bracelets = true },
+                    allowExit = true,
+                })
+            end
         }
     elseif decoration.interaction == 'tablet' then
-        return {
-            {
-                name = 'qbx_properties_tablet_' .. decoration.id,
-                label = 'Housing tablet',
-                icon = 'fa-solid fa-tablet-screen-button',
-                distance = TargetDistance('furniture', 1.5),
-                onSelect = function() OpenTablet() end
-            }
+        options[#options + 1] = {
+            name = 'qbx_properties_tablet_' .. decoration.id,
+            label = 'Housing tablet',
+            icon = 'fa-solid fa-tablet-screen-button',
+            distance = TargetDistance('furniture', 1.5),
+            onSelect = function() OpenTablet() end
         }
     elseif decoration.interaction == 'logout' then
-        if not sharedConfig.logoutEnabled then return end
-
-        return {
-            {
+        if sharedConfig.logoutEnabled then
+            options[#options + 1] = {
                 name = 'qbx_properties_logout_' .. decoration.id,
                 label = 'Log out',
                 icon = 'fa-solid fa-bed',
@@ -85,20 +159,62 @@ local function interactionOptions(decoration)
                     TriggerServerEvent('qbx_properties:server:logoutProperty')
                 end
             }
-        }
+        end
     elseif decoration.interaction == 'stash' then
         local index = decoration.stashIndex or 0
-        return {
-            {
-                name = 'qbx_properties_stash_' .. decoration.id,
-                label = string.format('Open stash %d', index),
-                icon = 'fa-solid fa-box-archive',
+        options[#options + 1] = {
+            name = 'qbx_properties_stash_' .. decoration.id,
+            label = string.format('Open stash %d', index),
+            icon = 'fa-solid fa-box-archive',
+            distance = TargetDistance('furniture', 1.5),
+            canInteract = function() return PropertyAccess.stash or (IsPropertyBreached and IsPropertyBreached(CurrentPropertyId)) end,
+            onSelect = function() openLockedStash(decoration, index) end
+        }
+
+        if sharedConfig.storagePins then
+            options[#options + 1] = {
+                name = 'qbx_properties_stashlock_' .. decoration.id,
+                label = 'Manage lock',
+                icon = 'fa-solid fa-lock',
                 distance = TargetDistance('furniture', 1.5),
-                canInteract = function() return PropertyAccess.stash or (IsPropertyBreached and IsPropertyBreached(CurrentPropertyId)) end,
-                onSelect = function() TriggerServerEvent('qbx_properties:server:openStash', index) end
+                canInteract = function() return PropertyAccess.stash and PropertyAccess.pins end,
+                onSelect = function() manageStashLock(decoration) end
             }
+        end
+    elseif decoration.interaction == 'fridge' then
+        options[#options + 1] = {
+            name = 'qbx_properties_fridge_' .. decoration.id,
+            label = 'Open fridge',
+            icon = 'fa-solid fa-snowflake',
+            distance = TargetDistance('furniture', 1.5),
+            canInteract = function() return PropertyAccess.stash or (IsPropertyBreached and IsPropertyBreached(CurrentPropertyId)) end,
+            onSelect = function() TriggerServerEvent('qbx_properties:server:openFridge', decoration.id) end
+        }
+    elseif decoration.interaction == 'trash' then
+        options[#options + 1] = {
+            name = 'qbx_properties_trash_' .. decoration.id,
+            label = 'Open trash',
+            icon = 'fa-solid fa-trash-can',
+            distance = TargetDistance('furniture', 1.5),
+            canInteract = function() return PropertyAccess.door end,
+            onSelect = function() TriggerServerEvent('qbx_properties:server:openTrash', decoration.id) end
         }
     end
+
+    local spec = GetFurnitureSpecs()[decoration.model]
+    if burnout and spec and (spec.power or 0) > 0 then
+        options[#options + 1] = {
+            name = 'qbx_properties_repair_' .. decoration.id,
+            label = 'Repair wiring',
+            icon = 'fa-solid fa-screwdriver-wrench',
+            distance = TargetDistance('furniture', 1.5),
+            canInteract = function() return isBroken(decoration.id) end,
+            onSelect = function() repairFurniture(decoration) end
+        }
+    end
+
+    if #options == 0 then return end
+    return options
 end
 
 local PROXY_MODEL <const> = `prop_cs_tablet`
@@ -115,7 +231,7 @@ local function removeInteraction(id)
 end
 
 local function addInteraction(entity, decoration)
-    if not sharedConfig.targetInteractions or not decoration.interaction then return end
+    if not sharedConfig.targetInteractions then return end
 
     local options = interactionOptions(decoration)
     if not options then return end
@@ -199,13 +315,14 @@ function SpawnDecoration(decoration)
     DecorationObjects[decoration.id] = entity
     PlacedDecorations[decoration.id] = decoration.model
     DecorationItems[decoration.id] = decoration.item
+    DecorationHealth[decoration.id] = tonumber(decoration.health) or 100
 
     if decoration.item then
         local meta = decoration.metadata or (type(decoration.item_metadata) == 'string' and json.decode(decoration.item_metadata)) or nil
         TriggerEvent('qbx_properties:client:itemFurniture', 'spawn', decoration.id, entity, decoration.item, meta)
     end
     addInteraction(entity, decoration)
-    applyPower(entity, decoration.model)
+    applyPower(entity, decoration.model, decoration.id)
 
     if IsDecorating then PushPlacedDecorations() end
 
@@ -232,6 +349,7 @@ function DespawnDecoration(id)
     DecorationObjects[id] = nil
     PlacedDecorations[id] = nil
     DecorationItems[id] = nil
+    DecorationHealth[id] = nil
 
     if IsDecorating then PushPlacedDecorations() end
 end

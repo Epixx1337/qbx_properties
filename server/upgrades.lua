@@ -63,10 +63,11 @@ function GetStashMultiplier(property)
     return GetPropertyType(property).stashMultiplier or 1.0
 end
 
----@param property table needs id and type
+---@param property table needs id and type, size when present drives the base
 ---@return integer? limit nil means unlimited
 function GetStashLimit(property)
-    local base = sharedConfig.stashLimit
+    local size = property.size and sharedConfig.propertySizes[property.size]
+    local base = size and size.stashes or sharedConfig.stashLimit
     if not base then return nil end
     return base + highestOwned(property.id, 'stashLimitBonus', property.type)
 end

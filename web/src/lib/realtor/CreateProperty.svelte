@@ -350,10 +350,14 @@
                   <span>Rental</span>
                 </label>
                 {#if form.isRental}
-                  <input class="input mono" type="number" bind:value={form.rentInterval} min="1" max="24" />
+                  <select class="select" bind:value={form.rentInterval}>
+                    {#each market.rentIntervals as interval (interval.value)}
+                      <option value={interval.value}>{interval.label}</option>
+                    {/each}
+                  </select>
                 {/if}
               </div>
-              <span class="hint">{form.isRental ? 'Hours between rent charges' : 'Sold outright'}</span>
+              <span class="hint">{form.isRental ? 'Billing period between rent charges' : 'Sold outright'}</span>
             </div>
           </div>
 
@@ -428,11 +432,11 @@
               {/each}
             </div>
             {#if form.listingType === 'auction'}
-              <div class="type-chips">
+              <select class="select duration-select" bind:value={form.auctionHours}>
                 {#each market.config.auctionDurations ?? [24, 48, 72] as hours (hours)}
-                  <button class="chip" class:active={form.auctionHours === hours} onclick={() => (form.auctionHours = hours)}>{hours}h</button>
+                  <option value={hours}>{hours} hours</option>
                 {/each}
-              </div>
+              </select>
             {/if}
             <span class="hint">{listHint}</span>
           </div>

@@ -144,4 +144,4 @@ For world interactions on the placed prop, listen for the client event `qbx_prop
 - Metadata is stored as-is on the decoration row (`item_metadata`) and returned untouched on pickup, apart from the optional durability subtraction. Serial numbers, contents, custom fields all survive.
 - If the player's inventory cannot hold the item on pickup, nothing is deleted and they are told they cannot carry it.
 - Placed items are plain decorations: no stash/wardrobe/logout interactions are attached, and they do not appear in the buy catalog. Add your own ox_target options against the prop model if the item should stay usable while placed.
-- The `item` and `item_metadata` columns come from `property_item_furniture.sql` — run it if you are updating an existing database.
+- The `item` and `item_metadata` columns are added by the startup migrator on existing databases; fresh installs get them from `schema.sql`.

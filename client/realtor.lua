@@ -18,9 +18,26 @@ local function buildingList()
     return lib.callback.await('qbx_properties:callback:getBuildings', false)
 end
 
+local propertiesQuery = { page = 1, search = '', filter = 'all' }
+
 function RealtorProperties()
-    return lib.callback.await('qbx_properties:callback:getRealtorProperties', false)
+    return lib.callback.await('qbx_properties:callback:getRealtorProperties', false, propertiesQuery)
 end
+
+RegisterNUICallback('realtor:fetchProperties', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local filter = data.filter
+    if filter ~= 'free' and filter ~= 'owned' then filter = 'all' end
+
+    propertiesQuery = {
+        page = tonumber(data.page) or 1,
+        search = type(data.search) == 'string' and data.search or '',
+        filter = filter,
+    }
+    SendUI('realtor:properties', RealtorProperties())
+end)
 
 function SendRealtorData()
     playerCoords = GetEntityCoords(cache.ped)
@@ -159,6 +176,53 @@ RegisterNUICallback('realtor:setMailbox', function(data, cb)
         type = ok and 'success' or 'error',
         description = ok and 'Mailbox set.' or 'Could not set the mailbox there.',
     })
+end)
+
+RegisterNUICallback('realtor:setDoorcam', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    CloseUI()
+    local coords = PickWithLaser('Aim where the doorbell camera sits — above the door, facing out — and click')
+
+    if coords then
+        local eye = GetPedBoneCoords(cache.ped, 31086, 0.0, 0.0, 0.0)
+        local direction = eye - coords
+        local length = #direction
+
+        if length > 0.2 then
+            direction = direction / length
+            local camPos = coords + direction * 0.15
+            local heading = math.deg(math.atan(-direction.x, direction.y)) % 360.0
+            local pitch = math.deg(math.asin(math.max(-1.0, math.min(1.0, direction.z))))
+
+            local ok = lib.callback.await('qbx_properties:callback:setDoorcam', false, data.propertyId, {
+                x = camPos.x, y = camPos.y, z = camPos.z, w = heading, p = pitch,
+            })
+            lib.notify({
+                type = ok and 'success' or 'error',
+                description = ok and 'Doorcam placed, looking back at where you stood.' or 'Could not place the doorcam there.',
+            })
+        else
+            lib.notify({ type = 'error', description = 'Step back a little from the camera spot.' })
+        end
+    end
+
+    OpenUI('housing')
+    SendUI('housing:tab', 'manage')
+    SendUI('realtor:detailData', lib.callback.await('qbx_properties:callback:getPropertyDetails', false, data.propertyId))
+end)
+
+RegisterNUICallback('realtor:clearDoorcam', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local ok = lib.callback.await('qbx_properties:callback:clearDoorcam', false, data.propertyId)
+    lib.notify({
+        type = ok and 'success' or 'error',
+        description = ok and 'Doorcam removed, the automatic placement is back.' or 'Could not remove the doorcam.',
+    })
+    SendUI('realtor:detailData', lib.callback.await('qbx_properties:callback:getPropertyDetails', false, data.propertyId))
 end)
 
 RegisterNUICallback('realtor:editGarage', function(data, cb)

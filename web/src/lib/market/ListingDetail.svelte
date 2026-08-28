@@ -97,6 +97,7 @@
           <img
             src={listing.images[Math.min(imageIndex, listing.images.length - 1)]}
             alt={listing.property_name}
+            loading="lazy"
             onclick={() => (lightboxIndex = imageIndex)}
           />
         {:else}

@@ -1,4 +1,23 @@
 return {
+    -- Icons, labels and grouping for the furniture catalog categories. Keys match the category
+    -- names under `furniture` below. `icon` takes any Font Awesome free class (fontawesome.com/icons),
+    -- `order` sorts the icon row (lower first), and `parent` turns a category into a subcategory of
+    -- another entry — parents that hold no furniture themselves (like structure) only need icon/label.
+    -- Categories without an entry here fall back to a generic icon and their capitalised key.
+    furnitureCategories = {
+        utility = { label = 'Utility', icon = 'fa-solid fa-screwdriver-wrench', order = 1 },
+        kitchen = { label = 'Kitchen', icon = 'fa-solid fa-utensils', order = 2 },
+        lighting = { label = 'Lighting', icon = 'fa-solid fa-lightbulb', order = 3 },
+        couches = { label = 'Couches', icon = 'fa-solid fa-couch', order = 4 },
+        tables = { label = 'Tables', icon = 'fa-solid fa-table', order = 5 },
+        beds = { label = 'Beds', icon = 'fa-solid fa-bed', order = 6 },
+        structure = { label = 'Structure', icon = 'fa-solid fa-cubes', order = 7 },
+        walls = { label = 'Walls', icon = 'fa-solid fa-grip-lines-vertical', parent = 'structure' },
+        arches = { label = 'Arches', icon = 'fa-solid fa-archway', parent = 'structure' },
+        stairs = { label = 'Stairs', icon = 'fa-solid fa-stairs', parent = 'structure' },
+        floors = { label = 'Floors', icon = 'fa-solid fa-border-all', parent = 'structure' },
+    },
+
     exteriorHashs = { -- Used for hiding the exterior when inside of an apartment IPL
         ['DellPerroHeightsApt4'] = {`sm_14_emissive`, `hei_sm_14_bld2`},
         ['DellPerroHeightsApt7'] = {`sm_14_emissive`, `hei_sm_14_bld2`},
@@ -57,6 +76,48 @@ return {
                 object = 'apa_v_ilev_fh_bedrmdoor',
                 label = 'Bedroom Door',
                 type = 'door',
+            },
+        },
+
+        kitchen = {
+            {
+                object = 'prop_fridge_03',
+                label = 'Double Fridge',
+                type = 'fridge',
+                price = 900,
+                power = 450,
+                slots = 10,
+                maxWeight = 60000,
+            },
+            {
+                object = 'v_res_tt_fridge',
+                label = 'Retro Fridge',
+                type = 'fridge',
+                price = 650,
+                power = 400,
+                slots = 8,
+                maxWeight = 45000,
+            },
+            {
+                object = 'prop_trailr_fridge',
+                label = 'Compact Fridge',
+                type = 'fridge',
+                price = 450,
+                power = 350,
+                slots = 6,
+                maxWeight = 30000,
+            },
+            {
+                object = 'prop_bin_01a',
+                label = 'Wheelie Bin',
+                type = 'trash',
+                price = 100,
+            },
+            {
+                object = 'prop_bin_07b',
+                label = 'Steel Bin',
+                type = 'trash',
+                price = 150,
             },
         },
 

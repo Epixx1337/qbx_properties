@@ -37,6 +37,12 @@
     {:else if placement.vehicle}
       <span><kbd>LMB</kbd> Place</span>
       <span><kbd>Scroll</kbd> Rotate</span>
+    {:else if placement.tour}
+      <span><kbd>WASD</kbd> Fly</span>
+      <span><kbd>Space</kbd>/<kbd>Ctrl</kbd> Up / down</span>
+      <span><kbd>Scroll</kbd> Speed</span>
+      <span><kbd>G</kbd> Take photo</span>
+      <span><kbd>X</kbd> Skip house</span>
     {:else if placement.photo}
       <span><kbd>E</kbd> Take photo</span>
     {:else if placement.capture}

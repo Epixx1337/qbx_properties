@@ -20,6 +20,7 @@ function OpenHousing()
         sizeOrder = sharedConfig.propertySizeOrder,
         gardens = sharedConfig.gardens.enabled,
         types = sharedConfig.propertyTypes,
+        rentIntervals = sharedConfig.rentIntervals,
     })
 
     if IsRealtor(QBX.PlayerData.job) or CanUseCreator() then
@@ -145,5 +146,6 @@ RegisterNUICallback('housing:embed', function(_, cb)
         sizeOrder = sharedConfig.propertySizeOrder,
         gardens = sharedConfig.gardens.enabled,
         types = sharedConfig.propertyTypes,
+        rentIntervals = sharedConfig.rentIntervals,
     })
 end)

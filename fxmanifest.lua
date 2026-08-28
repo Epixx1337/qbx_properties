@@ -4,7 +4,7 @@ game 'gta5'
 name 'qbx_properties'
 description 'Hopefully one day a feature rich property system'
 repository 'https://github.com/Qbox-project/qbx_properties'
-version '0.0.8'
+version '0.0.9'
 
 ox_lib 'locale'
 
@@ -40,10 +40,12 @@ client_scripts {
     'client/raids.lua',
     'client/robbery.lua',
     'client/wallcolor.lua',
+    'client/timecycle.lua',
     'client/tablet.lua',
     'client/creator.lua',
     'client/items.lua',
     'client/screenshot.lua',
+    'client/housephotos.lua',
     'client/phone.lua',
 }
 
@@ -73,6 +75,10 @@ server_scripts {
     'server/screenshot.js',
     'server/phone.lua',
     'server/upgrades.lua',
+    'server/appliances.lua',
+    'server/maintenance.lua',
+    'server/layouts.lua',
+    'server/timecycle.lua',
     'server/tenancy.lua',
     'server/exports.lua',
 }

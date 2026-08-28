@@ -84,4 +84,4 @@ From then on, any character receiving their first unit in that layout gets the l
 
 ## Database
 
-The `layout` column on `properties_apartment_decorations` comes from `property_apartment_layouts.sql`; the startup migrator applies it automatically and stamps existing furniture as `wiwang`.
+The `layout` column on `properties_apartment_decorations` is added by the startup migrator automatically, which also stamps existing furniture as `wiwang`.

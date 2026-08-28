@@ -55,6 +55,49 @@ export function formatMoney(value) {
   return `$${Number(value ?? 0).toLocaleString('en-US')}`
 }
 
+// svelte action: sets a cover background-image only once the node scrolls into view,
+// so long card grids (the market) fetch images the way lazy <img> tags do
+export function lazyBackground(node, url) {
+  let current = url ?? null
+  let visible = false
+
+  const apply = () => {
+    if (!visible) return
+    if (current) {
+      node.style.backgroundImage = `url("${current}")`
+      node.style.backgroundSize = 'cover'
+      node.style.backgroundPosition = 'center'
+    } else {
+      node.style.backgroundImage = ''
+    }
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          visible = true
+          apply()
+          observer.disconnect()
+        }
+      }
+    },
+    { rootMargin: '250px' }
+  )
+
+  observer.observe(node)
+
+  return {
+    update(next) {
+      current = next ?? null
+      apply()
+    },
+    destroy() {
+      observer.disconnect()
+    },
+  }
+}
+
 export function formatRemaining(endTimestamp) {
   const remaining = endTimestamp - Math.floor(Date.now() / 1000)
   if (remaining <= 0) return 'Ending'

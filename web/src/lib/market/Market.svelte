@@ -1,5 +1,5 @@
 <script>
-  import { fetchNui, formatMoney, formatRemaining } from '../nui.js'
+  import { fetchNui, formatMoney, formatRemaining, lazyBackground } from '../nui.js'
   import { app, market } from '../store.svelte.js'
   import ListingDetail from './ListingDetail.svelte'
 
@@ -92,7 +92,7 @@
         <div class="grid">
           {#each visible as listing (listing.id)}
             <button class="card" onclick={() => select(listing)}>
-              <div class="photo" style={listing.images?.length ? `background-image: url("${listing.images[0]}"); background-size: cover; background-position: center` : ''}>
+              <div class="photo" use:lazyBackground={listing.images?.[0]}>
                 {#if !listing.images?.length}
                   <span class="photo-label">NO PHOTOS YET</span>
                 {/if}

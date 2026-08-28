@@ -25,6 +25,12 @@ local function requestCapture(event, ...)
     return Citizen.Await(p)
 end
 
+---@param event string one of the qbx_properties:internal shot events
+---@return table result
+function RequestShotOp(event, ...)
+    return requestCapture(event, ...)
+end
+
 local imageProviders = {
     qbox = {
         url = 'https://api.qbox.re/v1/file', field = 'file', responsePath = 'data.url',

@@ -158,7 +158,7 @@ lib.callback.register('qbx_properties:callback:rentOut', function(source, proper
     interval = ToId(interval)
     contract = ToId(contract)
     if not player or not propertyId or not rent or not interval or type(targetCid) ~= 'string' then return false end
-    if rent < 1 or rent > 1000000 or interval < 1 or interval > 168 then return false end
+    if rent < 1 or rent > 1000000 or not IsValidRentInterval(interval) then return false end
     if contract and (contract < 1 or contract > 104) then contract = nil end
 
     local property = MySQL.single.await('SELECT id, property_name, owner, building, tenant FROM properties WHERE id = ?', {propertyId})

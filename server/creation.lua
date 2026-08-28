@@ -71,7 +71,7 @@ lib.callback.register('qbx_properties:callback:createProperty', function(source,
     if not price or price < sharedConfig.market.minPrice or price > sharedConfig.market.maxPrice then return false end
 
     local rentInterval = data.rentInterval and ToId(data.rentInterval) or nil
-    if rentInterval and (rentInterval < 1 or rentInterval > 24) then return false end
+    if rentInterval and not IsValidRentInterval(rentInterval) then return false end
 
     local entrance = toPoint(data.entrance)
     if not entrance then return false end
@@ -229,7 +229,12 @@ function PropertyImageUrls(raw)
 
     local urls = {}
     for i = 1, #decoded do
-        urls[i] = type(decoded[i]) == 'table' and decoded[i].url or decoded[i]
+        local entry = decoded[i]
+        if type(entry) == 'table' then
+            urls[i] = entry.url or (entry.file and ('nui://%s/screenshots/%s'):format(cache.resource, entry.file)) or ''
+        else
+            urls[i] = entry
+        end
     end
     return urls
 end
@@ -281,6 +286,7 @@ lib.callback.register('qbx_properties:callback:getPropertyDetails', function(sou
         description = property.description,
         hasGarden = property.garden_zone ~= nil,
         hasGarage = property.garage ~= nil,
+        hasDoorcam = property.doorcam ~= nil,
         wallColor = property.wall_color,
         utilities = {
             paidUntil = property.paidUntil,
@@ -314,7 +320,7 @@ lib.callback.register('qbx_properties:callback:updateProperty', function(source,
 
     local size = IsValidPropertySize(data.size) and data.size or sharedConfig.defaultPropertySize
     local rentInterval = data.rentInterval and ToId(data.rentInterval) or nil
-    if rentInterval and (rentInterval < 1 or rentInterval > 24) then return false end
+    if rentInterval and not IsValidRentInterval(rentInterval) then return false end
 
     local description = type(data.description) == 'string' and data.description:sub(1, 500) or nil
 
@@ -478,17 +484,210 @@ local function responseField(result, path)
     return type(value) == 'string' and value or nil
 end
 
-lib.callback.register('qbx_properties:callback:addPropertyImage', function(source, propertyId)
+---@param source integer whose screen is captured
+---@param filename string without extension, [%w_-] only
+---@return table? entry image entry for the images column, nil on failure
+---@return string? err
+local function capturePropertyPhoto(source, filename)
+    if GetResourceState('screencapture') ~= 'started' then
+        return nil, 'The screencapture resource is not running.'
+    end
+
+    local provider = imageProvider()
+
+    if provider then
+        local result
+
+        exports.screencapture:remoteUpload(source, provider.url, {
+            encoding = 'webp',
+            headers = { Authorization = config.imageUpload.apiKey },
+            formField = provider.field or 'file',
+            filename = filename,
+        }, function(responseData)
+            result = responseData or false
+        end, 'blob')
+
+        local ok = pcall(function()
+            lib.waitFor(function()
+                if result ~= nil then return true end
+            end, 'upload timed out', 15000)
+        end)
+
+        local url = ok and type(result) == 'table' and responseField(result, provider.responsePath or 'url') or nil
+        if not url then return nil, 'The upload failed.' end
+
+        return { url = url, path = provider.storagePath and responseField(result, provider.storagePath) or nil }
+    end
+
+    local captured
+    local started = pcall(function()
+        exports.screencapture:serverCapture(source, { encoding = 'webp', quality = 0.8 }, function(data)
+            captured = data or false
+        end, 'base64')
+    end)
+    if not started then return nil, 'screencapture is missing the serverCapture export.' end
+
+    local waited = pcall(function()
+        lib.waitFor(function()
+            if captured ~= nil then return true end
+        end, 'capture timed out', 15000)
+    end)
+    if not waited or type(captured) ~= 'string' then return nil, 'The screenshot failed.' end
+    if #captured > 2000000 then return nil, 'The screenshot is too large.' end
+
+    local written = RequestShotOp and RequestShotOp('qbx_properties:internal:shotWrite', filename, captured)
+    if not written or not written.ok then
+        return nil, written and written.error or 'Could not save the screenshot.'
+    end
+
+    return { file = written.file }
+end
+
+---@param entry table decoded image entry
+local function deleteLocalImage(entry)
+    if type(entry) == 'table' and entry.file and RequestShotOp then
+        RequestShotOp('qbx_properties:internal:shotDelete', entry.file)
+    end
+end
+
+local tourSources = {}
+local tourHiddenDoors = nil
+
+local function spritesConfigured()
+    return sharedConfig.housePhotos and sharedConfig.housePhotos.hideDoorSprites
+        and GetResourceState('ox_doorlock') == 'started'
+end
+
+local function hideTourDoorSprites()
+    if not spritesConfigured() or tourHiddenDoors then return end
+    tourHiddenDoors = {}
+
+    CreateThread(function()
+        local rows = MySQL.query.await('SELECT id, data FROM ox_doorlock WHERE name LIKE ?', {GetDoorPrefix():gsub('[%%_\\]', '\\%0') .. '%'}) or {}
+
+        for i = 1, #rows do
+            local ok, data = pcall(json.decode, rows[i].data)
+            if ok and type(data) == 'table' and not data.hideUi then
+                tourHiddenDoors[#tourHiddenDoors + 1] = rows[i].id
+                pcall(function() exports.ox_doorlock:editDoor(rows[i].id, { hideUi = true }) end)
+                if i % 100 == 0 then Wait(0) end
+            end
+        end
+    end)
+end
+
+local function restoreTourDoorSprites()
+    if not tourHiddenDoors then return end
+    local hidden = tourHiddenDoors
+    tourHiddenDoors = nil
+
+    CreateThread(function()
+        for i = 1, #hidden do
+            pcall(function() exports.ox_doorlock:editDoor(hidden[i], { hideUi = false }) end)
+            if i % 100 == 0 then Wait(0) end
+        end
+    end)
+end
+
+local function endPhotoTour(source)
+    if not tourSources[source] then return end
+    tourSources[source] = nil
+    if not next(tourSources) then restoreTourDoorSprites() end
+end
+
+RegisterNetEvent('qbx_properties:server:photoTourEnd', function()
+    endPhotoTour(source --[[@as number]])
+end)
+
+AddEventHandler('playerDropped', function()
+    endPhotoTour(source --[[@as number]])
+end)
+
+AddEventHandler('onResourceStop', function(resource)
+    if resource ~= cache.resource or not tourHiddenDoors then return end
+
+    for i = 1, #tourHiddenDoors do
+        pcall(function() exports.ox_doorlock:editDoor(tourHiddenDoors[i], { hideUi = false }) end)
+    end
+    tourHiddenDoors = nil
+end)
+
+lib.callback.register('qbx_properties:callback:getPhotoTour', function(source, mode)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player or not IsRealtor(player.PlayerData.job) then return end
+
+    local rows = MySQL.query.await([[
+        SELECT id, property_name, coords, door_data, images FROM properties
+        WHERE building IS NULL ORDER BY property_name
+    ]]) or {}
+
+    local tour = {}
+    for i = 1, #rows do
+        local hasImages = rows[i].images ~= nil and rows[i].images ~= '[]'
+        if mode == 'all' or not hasImages then
+            local coords = json.decode(rows[i].coords)
+            local inside = { x = coords.x, y = coords.y, z = coords.z }
+
+            local door
+            if rows[i].door_data then
+                local ok, doors = pcall(json.decode, rows[i].door_data)
+                local leaf = ok and type(doors) == 'table' and doors[1] and doors[1].leaves and doors[1].leaves[1]
+                if leaf and leaf.coords then door = { x = leaf.coords.x, y = leaf.coords.y, z = leaf.coords.z } end
+            end
+
+            tour[#tour + 1] = { id = rows[i].id, name = rows[i].property_name, door = door or inside, inside = inside }
+        end
+    end
+
+    if #tour > 0 then
+        tourSources[source] = true
+        hideTourDoorSprites()
+    end
+
+    return tour
+end)
+
+lib.callback.register('qbx_properties:callback:savePropertyPhoto', function(source, propertyId)
     local player = exports.qbx_core:GetPlayer(source)
     propertyId = ToId(propertyId)
     if not player or not propertyId or not IsRealtor(player.PlayerData.job) then return false end
 
-    local provider = imageProvider()
-    if not provider then return false, 'Image uploads are not configured.' end
+    local property = MySQL.single.await('SELECT id, property_name, images FROM properties WHERE id = ? AND building IS NULL', {propertyId})
+    if not property then return false end
 
-    if GetResourceState('screencapture') ~= 'started' then
-        return false, 'The screencapture resource is not running.'
+    local images = property.images and json.decode(property.images) or {}
+    if #images >= (config.imageUpload.maxImages or 5) then return false, 'This property already has the maximum number of photos.' end
+
+    local entry, err = capturePropertyPhoto(source, string.format('house_%d_%d', propertyId, os.time()))
+    if not entry then return false, err end
+
+    table.insert(images, 1, entry)
+    MySQL.update.await('UPDATE properties SET images = ? WHERE id = ?', {json.encode(images), propertyId})
+
+    LogAction(source, 'qbx_properties:server:savePropertyPhoto', string.format('%s photographed %s (%s)', player.PlayerData.citizenid, property.property_name, entry.url and 'cdn' or 'local'))
+
+    return true, entry.url and 'cdn' or 'local'
+end)
+
+lib.addCommand('housephotos', {
+    help = 'Tour every house missing a photo and frame its main picture',
+    params = {
+        { name = 'mode', help = "'all' also revisits houses that already have photos", type = 'string', optional = true },
+    },
+}, function(source, args)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player or not IsRealtor(player.PlayerData.job) then
+        exports.qbx_core:Notify(source, 'Only realtors can run the photo tour.', 'error')
+        return
     end
+
+    TriggerClientEvent('qbx_properties:client:housePhotoTour', source, args.mode)
+end)
+
+lib.callback.register('qbx_properties:callback:addPropertyImage', function(source, propertyId)
+    local player = exports.qbx_core:GetPlayer(source)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId or not IsRealtor(player.PlayerData.job) then return false end
 
     local property = MySQL.single.await('SELECT id, property_name, images FROM properties WHERE id = ?', {propertyId})
     if not property then return false end
@@ -496,28 +695,10 @@ lib.callback.register('qbx_properties:callback:addPropertyImage', function(sourc
     local images = property.images and json.decode(property.images) or {}
     if #images >= (config.imageUpload.maxImages or 5) then return false, 'This property already has the maximum number of photos.' end
 
-    local result
+    local entry, err = capturePropertyPhoto(source, string.format('property_%d_%d', propertyId, os.time()))
+    if not entry then return false, err end
 
-    exports.screencapture:remoteUpload(source, provider.url, {
-        encoding = 'webp',
-        headers = { Authorization = config.imageUpload.apiKey },
-        formField = provider.field or 'file',
-        filename = string.format('property_%d_%d', propertyId, os.time()),
-    }, function(responseData)
-        result = responseData or false
-    end, 'blob')
-
-    local ok = pcall(function()
-        lib.waitFor(function()
-            if result ~= nil then return true end
-        end, 'upload timed out', 15000)
-    end)
-
-    local url = ok and type(result) == 'table' and responseField(result, provider.responsePath or 'url') or nil
-    if not url then return false, 'The upload failed.' end
-
-    local storagePath = provider.storagePath and responseField(result, provider.storagePath) or nil
-    images[#images + 1] = { url = url, path = storagePath }
+    images[#images + 1] = entry
     MySQL.update.await('UPDATE properties SET images = ? WHERE id = ?', {json.encode(images), propertyId})
 
     LogAction(source, 'qbx_properties:server:addPropertyImage', string.format('%s added a photo to %s', player.PlayerData.citizenid, property.property_name))
@@ -544,6 +725,7 @@ lib.callback.register('qbx_properties:callback:removePropertyImage', function(so
             if status ~= 200 then lib.print.warn(('CDN delete returned %s for %s'):format(status, removed.path)) end
         end, 'DELETE', '', { Authorization = config.imageUpload.apiKey })
     end
+    deleteLocalImage(removed)
 
     table.remove(images, index)
     MySQL.update.await('UPDATE properties SET images = ? WHERE id = ?', {#images > 0 and json.encode(images) or nil, propertyId})
@@ -554,17 +736,54 @@ end)
 ---@param images table decoded images column
 function DeletePropertyImagesRemote(images)
     local provider = imageProvider()
-    if not provider or not provider.deleteUrl then return end
 
     for i = 1, #images do
         local image = images[i]
-        if type(image) == 'table' and image.path then
+        if type(image) == 'table' and image.path and provider and provider.deleteUrl then
             PerformHttpRequest(provider.deleteUrl:format(urlEncode(image.path)), function(status)
                 if status ~= 200 then lib.print.warn(('CDN delete returned %s for %s'):format(status, image.path)) end
             end, 'DELETE', '', { Authorization = config.imageUpload.apiKey })
         end
+        deleteLocalImage(image)
     end
 end
+
+lib.callback.register('qbx_properties:callback:setDoorcam', function(source, propertyId, point)
+    local player = exports.qbx_core:GetPlayer(source)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId or not IsRealtor(player.PlayerData.job) then return false end
+    if type(point) ~= 'table' or type(point.x) ~= 'number' or type(point.y) ~= 'number' or type(point.z) ~= 'number' then return false end
+
+    local property = MySQL.single.await('SELECT id, property_name, coords FROM properties WHERE id = ? AND building IS NULL', {propertyId})
+    if not property then return false end
+
+    local coords = json.decode(property.coords)
+    if #(vec3(coords.x, coords.y, coords.z) - vec3(point.x, point.y, point.z)) > 100.0 then return false end
+
+    local payload = {
+        x = point.x, y = point.y, z = point.z,
+        w = (tonumber(point.w) or 0.0) % 360.0,
+        p = math.max(-89.0, math.min(89.0, tonumber(point.p) or 0.0)),
+    }
+    MySQL.update.await('UPDATE properties SET doorcam = ? WHERE id = ?', {json.encode(payload), propertyId})
+
+    LogAction(source, 'qbx_properties:server:setDoorcam', string.format('%s placed the doorcam of %s', player.PlayerData.citizenid, property.property_name))
+    return true
+end)
+
+lib.callback.register('qbx_properties:callback:clearDoorcam', function(source, propertyId)
+    local player = exports.qbx_core:GetPlayer(source)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId or not IsRealtor(player.PlayerData.job) then return false end
+
+    local property = MySQL.single.await('SELECT id, property_name FROM properties WHERE id = ? AND building IS NULL', {propertyId})
+    if not property then return false end
+
+    MySQL.update.await('UPDATE properties SET doorcam = NULL WHERE id = ?', {propertyId})
+
+    LogAction(source, 'qbx_properties:server:clearDoorcam', string.format('%s cleared the doorcam of %s', player.PlayerData.citizenid, property.property_name))
+    return true
+end)
 
 lib.callback.register('qbx_properties:callback:recaptureInterior', function(source, propertyId, point)
     local player = exports.qbx_core:GetPlayer(source)

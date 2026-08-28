@@ -10,6 +10,19 @@
   let leaseInterval = $state(24)
   let leaseContract = $state(0)
   let payPeriods = $state(1)
+  let layoutName = $state('')
+  let importCode = $state('')
+  let importPreview = $state(null)
+  let armedLayout = $state(null)
+  let jobName = $state('')
+  let jobGrade = $state(0)
+  let jobModal = $state(null)
+  let doorcamIndex = $state(1)
+
+  $effect(() => {
+    const count = tablet.doorcam?.cams?.length ?? 0
+    if (doorcamIndex > count) doorcamIndex = 1
+  })
 
   const rentInfo = $derived(tablet.rent)
 
@@ -18,11 +31,12 @@
 
   const tabs = $derived([
     ['access', 'Housing Management'],
-    ...(tablet.utilities ? [['utilities', 'Utilities']] : []),
+    ...(tablet.utilities || tablet.maintenance ? [['utilities', 'Utilities']] : []),
     ...(tablet.rent ? [['rent', 'Rent']] : []),
     ...(tablet.doorcam ? [['doorcam', 'Doorcam']] : []),
+    ...(tablet.layouts ? [['layouts', 'Layouts']] : []),
     ...(tablet.upgrades?.length ? [['upgrades', 'Upgrades']] : []),
-    ...(tablet.wallColors ? [['walls', 'Wall colour']] : []),
+    ...(tablet.wallColors || tablet.timecycle ? [['walls', 'Interior']] : []),
   ])
 
   const permKeys = $derived([
@@ -76,6 +90,7 @@
     keyholders: '<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m3 3L22 7l-3-3"/>',
     security: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     garage: '<path d="M3 21V8l9-5 9 5v13"/><path d="M7 21v-8h10v8"/><path d="M7 17h10"/>',
+    timecycle: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m12.73-12.73l1.41-1.41"/>',
     star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
   }
 
@@ -105,6 +120,80 @@
     const days = Math.max(0, Math.ceil((util.paidUntil - Date.now() / 1000) / 86400))
     return `Due in ${days} day${days === 1 ? '' : 's'} · paid until ${date}`
   }
+
+  function maintenanceLine(m) {
+    if (!m.paidUntil) return 'The first cycle starts shortly'
+    const date = new Date(m.paidUntil * 1000).toLocaleDateString()
+    if (m.overdue) return m.seizeDays > 0 ? `Overdue since ${date} — seized after ${m.seizeDays} days unpaid` : `Overdue since ${date}`
+    const days = Math.max(0, Math.ceil((m.paidUntil - Date.now() / 1000) / 86400))
+    return `Due in ${days} day${days === 1 ? '' : 's'} · every ${m.intervalDays} days`
+  }
+
+  function saveLayout() {
+    if (!layoutName.trim()) return
+    fetchNui('tablet:saveLayout', { name: layoutName.trim() })
+    layoutName = ''
+  }
+
+  function applyLayout(layout) {
+    if (armedLayout !== layout.id) {
+      armedLayout = layout.id
+      setTimeout(() => { if (armedLayout === layout.id) armedLayout = null }, 4000)
+      return
+    }
+    armedLayout = null
+    fetchNui('tablet:applyLayout', { id: layout.id })
+  }
+
+  async function checkImport() {
+    const code = importCode.trim().toUpperCase()
+    if (!code) return
+    importPreview = (await fetchNui('tablet:previewLayoutCode', { code })) ?? false
+  }
+
+  function applyImport() {
+    const code = importCode.trim().toUpperCase()
+    if (!code) return
+    fetchNui('tablet:applyLayout', { code })
+    importCode = ''
+    importPreview = null
+  }
+
+  function addJob() {
+    const job = jobName.trim().toLowerCase()
+    if (!job) return
+    fetchNui('tablet:setJobAccess', { job, grade: jobGrade, door: true, stash: false, furniture: false, garage: false })
+    jobModal = job
+    jobName = ''
+    jobGrade = 0
+  }
+
+  function toggleJob(entry, key) {
+    fetchNui('tablet:setJobAccess', { ...entry, [key]: !entry[key] })
+  }
+
+  function removeJob(entry) {
+    if (jobModal === entry.job) jobModal = null
+    fetchNui('tablet:setJobAccess', { job: entry.job, grade: entry.grade, door: false, stash: false, furniture: false, garage: false })
+  }
+
+  const jobModalEntry = $derived(jobModal ? (tablet.accessJobs ?? []).find((entry) => entry.job === jobModal) ?? null : null)
+
+  const JOB_PERMS = [
+    ['door', 'Door', 'Unlock and lock the front door'],
+    ['stash', 'Stash', 'Open every stash in the property'],
+    ['furniture', 'Furniture', 'Place, move and remove furniture'],
+    ['garage', 'Garage', 'Store and retrieve vehicles'],
+  ]
+
+  function jobSummary(entry) {
+    const on = JOB_PERMS.filter(([key]) => entry[key]).map(([, label]) => label)
+    return on.length ? on.join(' · ') : 'No permissions'
+  }
+
+  const seenLine = (ts) => (ts ? `seen ${new Date(ts * 1000).toLocaleDateString()}` : null)
+
+  const intervalLabel = (hours) => tablet.rentIntervals.find((i) => i.value === hours)?.label ?? `${hours}h`
 </script>
 
 <div class="wrap">
@@ -150,7 +239,7 @@
               <span class="entry-main">
                 <span class="entry-id">
                   <span class="entry-name">{entry.name}</span>
-                  <span class="entry-cid">{entry.citizenid}</span>
+                  <span class="entry-cid">{entry.citizenid}{seenLine(entry.lastActive) ? ` · ${seenLine(entry.lastActive)}` : ''}</span>
                 </span>
                 <span class="entry-summary" class:none={summary(entry) === 'No permissions'}>{summary(entry)}</span>
               </span>
@@ -162,10 +251,55 @@
           {/each}
 
           <span class="hint">Granting starts with door access only — the pencil opens the full permission list.</span>
+
+          {#if tablet.accessJobs && tablet.isAccessOwner}
+            <div class="section-title">Job access</div>
+            <div class="job-bar">
+              <input class="input grow" placeholder="Job name" bind:value={jobName} />
+              <input class="input mono grade-input" type="number" min="0" max="20" title="Minimum grade" bind:value={jobGrade} />
+              <button class="btn" disabled={!jobName.trim()} onclick={addJob}>Add</button>
+            </div>
+
+            {#each tablet.accessJobs as entry (entry.job)}
+              <div class="entry">
+                <span class="entry-main">
+                  <span class="entry-id">
+                    <span class="entry-name">{entry.job}</span>
+                    <span class="entry-cid">grade {entry.grade}+</span>
+                  </span>
+                  <span class="entry-summary" class:none={jobSummary(entry) === 'No permissions'}>{jobSummary(entry)}</span>
+                </span>
+                <button class="pencil" title="Edit permissions" onclick={() => (jobModal = entry.job)}>✎</button>
+                <button class="mini danger" onclick={() => removeJob(entry)}>Revoke</button>
+              </div>
+            {:else}
+              <div class="empty">No jobs have access</div>
+            {/each}
+            <span class="hint">Everyone on the job at or above the grade gets these permissions while on the server.</span>
+          {/if}
+
+          {#if tablet.saleAuth}
+            <div class="section-title">Realtor sales</div>
+            <div class="entry">
+              <span class="entry-main">
+                <span class="entry-name">Authorise realtors to sell</span>
+                <span class="entry-summary">Lets realtors list this property on the market — the sale proceeds still come to you.</span>
+              </span>
+              <button
+                class="pill standalone"
+                class:on={tablet.saleAuth.authorized}
+                aria-label="Toggle realtor sales"
+                onclick={() => fetchNui('tablet:setSaleAuth', { enabled: !tablet.saleAuth.authorized })}
+              >
+                <span class="knob"></span>
+              </button>
+            </div>
+          {/if}
         </div>
       </div>
-    {:else if tab === 'utilities' && util}
+    {:else if tab === 'utilities'}
       <div class="scroll body">
+        {#if util}
         <div class="stat-grid">
           <div class="stat-card">
             <span class="stat-label">POWER DRAW</span>
@@ -246,6 +380,31 @@
             {/each}
           </div>
         {/if}
+        {/if}
+
+        {#if tablet.maintenance}
+          {@const maint = tablet.maintenance}
+          <div class="section-title">Maintenance</div>
+          <div class="bill-card">
+            <span class="bill-info">
+              <span class="bill-title">Ownership fee</span>
+              <span class="bill-sub" class:danger={maint.overdue}>{maintenanceLine(maint)}</span>
+            </span>
+            <button class="btn" class:subtle={!maint.overdue} onclick={() => fetchNui('tablet:payMaintenance')}>Pay {formatMoney(maint.fee)}</button>
+          </div>
+
+          {#if maint.history?.length}
+            <div class="draws">
+              {#each maint.history as entry, i (i)}
+                <div class="draw-row">
+                  <span class="draw-name">{entry.name ?? entry.payer}</span>
+                  <span class="pay-date">{dateFmt(entry.paidAt)}</span>
+                  <span class="draw-watts">{formatMoney(entry.amount)}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {/if}
       </div>
     {:else if tab === 'rent' && rentInfo}
       <div class="scroll body">
@@ -255,7 +414,7 @@
               <span class="stat-label">RENT</span>
               <span class="stat-line">
                 <span class="stat-big">{formatMoney(rentInfo.rent)}</span>
-                <span class="stat-unit">/ {rentInfo.interval}h</span>
+                <span class="stat-unit">/ {intervalLabel(rentInfo.interval)}</span>
               </span>
               <span class="fine">{rentInfo.role === 'owner' ? `Paid to you by ${rentInfo.tenant}` : `Paid to ${rentInfo.ownerName}`}</span>
             </div>
@@ -324,8 +483,12 @@
               </span>
             </span>
             <span class="lease-field">
-              <span class="mini-label">Every (hours)</span>
-              <input class="input mono" type="number" min="1" max="168" bind:value={leaseInterval} />
+              <span class="mini-label">Billing period</span>
+              <select class="select" bind:value={leaseInterval}>
+                {#each tablet.rentIntervals as interval (interval.value)}
+                  <option value={interval.value}>{interval.label}</option>
+                {/each}
+              </select>
             </span>
             <span class="lease-field">
               <span class="mini-label">Contract (0 = open)</span>
@@ -333,7 +496,7 @@
             </span>
             <button class="btn lease-btn" disabled={!leaseTarget} onclick={rentOut}>Offer lease</button>
           </div>
-          <span class="hint">A contract of 12 with 24h payments runs the lease for 12 days, then it ends on its own.</span>
+          <span class="hint">A contract of 12 runs the lease for 12 billing periods, then it ends on its own.</span>
         {/if}
 
         {#if rentInfo.history?.length}
@@ -355,11 +518,21 @@
           <span class="section-title">At the door</span>
           <span class="doorcam-actions">
             <button class="btn subtle" onclick={() => fetchNui('tablet:getDoorcam')}>Refresh</button>
-            {#if tablet.doorcam.cam}
-              <button class="btn" onclick={() => fetchNui('tablet:showDoorcam')}>Show doorcam</button>
+            {#if tablet.doorcam.cams?.length}
+              <button class="btn" onclick={() => fetchNui('tablet:showDoorcam', { index: doorcamIndex })}>Show doorcam</button>
             {/if}
           </span>
         </div>
+
+        {#if (tablet.doorcam.cams?.length ?? 0) > 1}
+          <div class="nearby">
+            {#each tablet.doorcam.cams as cam, i (i)}
+              <button class="chip" class:chip-active={doorcamIndex === i + 1} onclick={() => (doorcamIndex = i + 1)}>
+                {cam.custom ? 'Doorcam' : `Door ${i + (tablet.doorcam.cams[0]?.custom ? 0 : 1)}`}
+              </button>
+            {/each}
+          </div>
+        {/if}
 
         {#if tablet.doorcam.ringers?.length}
           {#each tablet.doorcam.ringers as ringer (ringer.citizenid)}
@@ -380,6 +553,50 @@
           </span>
         {:else}
           <div class="empty">Nobody is at the door</div>
+        {/if}
+      </div>
+    {:else if tab === 'layouts' && tablet.layouts}
+      <div class="scroll body">
+        <div class="doorcam-head">
+          <span class="section-title">Saved layouts ({tablet.layouts.layouts.length}/{tablet.layouts.max})</span>
+        </div>
+        <span class="hint">A layout is a snapshot of the furnishing. Applying one replaces the current furniture without refunds and charges the layout's furniture cost.</span>
+
+        <div class="job-bar">
+          <input class="input grow" placeholder="Layout name" maxlength="40" bind:value={layoutName} />
+          <button class="btn" disabled={!layoutName.trim()} onclick={saveLayout}>Save current</button>
+        </div>
+
+        {#each tablet.layouts.layouts as project (project.id)}
+          <div class="entry">
+            <span class="entry-main">
+              <span class="entry-id">
+                <span class="entry-name">{project.name}</span>
+                <span class="entry-cid">{project.shareCode}</span>
+              </span>
+              <span class="entry-summary">{project.items} piece{project.items === 1 ? '' : 's'} · {formatMoney(project.cost)} · by {project.creatorName}</span>
+            </span>
+            <button class="mini" class:armed={armedLayout === project.id} onclick={() => applyLayout(project)}>
+              {armedLayout === project.id ? 'Sure?' : 'Apply'}
+            </button>
+            <button class="mini danger" onclick={() => fetchNui('tablet:deleteLayout', { id: project.id })}>Delete</button>
+          </div>
+        {:else}
+          <div class="empty">No layouts saved yet</div>
+        {/each}
+
+        <div class="section-title">Import by code</div>
+        <div class="job-bar">
+          <input class="input grow mono" placeholder="Share code" maxlength="10" bind:value={importCode} />
+          <button class="btn subtle" disabled={!importCode.trim()} onclick={checkImport}>Check</button>
+          <button class="btn" disabled={!importCode.trim() || !importPreview} onclick={applyImport}>Apply</button>
+        </div>
+        {#if importPreview === false}
+          <span class="hint">No layout matches that code.</span>
+        {:else if importPreview}
+          <span class="hint">{importPreview.name} — {importPreview.items} piece{importPreview.items === 1 ? '' : 's'} for {formatMoney(importPreview.cost)}, by {importPreview.creatorName}</span>
+        {:else}
+          <span class="hint">Codes let friends share their layouts — applying pays for the furniture like a fresh purchase.</span>
         {/if}
       </div>
     {:else if tab === 'upgrades'}
@@ -421,39 +638,100 @@
       </div>
     {:else if tab === 'walls'}
       <div class="scroll body">
-        <div class="walls-head">
-          <span class="section-title">Wall colour</span>
-          <span class="hint">Applies to this interior and is restored whenever you come back.</span>
-        </div>
+        {#if tablet.wallColors}
+          <div class="walls-head">
+            <span class="section-title">Wall colour</span>
+            <span class="hint">Applies to this interior and is restored whenever you come back.</span>
+          </div>
 
-        <div class="swatches">
-          {#each tablet.wallColors ?? [] as swatch (swatch.index)}
-            <button
-              class="swatch"
-              class:active={tablet.wallColor === swatch.index}
-              style="background: #{swatch.hex}"
-              title={swatch.label}
-              aria-label={swatch.label}
-              onclick={() => {
-                tablet.wallColor = swatch.index
-                fetchNui('tablet:setWallColor', { color: swatch.index })
-              }}
-            ></button>
-          {/each}
-        </div>
+          <div class="swatches">
+            {#each tablet.wallColors ?? [] as swatch (swatch.index)}
+              <button
+                class="swatch"
+                class:active={tablet.wallColor === swatch.index}
+                style="background: #{swatch.hex}"
+                title={swatch.label}
+                aria-label={swatch.label}
+                onclick={() => {
+                  tablet.wallColor = swatch.index
+                  fetchNui('tablet:setWallColor', { color: swatch.index })
+                }}
+              ></button>
+            {/each}
+          </div>
 
-        {#if tablet.wallColor !== null}
-          {@const sel = (tablet.wallColors ?? []).find((c) => c.index === tablet.wallColor)}
-          {#if sel}
-            <div class="swatch-bar">
-              <span class="swatch-preview" style="background: #{sel.hex}"></span>
-              <span class="swatch-info">
-                <span class="swatch-label">{sel.label}</span>
-                <span class="swatch-hex">#{sel.hex}</span>
-              </span>
+          {#if tablet.wallColor !== null}
+            {@const sel = (tablet.wallColors ?? []).find((c) => c.index === tablet.wallColor)}
+            {#if sel}
+              <div class="swatch-bar">
+                <span class="swatch-preview" style="background: #{sel.hex}"></span>
+                <span class="swatch-info">
+                  <span class="swatch-label">{sel.label}</span>
+                  <span class="swatch-hex">#{sel.hex}</span>
+                </span>
+              </div>
+            {/if}
+          {/if}
+        {/if}
+
+        {#if tablet.timecycle}
+          <div class="walls-head">
+            <span class="section-title">Lighting</span>
+            <span class="hint">
+              {tablet.timecycle.unlocked
+                ? 'A lighting theme tints the whole interior while anyone is inside.'
+                : 'Buy the lighting upgrade to change the interior theme.'}
+            </span>
+          </div>
+
+          {#if tablet.timecycle.unlocked}
+            <div class="nearby">
+              <button
+                class="chip"
+                class:chip-active={!tablet.timecycle.current}
+                onclick={() => fetchNui('tablet:setTimecycle', {})}
+              >Default</button>
+              {#each tablet.timecycles as cycle (cycle.value)}
+                <button
+                  class="chip"
+                  class:chip-active={tablet.timecycle.current === cycle.value}
+                  onclick={() => fetchNui('tablet:setTimecycle', { value: cycle.value })}
+                >{cycle.label}</button>
+              {/each}
             </div>
           {/if}
         {/if}
+      </div>
+    {/if}
+
+    {#if jobModalEntry}
+      <div class="overlay">
+        <div class="modal">
+          <div class="modal-head">
+            <span class="modal-id">
+              <span class="modal-title">Job permissions</span>
+              <span class="modal-sub">{jobModalEntry.job} · grade {jobModalEntry.grade}+</span>
+            </span>
+            <button class="pencil" onclick={() => (jobModal = null)}>×</button>
+          </div>
+          <div class="modal-body">
+            {#each JOB_PERMS as [key, label, hint] (key)}
+              <button class="perm-row" onclick={() => toggleJob(jobModalEntry, key)}>
+                <span class="perm-main">
+                  <span class="perm-label">{label}</span>
+                  <span class="perm-hint">{hint}</span>
+                </span>
+                <span class="pill" class:on={jobModalEntry[key]}>
+                  <span class="knob"></span>
+                </span>
+              </button>
+            {/each}
+          </div>
+          <div class="modal-foot">
+            <span class="hint">Saved as you toggle</span>
+            <button class="btn" onclick={() => (jobModal = null)}>Done</button>
+          </div>
+        </div>
       </div>
     {/if}
 
@@ -1332,5 +1610,32 @@
   .wide {
     width: 100%;
     flex: none;
+  }
+
+  .job-bar {
+    display: flex;
+    gap: 8px;
+    flex: none;
+  }
+
+  .grade-input {
+    width: 64px;
+    flex: none;
+  }
+
+  .chip.chip-active {
+    border-color: var(--blue);
+    color: #fff;
+    background: var(--accent-15);
+  }
+
+  .pill.standalone {
+    border: none;
+    cursor: pointer;
+  }
+
+  .mini.armed {
+    background: var(--yellow);
+    color: #000;
   }
 </style>
