@@ -57,10 +57,11 @@ local function jobAccessRow(citizenId, property, permission)
     local job = player and player.PlayerData.job
     if not job then return end
 
-    return MySQL.single.await(
+    local ok, row = pcall(MySQL.single.await,
         'SELECT door, stash, furniture, garage FROM properties_job_access WHERE property_id = ? AND job_name = ? AND min_grade <= ?',
         {property.id, job.name, job.grade.level}
     )
+    return ok and row or nil
 end
 
 ---@param citizenId string

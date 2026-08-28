@@ -7,10 +7,13 @@ local TRASH_SUFFIX <const> = '_trash_(%d+)$'
 ---@param decorationId integer
 ---@return table? row
 local function getDecoration(property, decorationId)
+    local ok, row
     if property.building then
-        return MySQL.single.await('SELECT id, model, health, lock_pin, lock_setter, stash_slot FROM properties_apartment_decorations WHERE id = ? AND citizenid = ?', {decorationId, property.owner})
+        ok, row = pcall(MySQL.single.await, 'SELECT id, model, health, lock_pin, lock_setter, stash_slot FROM properties_apartment_decorations WHERE id = ? AND citizenid = ?', {decorationId, property.owner})
+    else
+        ok, row = pcall(MySQL.single.await, 'SELECT id, model, health, lock_pin, lock_setter, stash_slot FROM properties_decorations WHERE id = ? AND property_id = ?', {decorationId, property.id})
     end
-    return MySQL.single.await('SELECT id, model, health, lock_pin, lock_setter, stash_slot FROM properties_decorations WHERE id = ? AND property_id = ?', {decorationId, property.id})
+    return ok and row or nil
 end
 
 ---@param playerSource integer
@@ -203,14 +206,14 @@ function CheckStashPin(property, stashIndex, citizenId, pin)
     if not sharedConfig.storagePins or stashIndex == 0 then return true end
     if IsBreached and IsBreached(property.id) then return true end
 
-    local decoration
+    local ok, decoration
     if property.building then
-        decoration = MySQL.single.await('SELECT lock_pin, lock_setter FROM properties_apartment_decorations WHERE citizenid = ? AND stash_slot = ? AND layout = ?', {property.owner, stashIndex, GetBuildingLayout(property.building)})
+        ok, decoration = pcall(MySQL.single.await, 'SELECT lock_pin, lock_setter FROM properties_apartment_decorations WHERE citizenid = ? AND stash_slot = ? AND layout = ?', {property.owner, stashIndex, GetBuildingLayout(property.building)})
     else
-        decoration = MySQL.single.await('SELECT lock_pin, lock_setter FROM properties_decorations WHERE property_id = ? AND stash_slot = ?', {property.id, stashIndex})
+        ok, decoration = pcall(MySQL.single.await, 'SELECT lock_pin, lock_setter FROM properties_decorations WHERE property_id = ? AND stash_slot = ?', {property.id, stashIndex})
     end
 
-    if not decoration or not decoration.lock_pin then return true end
+    if not ok or not decoration or not decoration.lock_pin then return true end
     if decoration.lock_setter == citizenId then return true end
 
     return pin ~= nil and tostring(pin) == decoration.lock_pin
@@ -267,7 +270,7 @@ function BreakPoweredFurniture(propertyId)
 
     if #broken == 0 then return end
 
-    MySQL.update.await(('UPDATE properties_decorations SET health = 0 WHERE id IN (%s)'):format(table.concat(broken, ',')))
+    if not pcall(MySQL.update.await, ('UPDATE properties_decorations SET health = 0 WHERE id IN (%s)'):format(table.concat(broken, ','))) then return end
 
     local updates = {}
     for i = 1, #broken do updates[broken[i]] = 0 end

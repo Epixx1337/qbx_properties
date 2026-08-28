@@ -93,17 +93,34 @@ function GetBuildingLayout(buildingKey)
     return building and building.layout or buildingKey
 end
 
+local DECORATION_COLUMNS <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, (`lock_pin` IS NOT NULL) AS locked'
+local DECORATION_COLUMNS_LEGACY <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`'
+
+---@param query string with %s for the column list
+---@param params table
+---@return table? rows nil when even the legacy columns fail
+local function queryDecorations(query, params)
+    local ok, rows = pcall(MySQL.query.await, query:format(DECORATION_COLUMNS), params)
+    if ok and rows then return rows end
+
+    ok, rows = pcall(MySQL.query.await, query:format(DECORATION_COLUMNS_LEGACY), params)
+    if ok and rows then
+        lib.print.error('the decoration tables are missing migrated columns, restart the resource so the migrator adds them or run schema.sql by hand')
+        return rows
+    end
+end
+
 ---@param property table
 ---@return table
 function GetPropertyDecorations(property)
     if property.building then
-        local ok, rows = pcall(MySQL.query.await, 'SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, (`lock_pin` IS NOT NULL) AS locked FROM `properties_apartment_decorations` WHERE `citizenid` = ? AND `layout` = ? ORDER BY `id`', {property.owner, GetBuildingLayout(property.building)})
-        if ok and rows then return rows end
+        local rows = queryDecorations('SELECT %s FROM `properties_apartment_decorations` WHERE `citizenid` = ? AND `layout` = ? ORDER BY `id`', {property.owner, GetBuildingLayout(property.building)})
+        if rows then return rows end
 
         lib.print.error('properties_apartment_decorations is missing the layout column, restart the resource so the migrator adds it or run schema.sql by hand')
-        return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, (`lock_pin` IS NOT NULL) AS locked FROM `properties_apartment_decorations` WHERE `citizenid` = ? ORDER BY `id`', {property.owner}) or {}
+        return queryDecorations('SELECT %s FROM `properties_apartment_decorations` WHERE `citizenid` = ? ORDER BY `id`', {property.owner}) or {}
     end
-    return MySQL.query.await('SELECT `id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, (`lock_pin` IS NOT NULL) AS locked FROM `properties_decorations` WHERE `property_id` = ? ORDER BY `id`', {property.id})
+    return queryDecorations('SELECT %s FROM `properties_decorations` WHERE `property_id` = ? ORDER BY `id`', {property.id}) or {}
 end
 
 ---@param property table needs id, property_name, owner, building, type, stash_options
