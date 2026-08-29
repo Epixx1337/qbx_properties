@@ -16,6 +16,7 @@ function RefreshCustomGarages()
     TriggerClientEvent('qbx_properties:client:refreshGarages', -1)
 end
 
+
 lib.callback.register('qbx_properties:callback:getGarages', function(source)
     local result = {}
     for _, garage in pairs(customGarages) do
@@ -31,10 +32,6 @@ lib.callback.register('qbx_properties:callback:getGarages', function(source)
     end
     return result
 end)
-
-local garages = sharedConfig.apartmentGarages
-
-if not garages or #garages == 0 then return end
 
 ---@param garage table
 ---@return string? query, string[] values
@@ -69,7 +66,10 @@ local function residentCheck(query, values)
     end
 end
 
-CreateThread(function()
+function RegisterApartmentGarages()
+    local garages = sharedConfig.apartmentGarages
+    if not garages or #garages == 0 then return end
+
     for i = 1, #garages do
         local garage = garages[i]
         local query, values = buildResidencyQuery(garage)
@@ -94,12 +94,17 @@ CreateThread(function()
                 }
             end
 
-            exports.qbx_garages:RegisterGarage(garage.name, {
-                label = garage.label,
-                vehicleType = 'car',
-                accessPoints = accessPoints,
-                canAccess = residentCheck(query, values),
-            })
+            local ok, err = pcall(function()
+                exports.qbx_garages:RegisterGarage(garage.name, {
+                    label = garage.label,
+                    vehicleType = 'car',
+                    accessPoints = accessPoints,
+                    canAccess = residentCheck(query, values),
+                })
+            end)
+            if not ok then
+                lib.print.error(('could not register apartment garage %s: %s'):format(garage.name, err))
+            end
         end
     end
-end)
+end

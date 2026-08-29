@@ -1116,13 +1116,41 @@ function GetPropertyOccupants(propertyId)
 end
 
 local function registerGarages()
-    local properties = MySQL.query.await('SELECT id, property_name, garage FROM properties WHERE owner IS NOT NULL AND garage IS NOT NULL')
-    if not properties then return end
-    for i = 1, #properties do
-        local property = properties[i]
-        registerGarage(property.id, property.property_name, json.decode(property.garage))
+    if not UsesCustomGarages then
+        local deadline = GetGameTimer() + 30000
+        while GetResourceState('qbx_garages') ~= 'started' and GetGameTimer() < deadline do Wait(500) end
+
+        if GetResourceState('qbx_garages') ~= 'started' then
+            lib.print.error('qbx_garages is not running, property garages are not registered')
+            return
+        end
     end
+
+    local properties = MySQL.query.await('SELECT id, property_name, garage FROM properties WHERE owner IS NOT NULL AND garage IS NOT NULL')
+    if properties then
+        for i = 1, #properties do
+            local property = properties[i]
+            local ok, err = pcall(function()
+                registerGarage(property.id, property.property_name, json.decode(property.garage))
+            end)
+            if not ok then
+                lib.print.error(('could not register the garage of %s: %s'):format(property.property_name, err))
+            end
+        end
+    end
+
+    if RegisterApartmentGarages then RegisterApartmentGarages() end
 end
+
+AddEventHandler('onResourceStart', function(resource)
+    if resource ~= 'qbx_garages' then return end
+
+    CreateThread(function()
+        AwaitMigration()
+        Wait(1000)
+        registerGarages()
+    end)
+end)
 
 function EvictProperty(propertyId)
     MySQL.update.await('UPDATE properties SET owner = NULL, keyholders = JSON_OBJECT(), wall_color = NULL, sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ?', {propertyId})

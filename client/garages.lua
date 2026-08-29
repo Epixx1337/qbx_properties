@@ -63,11 +63,17 @@ end
 local refreshing = false
 
 local function refreshGarages()
-    if refreshing or not LocalPlayer.state.isLoggedIn then return end
+    if refreshing then return end
     refreshing = true
 
-    SetTimeout(1000, function()
+    CreateThread(function()
+        Wait(1000)
         refreshing = false
+
+        local deadline = GetGameTimer() + 30000
+        while not LocalPlayer.state.isLoggedIn and GetGameTimer() < deadline do Wait(250) end
+        if not LocalPlayer.state.isLoggedIn then return end
+
         local garages = lib.callback.await('qbx_properties:callback:getGarages', false) or {}
         clearGarages()
 
