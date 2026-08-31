@@ -277,7 +277,7 @@
   const FORWARDED = new Set(['escape', 'e', 'f', 'n', 'h'])
 
   function onKeydown(event) {
-    if (!app.view) return
+    if (!app.view || tablet.doorcamView) return
 
     const tag = event.target?.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {

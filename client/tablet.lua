@@ -40,6 +40,12 @@ end
 
 local doorcamPoints = {}
 local activeDoorcam
+local doorcamClosing = false
+
+RegisterNUICallback('doorcam:close', function(_, cb)
+    cb(1)
+    doorcamClosing = true
+end)
 
 local function pushDoorcam()
     if not CurrentPropertyId then return end
@@ -144,8 +150,10 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
         heading = (heading + 180.0) % 360.0
     end
 
-    SetUIFocus(false)
     SendUI('doorcam:view', true)
+    doorcamClosing = false
+    SetNuiFocus(true, false)
+    SetNuiFocusKeepInput(false)
 
     local cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', position.x, position.y, position.z, pitch, 0.0, heading, 75.0, false, 2)
     activeDoorcam = cam
@@ -154,11 +162,10 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
     SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
 
     local deadline = GetGameTimer() + 60000
-    while GetGameTimer() < deadline do
+    while GetGameTimer() < deadline and not doorcamClosing do
         Wait(0)
         DisableAllControlActions(0)
         HideHudAndRadarThisFrame()
-        if IsDisabledControlJustPressed(0, 47) then break end
     end
 
     SendUI('doorcam:view', false)

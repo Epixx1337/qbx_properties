@@ -329,7 +329,7 @@ Options worth knowing about:
 - `maintenance` (shared) — the recurring ownership fee: interval, percentage of the property price, minimum amount, and after how many unpaid days the property is seized (`0` never seizes). `enabled = false` turns the whole system off.
 - `layouts` (shared) — furniture layouts: on/off and how many snapshots one property may keep.
 - `rentIntervals` (shared) — the billing periods offered in every rental dropdown, from 24 hours up to a month out of the box.
-- `doorcam` (shared) — height and rotation offsets for the automatic doorbell camera on shell and IPL properties; a realtor-placed doorcam from the Manage tab always wins over these.
+- `doorcam` (shared) — height and rotation offsets for the automatic doorbell camera on shell and IPL properties; a realtor-placed doorcam from the Manage tab always wins over these. Apartment buildings can pin an exact camera per room layout with a `doorcam` entry in `config/buildings.lua` (the Wiwang and Starlite layouts ship with one).
 - `timecycles` (shared) — the interior lighting themes offered by the Mood Lighting upgrade.
 - `utilities` (shared) — billing period, grace period, and the humidity model (base level, effect per kilowatt, comfort threshold).
 - `commission` (shared) — the cut of sales and rent paid to the realtor who created the property.

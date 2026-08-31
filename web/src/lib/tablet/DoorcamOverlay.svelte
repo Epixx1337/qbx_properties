@@ -1,4 +1,6 @@
 <script>
+  import { fetchNui } from '../nui.js'
+
   let now = $state(new Date())
 
   $effect(() => {
@@ -10,7 +12,17 @@
   const stamp = $derived(
     `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}  ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
   )
+
+  function onKeydown(event) {
+    const key = event.key.toLowerCase()
+    if (key === 'g' || key === 'escape') {
+      event.preventDefault()
+      fetchNui('doorcam:close')
+    }
+  }
 </script>
+
+<svelte:window on:keydown={onKeydown} />
 
 <div class="doorcam">
   <div class="chip"><kbd>G</kbd> Close Camera Feed</div>

@@ -60,6 +60,8 @@ return {
                     model = -138454175,
                 },
             },
+            -- exact doorbell camera relative to the room anchor, facing visitors; headingOffset is added to the anchor heading
+            doorcam = { coords = vec3(-3.1, -1.3, 2.3), headingOffset = 90.0, pitch = -18.0 },
         },
     },
     lombank1 = {
@@ -274,7 +276,7 @@ return {
         description = 'A budget motel in East Vinewood, rooms right off the walkway.',
         resource = 'zydrec-starlitemotel',
         layout = 'starlite',
-        wallEntitySet = 'wall_tint', -- needs the fork linked in docs/starlite-motel.md, remove on the original map
+        wallEntitySet = 'wall_tint', -- ships with the current map, remove on old copies without named entity sets
         perRoomInterior = true,
         stairsOnly = true,
         entrance = vec3(958.5, -205.5, 73.0),
@@ -311,6 +313,7 @@ return {
                     headingOffset = 90.0,
                 },
             },
+            doorcam = { coords = vec3(4.7, -1.707, 1.1), headingOffset = 270.0, pitch = -18.0 },
         },
     },
     -- ['DellPerroHeightsApt4'] = {

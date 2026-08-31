@@ -820,6 +820,20 @@ local function doorcamPoints(property)
         local building = Buildings and Buildings[property.building]
         local layout = building and building.roomLayout
         local anchor = GetRoomCoords and GetRoomCoords(property.building, property.floor, property.room)
+
+        if anchor and layout and layout.doorcam then
+            local coords = RotateOffset(anchor, layout.doorcam.coords)
+            cams[#cams + 1] = {
+                x = coords.x,
+                y = coords.y,
+                z = coords.z,
+                w = (anchor.w + (layout.doorcam.headingOffset or 0.0)) % 360.0,
+                p = tonumber(layout.doorcam.pitch),
+                custom = true,
+            }
+            return cams
+        end
+
         local door = layout and layout.doors and layout.doors[1]
         if anchor and door then
             local coords = RotateOffset(anchor, door.coords)
