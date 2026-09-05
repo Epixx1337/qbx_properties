@@ -1,9 +1,14 @@
 <script>
+  import { tick } from 'svelte'
   import { fetchNui, formatMoney } from '../nui.js'
   import { realtor, market } from '../store.svelte.js'
   import Lightbox from '../Lightbox.svelte'
+  import MapView from '../MapView.svelte'
 
   let selected = $state(null)
+  let detailEl = $state(null)
+  let showMap = $state(false)
+  let mapRows = $state([])
   let editPrice = $state(0)
   let editSize = $state('medium')
   let editRental = $state(false)
@@ -154,6 +159,31 @@
         ]
   )
 
+  async function toggleMap() {
+    showMap = !showMap
+    if (showMap) mapRows = (await fetchNui('realtor:mapData')) ?? []
+  }
+
+  const mapMarkers = $derived(
+    mapRows.map((row) => ({
+      id: row.id,
+      name: row.property_name,
+      meta: kindLabel(row) + (row.rent_interval ? ` · Rental ${row.rent_interval}h` : ''),
+      price: row.price,
+      status: row.listed ? 'listed' : row.owner ? 'owned' : 'unlisted',
+      ownerName: row.owner ? ownerName(row) : null,
+      coords: row.coords,
+      row,
+    }))
+  )
+
+  async function openFromMap(entry) {
+    showMap = false
+    select(entry.row)
+    await tick()
+    detailEl?.scrollIntoView({ block: 'start' })
+  }
+
   const statusRows = $derived(
     !details
       ? []
@@ -181,8 +211,17 @@
         <button class="chip" class:active={filter === value} onclick={() => setFilter(value)}>{label}</button>
       {/each}
     </div>
+    <button class="chip map-toggle" class:active={showMap} onclick={toggleMap}>
+      <i class="fa-solid fa-map-location-dot"></i>
+      {showMap ? 'List' : 'Map'}
+    </button>
   </div>
 
+  {#if showMap}
+  <div class="map-holder">
+    <MapView markers={mapMarkers} mode="manage" onOpen={openFromMap} />
+  </div>
+  {:else}
   <div class="scroll body">
     <div class="grid">
       {#each realtor.properties as property (property.id)}
@@ -212,7 +251,7 @@
     {/if}
 
     {#if selected}
-      <div class="detail">
+      <div class="detail" bind:this={detailEl}>
         <div class="detail-head">
           <span class="detail-name">{selected.property_name}</span>
           <div class="detail-badges">
@@ -377,6 +416,7 @@
       </div>
     {/if}
   </div>
+  {/if}
 </div>
 
 <Lightbox images={details?.images ?? []} bind:index={lightboxIndex} />
@@ -450,6 +490,19 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .map-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .map-holder {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    padding-top: 16px;
   }
 
   .grid {

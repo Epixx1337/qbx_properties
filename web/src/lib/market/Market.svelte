@@ -2,10 +2,12 @@
   import { fetchNui, formatMoney, formatRemaining, lazyBackground } from '../nui.js'
   import { app, market } from '../store.svelte.js'
   import ListingDetail from './ListingDetail.svelte'
+  import MapView from '../MapView.svelte'
 
   let filter = $state('all')
   let search = $state('')
   let sort = $state('ending')
+  let mapView = $state(false)
   let now = $state(Math.floor(Date.now() / 1000))
 
   const readStore = (key) => {
@@ -62,6 +64,29 @@
     localStorage.setItem('qbx_properties_recent', JSON.stringify(recent))
     if (app.isRealtor) fetchNui('market:getBids', { listingId: listing.id })
   }
+
+  const mapMarkers = $derived(
+    visible.map((listing) => {
+      let coords = null
+      try {
+        coords = typeof listing.coords === 'string' ? JSON.parse(listing.coords) : listing.coords
+      } catch {}
+      return {
+        id: listing.id,
+        listingId: listing.id,
+        name: listing.property_name,
+        meta: metaLine(listing),
+        price: listing.top_bid ?? listing.price,
+        status: 'listed',
+        coords,
+      }
+    })
+  )
+
+  function openFromMap(entry) {
+    const listing = market.listings.find((l) => l.id === entry.listingId)
+    if (listing) select(listing)
+  }
 </script>
 
 {#if market.selected}
@@ -81,8 +106,17 @@
         <option value="priceDesc">Price: high to low</option>
         <option value="newest">Newest first</option>
       </select>
+      <button class="chip map-toggle" class:active={mapView} onclick={() => (mapView = !mapView)}>
+        <i class="fa-solid fa-map-location-dot"></i>
+        {mapView ? 'List' : 'Map'}
+      </button>
     </div>
 
+    {#if mapView}
+    <div class="map-holder">
+      <MapView markers={mapMarkers} mode="market" onOpen={openFromMap} />
+    </div>
+    {:else}
     <div class="scroll body">
       {#if filter === 'saved' && visible.length === 0}
         <div class="empty tall">Nothing saved yet. Open a listing and hit Save to keep an eye on it.</div>
@@ -142,6 +176,7 @@
         </div>
       {/if}
     </div>
+    {/if}
   </div>
 {/if}
 
@@ -213,6 +248,19 @@
     flex: 1;
     min-height: 0;
     padding: 18px;
+  }
+
+  .map-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .map-holder {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    padding: 14px 18px 18px;
   }
 
   .grid {

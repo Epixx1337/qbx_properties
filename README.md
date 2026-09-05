@@ -141,6 +141,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 **Economy**
 - Market with direct sales, auctions (configurable durations, anti-snipe) and open-to-offer listings with full escrow, plus saved listings and a recently-viewed strip
+- Interactive map view: buyers browse listings as pins on a zoomable GTA map with a detail card, waypoint button and one click through to the listing; realtors get the same map over the whole catalog in the Manage tab — green pins are listed, red owned, blue unlisted — opening straight into the Manage panel
 - The market UI can be embedded in laptop and tablet resources (fd_laptops and similar), with `/housing` optionally disabled — see [docs/third-party-ui.md](docs/third-party-ui.md)
 - Rent cycles, utility billing with power usage and humidity per property size, and a recurring maintenance fee with seizure for deadbeats
 - A sales ledger records every ownership change with price and the seller's profit, and it survives the property being deleted
@@ -173,6 +174,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - [wiwang_hotel](https://github.com/Epixx1337/wiwang_hotel) — our edit of the Wiwang Hotel MLO with per-room `wall_tint` entity sets, required for wall colours inside its apartments
 - [prp-housing shells](https://studio.prodigyrp.net/map) — the ProdigyRP house MLOs, required for wall colours in those interiors
 - The free starter shells are from [K4MB1](https://forum.cfx.re/t/free-props-starter-shells-for-housing-scripts/4826922)
+- [gta-v-map-leaflet](https://github.com/RiceaRaul/gta-v-map-leaflet) — the map view's tile atlas and the GTA-to-Leaflet projection setup, rendered with [Leaflet](https://leafletjs.com/)
 
 ## Installation
 

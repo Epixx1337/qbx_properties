@@ -39,6 +39,10 @@ RegisterNUICallback('realtor:fetchProperties', function(data, cb)
     SendUI('realtor:properties', RealtorProperties())
 end)
 
+RegisterNUICallback('realtor:mapData', function(_, cb)
+    cb(lib.callback.await('qbx_properties:callback:getPropertyMapData', false) or {})
+end)
+
 function SendRealtorData()
     playerCoords = GetEntityCoords(cache.ped)
     SendUI('realtor:init', {

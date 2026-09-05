@@ -152,6 +152,29 @@ lib.callback.register('qbx_properties:callback:getRealtorProperties', function(s
     return { rows = rows, total = total, page = page, pages = pages }
 end)
 
+lib.callback.register('qbx_properties:callback:getPropertyMapData', function(source)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player or not IsRealtor(player.PlayerData.job) then return {} end
+
+    local rows = MySQL.query.await([[
+        SELECT p.id, p.property_name, p.owner, p.price, p.rent_interval, p.building, p.interior, p.coords, p.sale_authorized,
+               p.interior REGEXP '^-?[0-9]+$' AS shell,
+               pl.charinfo AS owner_charinfo,
+               EXISTS(SELECT 1 FROM properties_listings l WHERE l.property_id = p.id AND l.status IN ('active','finalizing')) AS listed
+        FROM properties p
+        LEFT JOIN players pl ON pl.citizenid = p.owner
+        WHERE p.building IS NULL
+        ORDER BY p.property_name
+    ]]) or {}
+
+    for i = 1, #rows do
+        local coords = rows[i].coords and json.decode(rows[i].coords)
+        rows[i].coords = coords and { x = coords.x, y = coords.y } or nil
+    end
+
+    return rows
+end)
+
 RegisterNetEvent('qbx_properties:server:repossess', function(propertyId)
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)

@@ -11,6 +11,14 @@ RegisterNUICallback('market:refresh', function(_, cb)
     pushListings()
 end)
 
+RegisterNUICallback('map:setWaypoint', function(data, cb)
+    cb(1)
+    local x, y = tonumber(data?.x), tonumber(data?.y)
+    if not x or not y then return end
+    SetNewWaypoint(x, y)
+    exports.qbx_core:Notify('Waypoint set', 'success')
+end)
+
 function OpenHousing()
     OpenUI('housing')
     SendUI('market:init', {
