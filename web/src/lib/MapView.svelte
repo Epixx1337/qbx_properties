@@ -9,15 +9,24 @@
   let container
   let map
   let pinLayer
+  let canvasRenderer
   let fitted = false
   const pinIndex = new Map()
   let selected = $state(null)
+  let hidden = $state(new Set())
 
   const STATUS = {
     listed: { color: '#40c057', label: 'For sale' },
     owned: { color: '#fa5252', label: 'Sold' },
     unlisted: { color: '#339af0', label: 'Not listed' },
+    mine: { color: '#9775fa', label: 'My properties' },
+    access: { color: '#fd7e14', label: 'Have keys' },
   }
+
+  // past this many pins the DOM icons get replaced by canvas dots so big catalogs stay smooth
+  const DENSE_THRESHOLD = 150
+
+  const present = $derived(new Set(markers.map((m) => m.status)))
 
   const HOUSE_PATH = 'M12 3 2 11h3v9h6v-6h2v6h6v-9h3z'
 
@@ -43,9 +52,21 @@
     })
   }
 
+  function dotStyle(status, active) {
+    return {
+      radius: active ? 9 : 7,
+      weight: active ? 3 : 2,
+      color: active ? '#fff' : 'rgba(255, 255, 255, 0.85)',
+      fillColor: STATUS[status]?.color ?? STATUS.unlisted.color,
+      fillOpacity: 1,
+    }
+  }
+
   function refreshIcon(id, active) {
     const item = pinIndex.get(id)
-    if (item) item.pin.setIcon(houseIcon(item.entry.status, active))
+    if (!item) return
+    if (item.pin.setStyle) item.pin.setStyle(dotStyle(item.entry.status, active))
+    else item.pin.setIcon(houseIcon(item.entry.status, active))
   }
 
   function selectEntry(entry) {
@@ -60,16 +81,37 @@
     pinLayer.clearLayers()
     pinIndex.clear()
 
+    const dense = markers.length > DENSE_THRESHOLD
+
     for (const entry of markers) {
-      if (!entry.coords) continue
-      const pin = L.marker([entry.coords.y, entry.coords.x], {
-        icon: houseIcon(entry.status, selected?.id === entry.id),
-        title: entry.name,
-      })
+      if (!entry.coords || hidden.has(entry.status)) continue
+
+      let pin
+      if (dense) {
+        pin = L.circleMarker([entry.coords.y, entry.coords.x], {
+          renderer: canvasRenderer,
+          ...dotStyle(entry.status, selected?.id === entry.id),
+        })
+        if (entry.name) pin.bindTooltip(entry.name, { direction: 'top', offset: [0, -8] })
+      } else {
+        pin = L.marker([entry.coords.y, entry.coords.x], {
+          icon: houseIcon(entry.status, selected?.id === entry.id),
+          title: entry.name,
+        })
+      }
+
       pin.on('click', () => selectEntry(entry))
       pin.addTo(pinLayer)
       pinIndex.set(entry.id, { pin, entry })
     }
+  }
+
+  function toggleStatus(key) {
+    const next = new Set(hidden)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    hidden = next
+    if (selected && next.has(selected.status)) selected = null
   }
 
   function fitToMarkers() {
@@ -103,6 +145,7 @@
       bounds: ATLAS_BOUNDS,
     }).addTo(map)
 
+    canvasRenderer = L.canvas({ padding: 0.3 })
     pinLayer = L.layerGroup().addTo(map)
 
     return () => map.remove()
@@ -110,6 +153,7 @@
 
   $effect(() => {
     markers
+    hidden
     if (!map) return
     untrack(() => {
       drawMarkers()
@@ -138,8 +182,10 @@
 
   <div class="legend">
     {#each Object.entries(STATUS) as [key, status] (key)}
-      {#if mode === 'manage' || key === 'listed'}
-        <span class="legend-item"><span class="dot" style="--pin:{status.color}"></span>{status.label}</span>
+      {#if present.has(key)}
+        <button class="legend-item" class:dimmed={hidden.has(key)} onclick={() => toggleStatus(key)}>
+          <span class="dot" style="--pin:{status.color}"></span>{status.label}
+        </button>
       {/if}
     {/each}
   </div>
@@ -213,6 +259,21 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  .legend-item.dimmed {
+    opacity: 0.38;
+  }
+
+  .legend-item:hover {
+    color: #fff;
   }
 
   .dot {
@@ -359,5 +420,20 @@
   :global(.leaflet-bar a:hover) {
     background: var(--dark-5);
     color: #fff;
+  }
+
+  :global(.leaflet-tooltip) {
+    padding: 4px 9px;
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--dark-0);
+    background: var(--dark-7);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+  }
+
+  :global(.leaflet-tooltip-top::before) {
+    border-top-color: var(--dark-4);
   }
 </style>

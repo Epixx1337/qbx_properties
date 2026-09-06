@@ -175,6 +175,87 @@ lib.callback.register('qbx_properties:callback:getPropertyMapData', function(sou
     return rows
 end)
 
+local MAP_ROW_COLUMNS <const> = 'p.id, p.property_name, p.coords, p.type, p.size, p.building, p.rent_interval'
+
+local function toMapRow(row)
+    local coords
+    local building = row.building and Buildings[row.building]
+
+    if building and building.entrance then
+        coords = { x = building.entrance.x + 0.0, y = building.entrance.y + 0.0 }
+    elseif row.coords then
+        local ok, decoded = pcall(json.decode, row.coords)
+        if ok and decoded then coords = { x = decoded.x, y = decoded.y } end
+    end
+
+    return {
+        id = row.id,
+        property_name = row.property_name,
+        coords = coords,
+        type = row.type,
+        size = row.size,
+        building = row.building,
+        rent_interval = row.rent_interval,
+        owner_charinfo = row.owner_charinfo,
+    }
+end
+
+lib.callback.register('qbx_properties:callback:getPlayerMapProperties', function(source)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player then return { owned = {}, access = {} } end
+    local citizenid = player.PlayerData.citizenid
+
+    local owned = {}
+    local seen = {}
+    local ownedRows = MySQL.query.await(([[
+        SELECT %s FROM properties p WHERE p.owner = ? OR p.tenant = ?
+    ]]):format(MAP_ROW_COLUMNS), { citizenid, citizenid }) or {}
+
+    for i = 1, #ownedRows do
+        seen[ownedRows[i].id] = true
+        owned[#owned + 1] = toMapRow(ownedRows[i])
+    end
+
+    local access = {}
+    local accessRows = MySQL.query.await(([[
+        SELECT DISTINCT %s, pl.charinfo AS owner_charinfo
+        FROM properties p
+        LEFT JOIN players pl ON pl.citizenid = p.owner
+        WHERE (p.owner IS NULL OR p.owner != ?) AND (p.tenant IS NULL OR p.tenant != ?)
+          AND (
+            (p.building IS NULL AND p.keyholders LIKE CONCAT('%%"', ?, '"%%'))
+            OR (p.building IS NOT NULL AND EXISTS(SELECT 1 FROM properties_apartment_keyholders k WHERE k.tenant = p.owner AND k.keyholder = ?))
+            OR EXISTS(SELECT 1 FROM properties_access a WHERE a.citizenid = ?
+                AND ((p.building IS NULL AND a.property_id = p.id) OR (p.building IS NOT NULL AND a.tenant = p.owner)))
+          )
+    ]]):format(MAP_ROW_COLUMNS), { citizenid, citizenid, citizenid, citizenid, citizenid }) or {}
+
+    for i = 1, #accessRows do
+        if not seen[accessRows[i].id] then
+            seen[accessRows[i].id] = true
+            access[#access + 1] = toMapRow(accessRows[i])
+        end
+    end
+
+    local gang = player.PlayerData.gang
+    if gang and gang.name and gang.name ~= 'none' then
+        local groupRows = MySQL.query.await(([[
+            SELECT %s, p.group_name FROM properties p
+            WHERE p.group_name = ? AND (p.owner IS NULL OR p.owner != ?)
+        ]]):format(MAP_ROW_COLUMNS), { gang.name, citizenid }) or {}
+
+        for i = 1, #groupRows do
+            local row = groupRows[i]
+            if not seen[row.id] and GetPropertyType(row).groupAccess then
+                seen[row.id] = true
+                access[#access + 1] = toMapRow(row)
+            end
+        end
+    end
+
+    return { owned = owned, access = access }
+end)
+
 RegisterNetEvent('qbx_properties:server:repossess', function(propertyId)
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)

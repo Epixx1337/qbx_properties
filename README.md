@@ -141,7 +141,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 **Economy**
 - Market with direct sales, auctions (configurable durations, anti-snipe) and open-to-offer listings with full escrow, plus saved listings and a recently-viewed strip
-- Interactive map view: buyers browse listings as pins on a zoomable GTA map with a detail card, waypoint button and one click through to the listing; realtors get the same map over the whole catalog in the Manage tab — green pins are listed, red owned, blue unlisted — opening straight into the Manage panel
+- Interactive map view: buyers browse listings as pins on a zoomable GTA map with a detail card, waypoint button and one click through to the listing — with their own homes (violet) and homes they hold keys to (orange) plotted alongside, each pin type toggleable from the legend; realtors get the same map over the whole catalog in the Manage tab — green pins are listed, red owned, blue unlisted — opening straight into the Manage panel, and big catalogs render on a canvas so hundreds of pins stay smooth
 - The market UI can be embedded in laptop and tablet resources (fd_laptops and similar), with `/housing` optionally disabled — see [docs/third-party-ui.md](docs/third-party-ui.md)
 - Rent cycles, utility billing with power usage and humidity per property size, and a recurring maintenance fee with seizure for deadbeats
 - A sales ledger records every ownership change with price and the seller's profit, and it survives the property being deleted

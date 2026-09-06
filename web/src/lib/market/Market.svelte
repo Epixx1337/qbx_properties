@@ -65,14 +65,38 @@
     if (app.isRealtor) fetchNui('market:getBids', { listingId: listing.id })
   }
 
-  const mapMarkers = $derived(
-    visible.map((listing) => {
+  let mine = $state(null)
+
+  async function toggleMap() {
+    mapView = !mapView
+    if (mapView) mine = (await fetchNui('map:playerProperties')) ?? null
+  }
+
+  function parseOwnerName(row) {
+    if (!row.owner_charinfo) return null
+    try {
+      const info = JSON.parse(row.owner_charinfo)
+      return `${info.firstname} ${info.lastname}`
+    } catch {
+      return null
+    }
+  }
+
+  const cap = (value) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : null)
+
+  function mineMeta(row) {
+    if (row.building) return 'Apartment'
+    return [cap(row.type), cap(row.size)].filter(Boolean).join(' · ') || 'House'
+  }
+
+  const mapMarkers = $derived.by(() => {
+    const listed = visible.map((listing) => {
       let coords = null
       try {
         coords = typeof listing.coords === 'string' ? JSON.parse(listing.coords) : listing.coords
       } catch {}
       return {
-        id: listing.id,
+        id: `l${listing.id}`,
         listingId: listing.id,
         name: listing.property_name,
         meta: metaLine(listing),
@@ -81,7 +105,25 @@
         coords,
       }
     })
-  )
+
+    const listedProps = new Set(visible.map((l) => l.property_id))
+    const extras = []
+    for (const [rows, status] of [[mine?.owned ?? [], 'mine'], [mine?.access ?? [], 'access']]) {
+      for (const row of rows) {
+        if (listedProps.has(row.id)) continue
+        extras.push({
+          id: `p${row.id}`,
+          name: row.property_name,
+          meta: mineMeta(row),
+          status,
+          ownerName: status === 'access' ? parseOwnerName(row) : null,
+          coords: row.coords,
+        })
+      }
+    }
+
+    return [...listed, ...extras]
+  })
 
   function openFromMap(entry) {
     const listing = market.listings.find((l) => l.id === entry.listingId)
@@ -106,7 +148,7 @@
         <option value="priceDesc">Price: high to low</option>
         <option value="newest">Newest first</option>
       </select>
-      <button class="chip map-toggle" class:active={mapView} onclick={() => (mapView = !mapView)}>
+      <button class="chip map-toggle" class:active={mapView} onclick={toggleMap}>
         <i class="fa-solid fa-map-location-dot"></i>
         {mapView ? 'List' : 'Map'}
       </button>

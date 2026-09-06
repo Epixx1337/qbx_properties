@@ -19,6 +19,10 @@ RegisterNUICallback('map:setWaypoint', function(data, cb)
     exports.qbx_core:Notify('Waypoint set', 'success')
 end)
 
+RegisterNUICallback('map:playerProperties', function(_, cb)
+    cb(lib.callback.await('qbx_properties:callback:getPlayerMapProperties', false) or { owned = {}, access = {} })
+end)
+
 function OpenHousing()
     OpenUI('housing')
     SendUI('market:init', {
