@@ -52,6 +52,9 @@ local function endTenancy(propertyId, property, reason)
     MySQL.update.await('UPDATE properties SET tenant = NULL, tenant_rent = NULL, tenant_interval = NULL, tenant_last_paid = NULL, tenant_paid_until = NULL, tenant_contract_end = NULL, tenant_notice_end = NULL WHERE id = ?', {propertyId})
     RefreshCustomGarages()
 
+    local owner = property.owner and exports.qbx_core:GetPlayerByCitizenId(property.owner)
+    HandoverPropertyKeys(propertyId, owner and owner.PlayerData.source or nil)
+
     notifyCitizen(property.owner, string.format('The tenancy of %s ended (%s).', property.property_name, reason))
     if property.tenant then
         notifyCitizen(property.tenant, string.format('Your tenancy of %s ended (%s).', property.property_name, reason))
@@ -230,6 +233,7 @@ RegisterNetEvent('qbx_properties:server:tenancyConfirm', function(accepted)
     ]], {citizenId, pending.rent, pending.interval, pending.interval, pending.contract or 0, (pending.contract or 0) * pending.interval, pending.propertyId})
 
     RecordPropertyPayment(pending.propertyId, 'rent', citizenId, pending.rent)
+    IssuePropertyKey(pending.propertyId, playerSource)
     RefreshCustomGarages()
     StartTenantThread(pending.propertyId)
 

@@ -82,6 +82,7 @@ function OpenTablet()
         wallColor = lib.callback.await('qbx_properties:callback:getWallColor', false, CurrentPropertyId),
         timecycles = sharedConfig.timecycles,
         rentIntervals = sharedConfig.rentIntervals,
+        physicalKeys = sharedConfig.physicalKeys and sharedConfig.physicalKeys.enabled and { prices = sharedConfig.physicalKeys.prices } or nil,
     })
     pushAccess()
     pushUtilities()
@@ -309,6 +310,18 @@ RegisterNUICallback('tablet:setAccess', function(data, cb)
     })
 
     pushAccess()
+end)
+
+RegisterNUICallback('tablet:cutKey', function(data, cb)
+    cb(1)
+    if not CurrentPropertyId then return end
+    lib.callback.await('qbx_properties:callback:cutKey', false, CurrentPropertyId, type(data) == 'table' and data.citizenid or nil)
+end)
+
+RegisterNUICallback('tablet:changeLock', function(_, cb)
+    cb(1)
+    if not CurrentPropertyId then return end
+    lib.callback.await('qbx_properties:callback:changeLock', false, CurrentPropertyId)
 end)
 
 RegisterNUICallback('tablet:payUtilities', function(_, cb)

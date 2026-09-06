@@ -56,6 +56,9 @@ local function transferProperty(propertyId, buyerCid, amount)
     RecordPropertySale(propertyId, property.owner, buyerCid, amount)
     MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ?', {buyerCid, propertyId})
 
+    local buyer = exports.qbx_core:GetPlayerByCitizenId(buyerCid)
+    HandoverPropertyKeys(propertyId, buyer and buyer.PlayerData.source or nil)
+
     TriggerClientEvent('qbx_properties:client:refreshBlips', -1)
 
     local reason = string.format('Sale of %s', property.property_name)
@@ -317,6 +320,7 @@ RegisterNetEvent('qbx_properties:server:repossess', function(propertyId)
     end
 
     MySQL.update.await('UPDATE properties SET owner = NULL, keyholders = JSON_OBJECT(), wall_color = NULL WHERE id = ?', {propertyId})
+    HandoverPropertyKeys(propertyId)
 
     LogAction(playerSource, 'qbx_properties:server:repossess', string.format('%s repossessed %s from %s', player.PlayerData.citizenid, property.property_name, property.owner))
 

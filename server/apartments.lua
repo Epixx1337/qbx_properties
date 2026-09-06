@@ -186,6 +186,7 @@ function AssignRoom(player, buildingKey)
     if free then
         if MySQL.update.await('UPDATE properties SET owner = ? WHERE id = ? AND owner IS NULL', {citizenId, free.id}) == 1 then
             seedLayoutFurniture(citizenId, buildingKey)
+            HandoverPropertyKeys(free.id, player.PlayerData.source)
             return free.id
         end
         return AssignRoom(player, buildingKey)
@@ -198,6 +199,7 @@ function AssignRoom(player, buildingKey)
                 local id = CreateUnit(buildingKey, floor, room, 0, nil)
                 if id and MySQL.update.await('UPDATE properties SET owner = ? WHERE id = ? AND owner IS NULL', {citizenId, id}) == 1 then
                     seedLayoutFurniture(citizenId, buildingKey)
+                    HandoverPropertyKeys(id, player.PlayerData.source)
                     return id
                 end
             end
@@ -209,7 +211,11 @@ end
 function ReleaseRooms(citizenId)
     if IsRaidTarget and IsRaidTarget(citizenId) then return end
 
+    local units = MySQL.query.await('SELECT id FROM properties WHERE building IS NOT NULL AND owner = ?', {citizenId}) or {}
     MySQL.update.await('UPDATE properties SET owner = NULL WHERE building IS NOT NULL AND owner = ?', {citizenId})
+    for i = 1, #units do
+        HandoverPropertyKeys(units[i].id)
+    end
 end
 
 RegisterNetEvent('qbx_properties:server:ringUnit', function(buildingKey, floor, room)

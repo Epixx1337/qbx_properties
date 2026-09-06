@@ -95,6 +95,8 @@ export const tablet = $state({
   access: [],
   accessJobs: null,
   isAccessOwner: false,
+  isAccessTenant: false,
+  physicalKeys: null,
   apartment: false,
   nearby: [],
   utilities: null,

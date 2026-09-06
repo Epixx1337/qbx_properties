@@ -57,6 +57,7 @@ server_scripts {
     'server/property.lua',
     'server/realtor.lua',
     'server/access.lua',
+    'server/keys.lua',
     'server/doors.lua',
     'server/apartments.lua',
     'server/garages.lua',

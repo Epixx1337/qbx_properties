@@ -18,6 +18,8 @@
   let jobGrade = $state(0)
   let jobModal = $state(null)
   let doorcamIndex = $state(1)
+  let keyTarget = $state('')
+  let lockArmed = $state(false)
 
   $effect(() => {
     const count = tablet.doorcam?.cams?.length ?? 0
@@ -78,6 +80,18 @@
 
   function toggle(entry, key) {
     fetchNui('tablet:setAccess', { ...entry, [key]: !entry[key] })
+  }
+
+  const canManageKeys = $derived(!!tablet.physicalKeys && (tablet.isAccessOwner || tablet.isAccessTenant))
+
+  function cutKey() {
+    fetchNui('tablet:cutKey', { citizenid: keyTarget || null })
+    keyTarget = ''
+  }
+
+  function changeLock() {
+    lockArmed = false
+    fetchNui('tablet:changeLock')
   }
 
   function buyUpgrade(upgrade) {
@@ -294,6 +308,36 @@
                 <span class="knob"></span>
               </button>
             </div>
+          {/if}
+
+          {#if canManageKeys}
+            <div class="section-title">Keys</div>
+            <div class="entry">
+              <span class="entry-main">
+                <span class="entry-name">Cut a key</span>
+                <span class="entry-summary">A spare or replacement key for this door, {formatMoney(tablet.physicalKeys.prices?.key ?? 0)}. Pick someone standing next to you to hand it straight over.</span>
+              </span>
+              <select class="select key-target" bind:value={keyTarget} onfocus={() => fetchNui('tablet:getNearby')}>
+                <option value="">For myself</option>
+                {#each tablet.nearby as person (person.citizenid)}
+                  <option value={person.citizenid}>{person.name}</option>
+                {/each}
+              </select>
+              <button class="mini" onclick={cutKey}>Cut</button>
+            </div>
+            <div class="entry">
+              <span class="entry-main">
+                <span class="entry-name">Change the lock</span>
+                <span class="entry-summary">Every key cut so far stops working and you get one fresh key, {formatMoney(tablet.physicalKeys.prices?.lock ?? 0)}.</span>
+              </span>
+              {#if lockArmed}
+                <button class="mini" onclick={() => (lockArmed = false)}>Cancel</button>
+                <button class="mini danger" onclick={changeLock}>Confirm</button>
+              {:else}
+                <button class="mini danger" onclick={() => (lockArmed = true)}>Change</button>
+              {/if}
+            </div>
+            <span class="hint">Keys are physical items — whoever holds one opens the door. After a lock change or a sale, owners and tenants get their fresh key automatically.</span>
           {/if}
         </div>
       </div>
@@ -1620,6 +1664,11 @@
 
   .grade-input {
     width: 64px;
+    flex: none;
+  }
+
+  .key-target {
+    width: 150px;
     flex: none;
   }
 

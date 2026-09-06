@@ -175,6 +175,7 @@
     tablet.wallColor = data?.wallColor ?? null
     tablet.timecycles = data?.timecycles ?? []
     tablet.rentIntervals = data?.rentIntervals ?? []
+    tablet.physicalKeys = data?.physicalKeys ?? null
     tablet.access = []
     tablet.accessJobs = null
     tablet.isAccessOwner = false
@@ -222,6 +223,7 @@
     tablet.apartment = data?.apartment ?? false
     tablet.accessJobs = data?.jobs ?? null
     tablet.isAccessOwner = data?.isOwner ?? false
+    tablet.isAccessTenant = data?.isTenant ?? false
   })
   onMessage('tablet:nearby', (data) => { tablet.nearby = data ?? [] })
   onMessage('tablet:utilities', (data) => { tablet.utilities = data ?? null })

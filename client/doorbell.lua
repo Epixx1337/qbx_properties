@@ -60,12 +60,27 @@ CreateThread(function()
                 label = 'Ring doorbell',
                 icon = 'fa-solid fa-bell',
                 distance = TargetDistance('doorbell', 1.5),
-                canInteract = function(entity) return lacksKey(entity) end,
+                canInteract = function(entity) return KeysEnabled() or lacksKey(entity) end,
                 onSelect = function(data)
                     local buildingKey, floor, room = resolveDoorUnit(data.entity)
                     if not buildingKey then return end
                     TriggerServerEvent('qbx_properties:server:ringUnit', buildingKey, floor, room)
                     lib.notify({ type = 'info', description = 'You rang the doorbell.' })
+                end
+            },
+            {
+                name = 'qbx_properties_orderkey',
+                label = 'Order a replacement key',
+                icon = 'fa-solid fa-key',
+                distance = TargetDistance('doorbell', 1.5),
+                canInteract = function(entity)
+                    if not KeysEnabled() then return false end
+                    local propertyId = ResolveDoorProperty(entity)
+                    return propertyId ~= nil and IsKeyProperty(propertyId)
+                end,
+                onSelect = function(data)
+                    local propertyId = ResolveDoorProperty(data.entity)
+                    if propertyId then lib.callback.await('qbx_properties:callback:orderKey', false, propertyId) end
                 end
             }
         })

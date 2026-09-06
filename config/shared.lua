@@ -21,6 +21,20 @@ return {
         gang = 1,
     },
 
+    -- Physical keys
+    physicalKeys = { -- doors open with a key item instead of the access list, see README
+        enabled = false,
+        item = 'property_key', -- the ox_inventory item every key is cut from, add it to ox_inventory data/items.lua
+        prices = {
+            key = 500, -- cutting a spare or replacement key
+            lock = 5000, -- fitting a new lock: every key cut so far stops working, one fresh key is included
+        },
+        labels = {
+            house = '%s key', -- %s is the property name
+            apartment = 'Apartment key', -- buildings can override this with keyLabel in config/buildings.lua
+        },
+    },
+
     -- Identifier prefixes for stashes, doors and garages registered with ox_inventory, ox_doorlock and the garage system.
     -- Changing these on a live server orphans everything created under the old prefix: stash contents, door records
     -- and parked vehicles keep the old names and become unreachable until renamed by hand.

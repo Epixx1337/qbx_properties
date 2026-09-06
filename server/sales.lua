@@ -107,6 +107,8 @@ RegisterNetEvent('qbx_properties:server:respondToOffer', function(accepted)
         return
     end
 
+    HandoverPropertyKeys(offer.propertyId, buyer.PlayerData.source)
+
     if property.owner then
         local seller = exports.qbx_core:GetPlayerByCitizenId(property.owner)
         if seller then

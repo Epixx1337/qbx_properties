@@ -71,6 +71,15 @@ end
 function HasPropertyAccess(citizenId, property, permission)
     if not property or not citizenId then return false end
     if IsBreached and IsBreached(property.id) and BREACH_OPEN[permission] then return true end
+
+    if permission == 'door' and PhysicalKeysEnabled and PhysicalKeysEnabled() then
+        if isGroupMember(citizenId, property) then return true end
+        local jobRow = jobAccessRow(citizenId, property, permission)
+        if jobRow ~= nil and ToBool(jobRow.door) then return true end
+        local player = exports.qbx_core:GetPlayerByCitizenId(citizenId)
+        return player ~= nil and HasPropertyKey(player.PlayerData.source, property)
+    end
+
     if property.owner == citizenId then return appliesTo(property, permission) end
     if not appliesTo(property, permission) then return false end
     if property.tenant == citizenId then return true end
@@ -200,6 +209,7 @@ lib.callback.register('qbx_properties:callback:getAccessList', function(source, 
         apartment = property.building ~= nil,
         jobs = property.building == nil and JOB_ACCESS_TYPES[property.type] and getJobAccessList(propertyId) or nil,
         isOwner = property.owner == citizenId,
+        isTenant = property.tenant == citizenId,
     }
 end)
 

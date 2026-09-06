@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS `properties` (
     `timecycle` VARCHAR(50) DEFAULT NULL,
     `maintenance_paid_until` DATETIME DEFAULT NULL,
     `doorcam` JSON DEFAULT NULL,
+    `lock_version` INT NOT NULL DEFAULT 1,
     FOREIGN KEY (owner) REFERENCES `players` (`citizenid`),
     PRIMARY KEY (id)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -75,6 +76,14 @@ CREATE TABLE IF NOT EXISTS `properties_apartment_keyholders` (
     UNIQUE KEY `uk_apartment_keyholder` (`tenant`, `keyholder`),
     INDEX `idx_apartment_keyholders_tenant` (`tenant`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `properties_keys` (
+    `property_id` INT NOT NULL,
+    `citizenid` VARCHAR(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+    `lock_version` INT NOT NULL,
+    PRIMARY KEY (`property_id`, `citizenid`),
+    FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `properties_apartment_decorations` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,

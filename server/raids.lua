@@ -301,6 +301,7 @@ lib.callback.register('qbx_properties:callback:lockdownProperty', function(sourc
 
     MySQL.update.await('UPDATE properties_raids SET lockdown = 1, previous_owner = ? WHERE property_id = ?', {property.owner, propertyId})
     MySQL.update.await('UPDATE properties SET owner = NULL WHERE id = ?', {propertyId})
+    HandoverPropertyKeys(propertyId)
 
     if SetPropertyDoorsBreached then SetPropertyDoorsBreached(propertyId, false) end
     pushAccessFlags(propertyId)

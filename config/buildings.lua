@@ -2,6 +2,7 @@ return {
     wiwang = {
         type = 'mlo',
         label = 'Wiwang Hotel',
+        keyLabel = 'Hotel room key',
         entrance = vec3(-824.2, -699.8, 28.05),
         lobbyElevators = {
             vec4(-819.4, -699.77, 27.07, 85.04),
@@ -273,6 +274,7 @@ return {
     starlite = {
         type = 'mlo',
         label = 'Starlite Motel',
+        keyLabel = 'Motel room key',
         description = 'A budget motel in East Vinewood, rooms right off the walkway.',
         resource = 'zydrec-starlitemotel',
         layout = 'starlite',

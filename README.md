@@ -109,6 +109,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - Furniture layouts: save the current furnishing as a named snapshot, re-apply it later, or hand its share code to a friend so they can import it into their own property (applying pays for the furniture like a fresh purchase)
 - Owners can authorise realtors to sell their occupied property on the market — the proceeds still come to the owner — and every ownership change lands in a sales ledger with the seller's profit
 - Doorbell and doorcam: visitors ring at MLO doors, shell entrances and apartment unit doors; everyone inside gets notified, sees who is outside on the tablet's Doorcam tab, can watch a live camera over the door (multi-door houses cycle between every registered door), and lets them in — teleported inside for shells and apartments, a 10-second door unlock for MLOs. Realtors can also place an exact doorcam with the laser from the Manage tab, which overrides the automatic camera
+- Physical keys (optional): doors demand a key item instead of the access list — keys are cut from the tablet or ordered at the door for a fee, changing the lock kills every old key, and every sale hands the buyer a fresh key with a new lock ([docs below](#physical-door-keys))
 - Tenants can relocate between buildings, gated by config: free moves at the reception, plus a one-time migration offer on login whenever new buildings open with free rooms
 - Admins can furnish a unit and run `/saveroom` to save it as the default loadout for that room layout — every fresh tenant starts with those pieces already placed and fully editable
 - Standalone properties using interior shells, IPL interiors or real MLO houses
@@ -263,6 +264,34 @@ end)
 ```
 
 `createDoorProgrammatic` inserts the door into the `ox_doorlock` table, registers it live and syncs it to every client, defaulting to locked. `removeDoorByName` deletes every door whose name starts with the given prefix, which is how a property's furniture and extra doors are cleaned up before re-syncing. qbx_properties uses them for apartment unit doors, MLO property doors and placeable door furniture, and only creates a door when no door with that name exists yet.
+
+## Physical door keys
+
+Off by default. With `physicalKeys.enabled = true` in `config/shared.lua`, property doors stop asking the access list and ask for a **key item** instead: whoever holds a key for the property opens its doors — MLO front doors, apartment unit doors, placeable door furniture and shell/IPL entrances alike. Everything else (stashes, furniture, garages, bills) keeps using the access list, and job access on commercial properties plus gang access still open doors without a key.
+
+Add the template item to `ox_inventory/data/items.lua`, named whatever `physicalKeys.item` says (`property_key` by default):
+
+```lua
+['property_key'] = {
+    label = 'Key',
+    weight = 20,
+    stack = false,
+    close = true,
+    description = 'A cut key. Which door it fits is written on it.',
+},
+```
+
+Every key cut is that item with metadata: the label becomes `<property name> key` for houses and the building's `keyLabel` for apartments (`Hotel room key` at the Wiwang, `Motel room key` at the Starlite, `physicalKeys.labels.apartment` everywhere else), the description names the unit, and the icon is served by the resource itself, so nothing needs copying into ox_inventory's image folder.
+
+How keys move around:
+
+- Buying, renting or being assigned a property hands you a key on the spot, and the lock is changed at the same time so the previous owner's keys stop fitting. Tenants get a key when their lease starts.
+- Every lock has a version. Owners and tenants who are owed a key for the current lock — won an auction while offline, lock changed while they were away — get it automatically the next time they load in.
+- **Housing tablet → Keys**: cut a spare (`prices.key`) for yourself or hand it straight to someone standing next to you, or **change the lock** (`prices.lock`): every key cut so far dies, you get one fresh key, and an online owner or tenant gets theirs immediately.
+- Lost the only key? Owners and tenants get an **Order a replacement key** option at their own door (`prices.key`): on the door target of MLO houses and apartment units, and in the entrance menu of shell and IPL properties.
+- Fees go to `governmentAccount`. Raids and breaches bypass keys like they bypass every door.
+
+Enabling this on a live server: every current owner and tenant receives their first key on next login, and anyone who only had access-list rights needs a key handed to them before the door opens for them again.
 
 ## Property photos
 

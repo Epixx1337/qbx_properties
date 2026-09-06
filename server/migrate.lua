@@ -60,6 +60,7 @@ local columns = {
         sale_authorized = 'TINYINT(1) NOT NULL DEFAULT 0',
         timecycle = 'VARCHAR(50) DEFAULT NULL',
         maintenance_paid_until = 'DATETIME DEFAULT NULL',
+        lock_version = 'INT NOT NULL DEFAULT 1',
         doorcam = 'JSON DEFAULT NULL',
     },
     properties_access = {

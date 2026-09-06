@@ -1168,6 +1168,7 @@ end)
 
 function EvictProperty(propertyId)
     MySQL.update.await('UPDATE properties SET owner = NULL, keyholders = JSON_OBJECT(), wall_color = NULL, sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ?', {propertyId})
+    HandoverPropertyKeys(propertyId)
 
     local occupants = insideProperty[propertyId] or {}
     for _ = 1, #occupants do
@@ -1275,6 +1276,7 @@ RegisterNetEvent('qbx_properties:server:rentProperty', function(propertyId)
         registerGarage(propertyId, property.property_name, json.decode(property.garage))
     end
 
+    HandoverPropertyKeys(propertyId, playerSource)
     exports.qbx_core:Notify(playerSource, string.format('Successfully started renting %s', property.property_name), 'success')
     startRentThread(propertyId)
 
@@ -1310,6 +1312,7 @@ RegisterNetEvent('qbx_properties:server:buyProperty', function(propertyId)
     end
 
     RecordPropertySale(propertyId, nil, player.PlayerData.citizenid, property.price)
+    HandoverPropertyKeys(propertyId, playerSource)
 
     if property.garage then
         registerGarage(propertyId, property.property_name, json.decode(property.garage))
