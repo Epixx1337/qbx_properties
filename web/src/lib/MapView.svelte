@@ -4,23 +4,33 @@
   import 'leaflet/dist/leaflet.css'
   import { fetchNui, formatMoney } from './nui.js'
 
-  let { markers = [], mode = 'market', onOpen } = $props()
+  let { markers = [], mode = 'market', onOpen, focus = null } = $props()
 
   let container
   let map
   let pinLayer
   let canvasRenderer
   let fitted = false
+  let appliedFocus = null
   const pinIndex = new Map()
   let selected = $state(null)
-  let hidden = $state(new Set())
+
+  const hiddenKey = `qbx_properties_map_hidden_${mode}`
+  const readHidden = () => {
+    try { return JSON.parse(localStorage.getItem(hiddenKey) ?? '[]') } catch { return [] }
+  }
+  let hidden = $state(new Set(readHidden()))
 
   const STATUS = {
-    listed: { color: '#40c057', label: 'For sale' },
-    owned: { color: '#fa5252', label: 'Sold' },
-    unlisted: { color: '#339af0', label: 'Not listed' },
+    sale: { color: '#40c057', label: 'For sale' },
+    auction: { color: '#fab005', label: 'Auction' },
+    offer: { color: '#339af0', label: 'Offers' },
     mine: { color: '#9775fa', label: 'My properties' },
     access: { color: '#fd7e14', label: 'Have keys' },
+    listed: { color: '#40c057', label: 'For sale' },
+    owned: { color: '#fa5252', label: 'Sold' },
+    overdue: { color: '#fab005', label: 'Overdue upkeep' },
+    unlisted: { color: '#339af0', label: 'Not listed' },
   }
 
   // past this many pins the DOM icons get replaced by canvas dots so big catalogs stay smooth
@@ -111,7 +121,28 @@
     if (next.has(key)) next.delete(key)
     else next.add(key)
     hidden = next
+    try { localStorage.setItem(hiddenKey, JSON.stringify([...next])) } catch {}
     if (selected && next.has(selected.status)) selected = null
+  }
+
+  function applyFocus() {
+    if (!focus || focus === appliedFocus) return
+
+    const item = pinIndex.get(focus.id)
+    if (!item) {
+      const entry = markers.find((m) => m.id === focus.id)
+      if (entry && hidden.has(entry.status)) {
+        toggleStatus(entry.status)
+        return
+      }
+    }
+
+    const target = focus.coords ? [focus.coords.y, focus.coords.x] : item?.pin.getLatLng()
+    if (!target) return
+    appliedFocus = focus
+    fitted = true
+    map.setView(target, Math.max(map.getZoom(), 5))
+    if (item) selectEntry(item.entry)
   }
 
   function fitToMarkers() {
@@ -148,15 +179,35 @@
     canvasRenderer = L.canvas({ padding: 0.3 })
     pinLayer = L.layerGroup().addTo(map)
 
-    return () => map.remove()
+    fetchNui('map:playerPosition').then((pos) => {
+      if (!map || typeof pos?.x !== 'number' || typeof pos?.y !== 'number') return
+      L.marker([pos.y, pos.x], {
+        icon: L.divIcon({
+          className: 'you-pin',
+          html: '<div class="you"><div class="you-ring"></div></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        }),
+        interactive: false,
+        zIndexOffset: 1000,
+      }).addTo(map)
+    })
+
+    return () => {
+      const instance = map
+      map = null
+      instance.remove()
+    }
   })
 
   $effect(() => {
     markers
     hidden
+    focus
     if (!map) return
     untrack(() => {
       drawMarkers()
+      applyFocus()
       if (!fitted) fitToMarkers()
     })
   })
@@ -435,5 +486,45 @@
 
   :global(.leaflet-tooltip-top::before) {
     border-top-color: var(--dark-4);
+  }
+
+  :global(.you-pin) {
+    background: none;
+    border: none;
+  }
+
+  :global(.you-pin .you) {
+    position: relative;
+    width: 18px;
+    height: 18px;
+  }
+
+  :global(.you-pin .you::after) {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: #fff;
+    border: 3px solid #339af0;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  }
+
+  :global(.you-pin .you-ring) {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(51, 154, 240, 0.85);
+    animation: you-pulse 1.8s ease-out infinite;
+  }
+
+  @keyframes -global-you-pulse {
+    0% {
+      transform: scale(0.5);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1.9);
+      opacity: 0;
+    }
   }
 </style>

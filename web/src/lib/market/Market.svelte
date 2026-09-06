@@ -7,7 +7,8 @@
   let filter = $state('all')
   let search = $state('')
   let sort = $state('ending')
-  let mapView = $state(false)
+  let mapView = $state(localStorage.getItem('qbx_properties_market_map') === '1')
+  let mapFocus = $state(null)
   let now = $state(Math.floor(Date.now() / 1000))
 
   const readStore = (key) => {
@@ -67,9 +68,31 @@
 
   let mine = $state(null)
 
-  async function toggleMap() {
+  function toggleMap() {
     mapView = !mapView
-    if (mapView) mine = (await fetchNui('map:playerProperties')) ?? null
+    mapFocus = null
+    if (mapView) mine = null
+    try { localStorage.setItem('qbx_properties_market_map', mapView ? '1' : '0') } catch {}
+  }
+
+  $effect(() => {
+    if (!mapView || mine !== null) return
+    fetchNui('map:playerProperties').then((result) => {
+      mine = result ?? { owned: [], access: [] }
+    })
+  })
+
+  function showOnMap(listing) {
+    let coords = null
+    try {
+      coords = typeof listing.coords === 'string' ? JSON.parse(listing.coords) : listing.coords
+    } catch {}
+    market.selected = null
+    mapFocus = { id: `l${listing.id}`, coords }
+    if (!mapView) {
+      mapView = true
+      try { localStorage.setItem('qbx_properties_market_map', '1') } catch {}
+    }
   }
 
   function parseOwnerName(row) {
@@ -101,7 +124,7 @@
         name: listing.property_name,
         meta: metaLine(listing),
         price: listing.top_bid ?? listing.price,
-        status: 'listed',
+        status: listing.listing_type ?? 'sale',
         coords,
       }
     })
@@ -132,7 +155,7 @@
 </script>
 
 {#if market.selected}
-  <ListingDetail listing={market.selected} {now} {toggleSave} savedIds={saved} />
+  <ListingDetail listing={market.selected} {now} {toggleSave} savedIds={saved} onShowMap={showOnMap} />
 {:else}
   <div class="content">
     <div class="toolbar">
@@ -156,7 +179,7 @@
 
     {#if mapView}
     <div class="map-holder">
-      <MapView markers={mapMarkers} mode="market" onOpen={openFromMap} />
+      <MapView markers={mapMarkers} mode="market" onOpen={openFromMap} focus={mapFocus} />
     </div>
     {:else}
     <div class="scroll body">

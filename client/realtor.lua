@@ -39,8 +39,15 @@ RegisterNUICallback('realtor:fetchProperties', function(data, cb)
     SendUI('realtor:properties', RealtorProperties())
 end)
 
-RegisterNUICallback('realtor:mapData', function(_, cb)
-    cb(lib.callback.await('qbx_properties:callback:getPropertyMapData', false) or {})
+RegisterNUICallback('realtor:mapData', function(data, cb)
+    cb(lib.callback.await('qbx_properties:callback:getPropertyMapData', false, type(data) == 'table' and {
+        search = type(data.search) == 'string' and data.search or '',
+        filter = data.filter,
+    } or nil) or {})
+end)
+
+RegisterNUICallback('realtor:bulkList', function(data, cb)
+    cb(lib.callback.await('qbx_properties:callback:bulkCreateListings', false, type(data) == 'table' and data or {}) or false)
 end)
 
 function SendRealtorData()

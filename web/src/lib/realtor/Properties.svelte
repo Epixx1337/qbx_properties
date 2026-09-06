@@ -7,8 +7,11 @@
 
   let selected = $state(null)
   let detailEl = $state(null)
-  let showMap = $state(false)
-  let mapRows = $state([])
+  let showMap = $state(localStorage.getItem('qbx_properties_manage_map') === '1')
+  let mapRows = $state(null)
+  let mapFocus = $state(null)
+  let bulk = $state(null)
+  let bulkBusy = $state(false)
   let editPrice = $state(0)
   let editSize = $state('medium')
   let editRental = $state(false)
@@ -33,14 +36,22 @@
     fetchNui('realtor:fetchProperties', { page, search: search.trim(), filter })
   }
 
+  async function fetchMapRows() {
+    mapRows = (await fetchNui('realtor:mapData', { search: search.trim(), filter })) ?? []
+  }
+
   function onSearchInput() {
     clearTimeout(searchTimer)
-    searchTimer = setTimeout(() => fetchPage(1), 300)
+    searchTimer = setTimeout(() => {
+      fetchPage(1)
+      if (showMap) fetchMapRows()
+    }, 300)
   }
 
   function setFilter(value) {
     filter = value
     fetchPage(1)
+    if (showMap) fetchMapRows()
   }
 
   function select(property) {
@@ -159,18 +170,24 @@
         ]
   )
 
-  async function toggleMap() {
+  function toggleMap() {
     showMap = !showMap
-    if (showMap) mapRows = (await fetchNui('realtor:mapData')) ?? []
+    mapFocus = null
+    try { localStorage.setItem('qbx_properties_manage_map', showMap ? '1' : '0') } catch {}
+    if (showMap) mapRows = null
   }
 
+  $effect(() => {
+    if (showMap && mapRows === null) fetchMapRows()
+  })
+
   const mapMarkers = $derived(
-    mapRows.map((row) => ({
+    (mapRows ?? []).map((row) => ({
       id: row.id,
       name: row.property_name,
       meta: kindLabel(row) + (row.rent_interval ? ` · Rental ${row.rent_interval}h` : ''),
       price: row.price,
-      status: row.listed ? 'listed' : row.owner ? 'owned' : 'unlisted',
+      status: row.listed ? 'listed' : row.overdue ? 'overdue' : row.owner ? 'owned' : 'unlisted',
       ownerName: row.owner ? ownerName(row) : null,
       coords: row.coords,
       row,
@@ -179,9 +196,40 @@
 
   async function openFromMap(entry) {
     showMap = false
+    try { localStorage.setItem('qbx_properties_manage_map', '0') } catch {}
     select(entry.row)
     await tick()
     detailEl?.scrollIntoView({ block: 'start' })
+  }
+
+  function showSelectedOnMap() {
+    if (!selected) return
+    mapFocus = { id: selected.id }
+    if (!showMap) {
+      showMap = true
+      try { localStorage.setItem('qbx_properties_manage_map', '1') } catch {}
+    }
+  }
+
+  async function armBulk() {
+    if (bulk) {
+      bulk = null
+      return
+    }
+    bulkBusy = true
+    const res = await fetchNui('realtor:bulkList', { search: search.trim(), filter, dryRun: true })
+    bulkBusy = false
+    bulk = res && typeof res.eligible === 'number' ? res : { eligible: 0 }
+  }
+
+  async function confirmBulk() {
+    if (bulkBusy) return
+    bulkBusy = true
+    await fetchNui('realtor:bulkList', { search: search.trim(), filter, dryRun: false })
+    bulkBusy = false
+    bulk = null
+    fetchPage(realtor.propertiesPage)
+    if (showMap) fetchMapRows()
   }
 
   const statusRows = $derived(
@@ -211,15 +259,37 @@
         <button class="chip" class:active={filter === value} onclick={() => setFilter(value)}>{label}</button>
       {/each}
     </div>
+    <button class="chip map-toggle" class:active={bulk !== null} disabled={bulkBusy} onclick={armBulk}>
+      <i class="fa-solid fa-tags"></i>
+      Bulk list
+    </button>
     <button class="chip map-toggle" class:active={showMap} onclick={toggleMap}>
       <i class="fa-solid fa-map-location-dot"></i>
       {showMap ? 'List' : 'Map'}
     </button>
   </div>
 
+  {#if bulk}
+    <div class="bulk-bar">
+      <span class="bulk-text">
+        {#if bulk.eligible === 0}
+          No unowned, unlisted properties match the current filter.
+        {:else}
+          {bulk.eligible} unowned, unlisted {bulk.eligible === 1 ? 'property matches' : 'properties match'} the current filter — list them for sale at their catalog price?
+        {/if}
+      </span>
+      <div class="bulk-actions">
+        <button class="btn subtle" onclick={() => (bulk = null)}>Cancel</button>
+        {#if bulk.eligible > 0}
+          <button class="btn" disabled={bulkBusy} onclick={confirmBulk}>{bulkBusy ? 'Listing...' : `List ${bulk.eligible}`}</button>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   {#if showMap}
   <div class="map-holder">
-    <MapView markers={mapMarkers} mode="manage" onOpen={openFromMap} />
+    <MapView markers={mapMarkers} mode="manage" onOpen={openFromMap} focus={mapFocus} />
   </div>
   {:else}
   <div class="scroll body">
@@ -255,6 +325,9 @@
         <div class="detail-head">
           <span class="detail-name">{selected.property_name}</span>
           <div class="detail-badges">
+            <button class="btn subtle" onclick={showSelectedOnMap}>
+              <i class="fa-solid fa-map-location-dot"></i> Show on map
+            </button>
             {#if selected.listed}<span class="badge yellow">Listed</span>{/if}
             {#if selected.owner}<span class="badge red">Owned</span>{:else}<span class="badge green">Free</span>{/if}
             <span class="badge">ID {selected.id}</span>
@@ -496,6 +569,35 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+  }
+
+  .map-toggle:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .bulk-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: var(--dark-6);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-md);
+    flex: none;
+  }
+
+  .bulk-text {
+    font-size: 12px;
+    color: var(--dark-0);
+  }
+
+  .bulk-actions {
+    display: flex;
+    gap: 8px;
+    flex: none;
   }
 
   .map-holder {

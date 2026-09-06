@@ -3,7 +3,7 @@
   import { fetchNui, formatMoney, formatRemaining } from '../nui.js'
   import { app, market } from '../store.svelte.js'
 
-  let { listing, now, toggleSave, savedIds } = $props()
+  let { listing, now, toggleSave, savedIds, onShowMap } = $props()
 
   let imageIndex = $state(0)
   let lightboxIndex = $state(null)
@@ -79,6 +79,9 @@
       {/if}
     </div>
     <div class="head-right">
+      <button class="btn subtle" onclick={() => onShowMap?.(listing)}>
+        <i class="fa-solid fa-map-location-dot"></i> Show on map
+      </button>
       <button class="btn subtle" class:save-active={isSaved} onclick={() => toggleSave(listing.id)}>
         {isSaved ? 'Saved' : 'Save'}
       </button>

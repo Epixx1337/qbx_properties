@@ -23,6 +23,11 @@ RegisterNUICallback('map:playerProperties', function(_, cb)
     cb(lib.callback.await('qbx_properties:callback:getPlayerMapProperties', false) or { owned = {}, access = {} })
 end)
 
+RegisterNUICallback('map:playerPosition', function(_, cb)
+    local coords = GetEntityCoords(cache.ped)
+    cb({ x = coords.x, y = coords.y })
+end)
+
 function OpenHousing()
     OpenUI('housing')
     SendUI('market:init', {

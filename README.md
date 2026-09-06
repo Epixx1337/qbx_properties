@@ -118,6 +118,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 **Realtor job**
 - Create properties entirely in game through a four-step wizard: pick the door with a laser pointer, capture the interior point, position shells with a gizmo and a fly-anywhere freecam, write the listing summary, and set price, size, type and rental terms
 - Manage menu: server-side search, Available/Owned filters and pagination over the whole catalog (apartment units live on the Buildings tab), edit price/size/description, take property photos, place garages, draw garden zones, set mailboxes, add doors, re-capture the interior point and enter properties remotely
+- Bulk listing: one button lists every unowned, unlisted property matching the current search and filter for sale at its catalog price — with a count and confirmation first — so a seeded catalog goes on the market in seconds instead of house by house
 - `/housephotos` tours every house without a photo: teleported door to door in a freecam, frame the shot yourself, `E` to snap and move on — the result becomes the property's main market picture, saved locally or on the CDN
 - Realtor access is scoped to unowned properties — owned doors, interiors and furniture are out of reach (raids are the sanctioned way in), though owners can authorise realtors to list their property for sale
 - Realtors earn a configurable commission on sales and rent of properties they created
@@ -141,7 +142,8 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 
 **Economy**
 - Market with direct sales, auctions (configurable durations, anti-snipe) and open-to-offer listings with full escrow, plus saved listings and a recently-viewed strip
-- Interactive map view: buyers browse listings as pins on a zoomable GTA map with a detail card, waypoint button and one click through to the listing — with their own homes (violet) and homes they hold keys to (orange) plotted alongside, each pin type toggleable from the legend; realtors get the same map over the whole catalog in the Manage tab — green pins are listed, red owned, blue unlisted — opening straight into the Manage panel, and big catalogs render on a canvas so hundreds of pins stay smooth
+- Interactive map view: buyers browse listings as pins on a zoomable GTA map — colored by listing type (sale, auction, offers) — with a detail card, waypoint button and one click through to the listing, their own homes (violet) and homes they hold keys to (orange) plotted alongside, a pulsing you-are-here dot, and every listing and Manage panel carries a Show on map button that jumps straight to its pin; pin types toggle from the legend, and the map/legend choices are remembered per player
+- The realtor's Manage tab gets the same map over the whole catalog — green pins listed, red owned, yellow behind on upkeep (seizure candidates), blue unlisted — following the active search and filter, opening pins straight into the Manage panel; big catalogs render on a canvas so hundreds of pins stay smooth
 - The market UI can be embedded in laptop and tablet resources (fd_laptops and similar), with `/housing` optionally disabled — see [docs/third-party-ui.md](docs/third-party-ui.md)
 - Rent cycles, utility billing with power usage and humidity per property size, and a recurring maintenance fee with seizure for deadbeats
 - A sales ledger records every ownership change with price and the seller's profit, and it survives the property being deleted

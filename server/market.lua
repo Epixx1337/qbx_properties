@@ -94,12 +94,10 @@ exports('GetListings', fetchListings)
 
 local REALTOR_PAGE_SIZE <const> = 24
 
-lib.callback.register('qbx_properties:callback:getRealtorProperties', function(source, opts)
-    local player = exports.qbx_core:GetPlayer(source)
-    if not player or not IsRealtor(player.PlayerData.job) then return { rows = {}, total = 0, page = 1, pages = 1 } end
-
+---@param opts table? search and filter from the manage tab
+---@return string whereSql, table params
+local function realtorFilterSql(opts)
     opts = type(opts) == 'table' and opts or {}
-    local page = math.max(1, ToId(opts.page) or 1)
 
     local where = { 'p.building IS NULL' }
     local params = {}
@@ -118,7 +116,16 @@ lib.callback.register('qbx_properties:callback:getRealtorProperties', function(s
         params[#params + 1] = like
     end
 
-    local whereSql = table.concat(where, ' AND ')
+    return table.concat(where, ' AND '), params
+end
+
+lib.callback.register('qbx_properties:callback:getRealtorProperties', function(source, opts)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player or not IsRealtor(player.PlayerData.job) then return { rows = {}, total = 0, page = 1, pages = 1 } end
+
+    opts = type(opts) == 'table' and opts or {}
+    local page = math.max(1, ToId(opts.page) or 1)
+    local whereSql, params = realtorFilterSql(opts)
 
     local total = MySQL.scalar.await(([[
         SELECT COUNT(*) FROM properties p LEFT JOIN players pl ON pl.citizenid = p.owner WHERE %s
@@ -152,27 +159,65 @@ lib.callback.register('qbx_properties:callback:getRealtorProperties', function(s
     return { rows = rows, total = total, page = page, pages = pages }
 end)
 
-lib.callback.register('qbx_properties:callback:getPropertyMapData', function(source)
+lib.callback.register('qbx_properties:callback:getPropertyMapData', function(source, opts)
     local player = exports.qbx_core:GetPlayer(source)
     if not player or not IsRealtor(player.PlayerData.job) then return {} end
 
-    local rows = MySQL.query.await([[
+    local whereSql, params = realtorFilterSql(opts)
+    local maintenanceOn = sharedConfig.maintenance and sharedConfig.maintenance.enabled
+
+    local rows = MySQL.query.await(([[
         SELECT p.id, p.property_name, p.owner, p.price, p.rent_interval, p.building, p.interior, p.coords, p.sale_authorized,
                p.interior REGEXP '^-?[0-9]+$' AS shell,
                pl.charinfo AS owner_charinfo,
-               EXISTS(SELECT 1 FROM properties_listings l WHERE l.property_id = p.id AND l.status IN ('active','finalizing')) AS listed
+               EXISTS(SELECT 1 FROM properties_listings l WHERE l.property_id = p.id AND l.status IN ('active','finalizing')) AS listed,
+               (p.owner IS NOT NULL AND p.rent_interval IS NULL AND p.maintenance_paid_until IS NOT NULL AND p.maintenance_paid_until < NOW()) AS overdue
         FROM properties p
         LEFT JOIN players pl ON pl.citizenid = p.owner
-        WHERE p.building IS NULL
+        WHERE %s
         ORDER BY p.property_name
-    ]]) or {}
+    ]]):format(whereSql), params) or {}
 
     for i = 1, #rows do
         local coords = rows[i].coords and json.decode(rows[i].coords)
         rows[i].coords = coords and { x = coords.x, y = coords.y } or nil
+        if not maintenanceOn then rows[i].overdue = 0 end
     end
 
     return rows
+end)
+
+lib.callback.register('qbx_properties:callback:bulkCreateListings', function(source, opts)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player or not IsRealtor(player.PlayerData.job) then return end
+    opts = type(opts) == 'table' and opts or {}
+
+    local whereSql, params = realtorFilterSql(opts)
+    params[#params + 1] = market.minPrice
+    params[#params + 1] = market.maxPrice
+
+    local rows = MySQL.query.await(([[
+        SELECT p.id, p.price FROM properties p
+        LEFT JOIN players pl ON pl.citizenid = p.owner
+        WHERE %s AND p.owner IS NULL AND p.price >= ? AND p.price <= ?
+          AND NOT EXISTS(SELECT 1 FROM properties_listings l WHERE l.property_id = p.id AND l.status IN ('active','finalizing'))
+    ]]):format(whereSql), params) or {}
+
+    if opts.dryRun then return { eligible = #rows } end
+
+    local created = 0
+    for i = 1, #rows do
+        if CreateListingInternal(source, player, rows[i].id, { type = 'sale', price = rows[i].price }) then
+            created = created + 1
+        end
+    end
+
+    if created > 0 then
+        LogAction(source, 'qbx_properties:server:bulkList', string.format('%s bulk-listed %d properties for sale', player.PlayerData.citizenid, created))
+        exports.qbx_core:Notify(source, string.format('Listed %d %s for sale at catalog price.', created, created == 1 and 'property' or 'properties'), 'success')
+    end
+
+    return { created = created, eligible = #rows }
 end)
 
 local MAP_ROW_COLUMNS <const> = 'p.id, p.property_name, p.coords, p.type, p.size, p.building, p.rent_interval'
