@@ -140,7 +140,7 @@ lib.callback.register('qbx_properties:callback:getRealtorProperties', function(s
 
     local rows = MySQL.query.await(([[
         SELECT p.id, p.property_name, p.owner, p.price, p.rent_interval, p.building, p.interior, p.images, p.sale_authorized,
-               p.interior REGEXP '^-?[0-9]+$' AS shell,
+               p.interior REGEXP '^-{0,1}[0-9]+$' AS shell,
                pl.charinfo AS owner_charinfo,
                EXISTS(SELECT 1 FROM properties_listings l WHERE l.property_id = p.id AND l.status IN ('active','finalizing')) AS listed
         FROM properties p
@@ -168,7 +168,7 @@ lib.callback.register('qbx_properties:callback:getPropertyMapData', function(sou
 
     local rows = MySQL.query.await(([[
         SELECT p.id, p.property_name, p.owner, p.price, p.rent_interval, p.building, p.interior, p.coords, p.sale_authorized,
-               p.interior REGEXP '^-?[0-9]+$' AS shell,
+               p.interior REGEXP '^-{0,1}[0-9]+$' AS shell,
                pl.charinfo AS owner_charinfo,
                EXISTS(SELECT 1 FROM properties_listings l WHERE l.property_id = p.id AND l.status IN ('active','finalizing')) AS listed,
                (p.owner IS NOT NULL AND p.rent_interval IS NULL AND p.maintenance_paid_until IS NOT NULL AND p.maintenance_paid_until < NOW()) AS overdue

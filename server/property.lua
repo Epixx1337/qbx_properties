@@ -545,7 +545,7 @@ function CanOwnAnotherProperty(citizenId, propertyType)
 end
 
 lib.callback.register('qbx_properties:callback:getWalkInProperties', function()
-    local rows = MySQL.query.await("SELECT id, coords FROM properties WHERE building IS NULL AND interior NOT REGEXP '^-?[0-9]+$'")
+    local rows = MySQL.query.await("SELECT id, coords FROM properties WHERE building IS NULL AND interior NOT REGEXP '^-{0,1}[0-9]+$'")
     local result = {}
     for i = 1, #rows do
         local coords = json.decode(rows[i].coords)
