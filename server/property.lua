@@ -446,6 +446,7 @@ lib.callback.register('qbx_properties:callback:requestProperties', function(sour
         local coords = json.decode(rows[i].coords)
         if coords and #(propertyCoords - vec3(coords.x, coords.y, coords.z)) < 1.0 then
             rows[i].coords = nil
+            if PhysicalKeysEnabled() then rows[i].hasKey = HasPropertyKey(source, rows[i]) end
             result[#result + 1] = rows[i]
         end
     end

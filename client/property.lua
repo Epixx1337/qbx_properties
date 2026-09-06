@@ -465,9 +465,7 @@ local function singlePropertyMenu(property, noBackMenu)
         }
     end
 
-    local isHolder = QBX.PlayerData.citizenid == property.owner or QBX.PlayerData.citizenid == property.tenant
-
-    if isHolder or lib.table.contains(json.decode(property.keyholders), QBX.PlayerData.citizenid) or HoldsPropertyKey(property.id) then
+    if QBX.PlayerData.citizenid == property.owner or QBX.PlayerData.citizenid == property.tenant or lib.table.contains(json.decode(property.keyholders), QBX.PlayerData.citizenid) or property.hasKey then
         options[#options + 1] = {
             title = locale('menu.enter'),
             icon = 'cog',
@@ -479,16 +477,6 @@ local function singlePropertyMenu(property, noBackMenu)
             serverEvent = 'qbx_properties:server:enterProperty',
             args = { id = property.id }
         }
-
-        if isHolder and KeysEnabled() then
-            options[#options + 1] = {
-                title = string.format('Order a replacement key ($%s)', sharedConfig.physicalKeys.prices and sharedConfig.physicalKeys.prices.key or 0),
-                icon = 'key',
-                onSelect = function()
-                    lib.callback.await('qbx_properties:callback:orderKey', false, property.id)
-                end,
-            }
-        end
     elseif property.owner == nil then
         if property.rent_interval then
             options[#options + 1] = {
@@ -684,57 +672,20 @@ local function refreshOwnedBlips()
     end
 end
 
-local keyProperties = {}
-
-local function refreshKeyProperties()
-    table.wipe(keyProperties)
-    local ids = lib.callback.await('qbx_properties:callback:getKeyProperties', false) or {}
-    for i = 1, #ids do keyProperties[ids[i]] = true end
-end
-
 ---@return boolean
 function KeysEnabled()
     return sharedConfig.physicalKeys ~= nil and sharedConfig.physicalKeys.enabled == true
 end
 
----@param propertyId integer
----@return boolean
-function IsKeyProperty(propertyId)
-    return keyProperties[propertyId] == true
-end
-
----@param propertyId integer
----@return boolean
-function HoldsPropertyKey(propertyId)
-    if not KeysEnabled() then return false end
-
-    local slots = exports.ox_inventory:Search('slots', sharedConfig.physicalKeys.item)
-    if type(slots) ~= 'table' then return false end
-
-    for i = 1, #slots do
-        local metadata = slots[i].metadata
-        if metadata and tonumber(metadata.property) == propertyId then return true end
-    end
-
-    return false
-end
-
 RegisterNetEvent('qbx_properties:client:refreshBlips', refreshOwnedBlips)
-RegisterNetEvent('qbx_properties:client:refreshBlips', refreshKeyProperties)
 
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
-    SetTimeout(3000, function()
-        refreshOwnedBlips()
-        refreshKeyProperties()
-    end)
+    SetTimeout(3000, refreshOwnedBlips)
 end)
 
 CreateThread(function()
     Wait(4000)
-    if LocalPlayer.state.isLoggedIn then
-        refreshOwnedBlips()
-        refreshKeyProperties()
-    end
+    if LocalPlayer.state.isLoggedIn then refreshOwnedBlips() end
 end)
 
 RegisterNetEvent('qbx_properties:client:concealPlayers', function(playerIds)
@@ -790,16 +741,6 @@ local function refreshRingZones()
                     onSelect = function()
                         TriggerServerEvent('qbx_properties:server:ringProperty', { id = entry.id })
                         lib.notify({ type = 'info', description = 'You rang the doorbell.' })
-                    end,
-                },
-                {
-                    name = string.format('qbx_properties_key_%d_%d', entry.id, i),
-                    label = 'Order a replacement key',
-                    icon = 'fas fa-key',
-                    distance = TargetDistance('doorbell', 1.5),
-                    canInteract = function() return KeysEnabled() and IsKeyProperty(entry.id) end,
-                    onSelect = function()
-                        lib.callback.await('qbx_properties:callback:orderKey', false, entry.id)
                     end,
                 },
             },

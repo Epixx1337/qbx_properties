@@ -40,22 +40,70 @@ end
 ---@param propertyId integer
 ---@return table?
 local function fetchProperty(propertyId)
-    return MySQL.single.await('SELECT id, property_name, owner, tenant, building, coords, door_data, lock_version FROM properties WHERE id = ?', {propertyId})
+    return MySQL.single.await('SELECT id, property_name, owner, tenant, building, lock_version FROM properties WHERE id = ?', {propertyId})
+end
+
+---@param slots table? slot list from ox_inventory or a decoded stash row
+---@param propertyId integer
+---@param version integer
+---@return boolean
+local function slotsHoldKey(slots, propertyId, version)
+    if type(slots) ~= 'table' then return false end
+
+    for _, slot in pairs(slots) do
+        if type(slot) == 'table' and slot.name == keys.item then
+            local metadata = slot.metadata
+            if metadata and tonumber(metadata.property) == propertyId and tonumber(metadata.lock) == version then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+---@param slot table
+---@return string? inventory id of the bag or container this item opens
+local function bagInventoryId(slot)
+    local metadata = slot.metadata
+    if type(metadata) ~= 'table' then return end
+    if metadata.container then return metadata.container end
+
+    if metadata.id then
+        local definition = exports.ox_inventory:Items(slot.name)
+        if definition and definition.backpack then return ('backpack-%s'):format(metadata.id) end
+    end
+end
+
+---@param inventoryId string
+---@param propertyId integer
+---@param version integer
+---@return boolean
+local function bagHoldsKey(inventoryId, propertyId, version)
+    if exports.ox_inventory:GetInventory(inventoryId) then
+        return slotsHoldKey(exports.ox_inventory:Search(inventoryId, 'slots', keys.item), propertyId, version)
+    end
+
+    local ok, stored = pcall(MySQL.scalar.await, "SELECT data FROM ox_inventory WHERE owner = '' AND name = ?", {inventoryId})
+    if not ok or type(stored) ~= 'string' then return false end
+
+    local decoded = json.decode(stored)
+    return type(decoded) == 'table' and slotsHoldKey(decoded, propertyId, version)
 end
 
 ---@param source integer
 ---@param property table needs id
 ---@return boolean
 function HasPropertyKey(source, property)
-    local slots = exports.ox_inventory:Search(source, 'slots', keys.item)
-    if type(slots) ~= 'table' then return false end
-
     local version = lockVersion(property)
-    for i = 1, #slots do
-        local metadata = slots[i].metadata
-        if metadata and tonumber(metadata.property) == property.id and tonumber(metadata.lock) == version then
-            return true
-        end
+    if slotsHoldKey(exports.ox_inventory:Search(source, 'slots', keys.item), property.id, version) then return true end
+
+    local items = exports.ox_inventory:GetInventoryItems(source)
+    if type(items) ~= 'table' then return false end
+
+    for _, slot in pairs(items) do
+        local bag = type(slot) == 'table' and bagInventoryId(slot)
+        if bag and bagHoldsKey(bag, property.id, version) then return true end
     end
 
     return false
@@ -152,9 +200,16 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     if not PhysicalKeysEnabled() then return end
     local playerSource = source --[[@as number]]
 
-    SetTimeout(5000, function()
-        if GetPlayerPed(playerSource) == 0 then return end
-        issueMissingKeys(playerSource)
+    CreateThread(function()
+        local deadline = GetGameTimer() + 30000
+        while GetGameTimer() < deadline do
+            if not exports.qbx_core:GetPlayer(playerSource) then return end
+            if exports.ox_inventory:GetInventory(playerSource) then
+                issueMissingKeys(playerSource)
+                return
+            end
+            Wait(500)
+        end
     end)
 end)
 
@@ -260,52 +315,3 @@ lib.callback.register('qbx_properties:callback:changeLock', function(source, pro
     return true
 end)
 
-lib.callback.register('qbx_properties:callback:orderKey', function(source, propertyId)
-    local player, property = keyHolderProperty(source, propertyId)
-    if not player or not property then return false end
-
-    local playerCoords = GetEntityCoords(GetPlayerPed(source))
-    local coords = json.decode(property.coords)
-    local near = coords ~= nil and #(playerCoords - vec3(coords.x, coords.y, coords.z)) <= 12.0
-
-    if not near and property.door_data then
-        local ok, doors = pcall(json.decode, property.door_data)
-        if ok and type(doors) == 'table' then
-            for d = 1, #doors do
-                local leaf = doors[d].leaves and doors[d].leaves[1]
-                if leaf and leaf.coords and #(playerCoords - vec3(leaf.coords.x, leaf.coords.y, leaf.coords.z)) <= 6.0 then
-                    near = true
-                    break
-                end
-            end
-        end
-    end
-
-    if not near then return false end
-
-    if not exports.ox_inventory:CanCarryItem(source, keys.item, 1) then
-        exports.qbx_core:Notify(source, 'Your pockets are full, the key would not fit.', 'error')
-        return false
-    end
-
-    local price = keyPrice('key')
-    if not charge(player, price, string.format('Replacement key for %s', property.property_name)) then return false end
-    if not GivePropertyKey(source, property) then return false end
-
-    exports.qbx_core:Notify(source, 'A locksmith cut you a replacement key.', 'success')
-    LogAction(source, 'qbx_properties:server:orderKey', string.format('%s ordered a replacement key for property %d', player.PlayerData.citizenid, property.id))
-    return true
-end)
-
-lib.callback.register('qbx_properties:callback:getKeyProperties', function(source)
-    if not PhysicalKeysEnabled() then return {} end
-
-    local player = exports.qbx_core:GetPlayer(source)
-    if not player then return {} end
-
-    local citizenId = player.PlayerData.citizenid
-    local rows = MySQL.query.await('SELECT id FROM properties WHERE owner = ? OR tenant = ?', {citizenId, citizenId}) or {}
-    local ids = {}
-    for i = 1, #rows do ids[i] = rows[i].id end
-    return ids
-end)
