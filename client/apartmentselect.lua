@@ -240,12 +240,26 @@ local function InputHandler()
     StopCamera()
 end
 
-RegisterNetEvent('apartments:client:setupSpawnUI', function()
+RegisterNetEvent('apartments:client:setupSpawnUI', function(data)
     ApartmentOptions = lib.callback.await('qbx_properties:callback:getApartmentChoices', false) or GetApartmentOptions()
     currentButtonID = 1
 
     if #ApartmentOptions == 0 then
-        DoScreenFadeIn(1000)
+        lib.print.warn('no apartment to assign: no building map is running and no fallback interior is configured')
+
+        if type(data) == 'table' then
+            local spawn = require '@qbx_core.config.shared'.defaultSpawn
+            FreezeEntityPosition(cache.ped, false)
+            SetEntityCoords(cache.ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
+            SetEntityHeading(cache.ped, spawn.w)
+            Wait(500)
+            DoScreenFadeIn(1000)
+            TriggerServerEvent('QBCore:Server:OnPlayerLoaded')
+            TriggerEvent('QBCore:Client:OnPlayerLoaded')
+            TriggerEvent('qb-clothes:client:CreateFirstCharacter')
+        else
+            DoScreenFadeIn(1000)
+        end
         return
     end
     if #ApartmentOptions == 1 or sharedConfig.apartmentChoice == false then

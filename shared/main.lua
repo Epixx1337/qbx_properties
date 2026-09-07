@@ -90,6 +90,7 @@ end
 ---@return table[]
 function GetApartmentOptions()
     local options = {}
+    local fallbacks = {}
     local keys = {}
 
     for key in pairs(Apartments) do keys[#keys + 1] = key end
@@ -99,7 +100,8 @@ function GetApartmentOptions()
         local entry = Apartments[keys[i]]
 
         if entry.type == 'interior' then
-            options[#options + 1] = {
+            local list = entry.fallback and fallbacks or options
+            list[#list + 1] = {
                 interior = keys[i],
                 label = entry.label,
                 description = entry.description,
@@ -117,7 +119,7 @@ function GetApartmentOptions()
         end
     end
 
-    return options
+    return #options > 0 and options or fallbacks
 end
 
 local furnitureTypes

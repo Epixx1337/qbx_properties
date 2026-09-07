@@ -187,6 +187,8 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 4. Set your Qbox CDN API key (see below) if you want realtor photos
 5. Ensure the resource starts after its dependencies
 
+New characters get an apartment out of the box: the six built-in IPL apartments in `config/buildings.lua` carry `fallback = true`, so they are offered whenever none of the configured buildings has its map resource running — no MLO needed for a working first spawn. Install one of the supported maps and its building takes over automatically; remove the `fallback` flag to offer the IPL apartments alongside the buildings, or delete those entries to never use them.
+
 The NUI is prebuilt in `web/build`. To rebuild after changing it: `cd web && bun i && bun run build`.
 
 ## Using a different multicharacter or spawn system
