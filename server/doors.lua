@@ -5,6 +5,19 @@ if not sharedConfig.dynamicApartments then return end
 local DOOR_PREFIX = GetDoorPrefix()
 local DOOR_PATTERN = EscapePattern(DOOR_PREFIX)
 local runtimeDoors = false
+local trustedDoors = {}
+
+-- ox_doorlock authorises its setDoorState export against whatever `source` its runtime last saw, so state
+-- changes made by the resource itself are marked trusted for the authorization hook for the duration of the call
+---@param doorId integer
+---@param state 0|1
+---@return boolean
+function SetPropertyDoorState(doorId, state)
+    trustedDoors[doorId] = GetGameTimer() + 1000
+    local ok = pcall(function() exports.ox_doorlock:setDoorState(doorId, state) end)
+    trustedDoors[doorId] = nil
+    return ok
+end
 
 ---@param propertyId integer
 ---@param buildingKey string
@@ -134,6 +147,9 @@ CreateThread(function()
         local propertyId = ToId(payload.door.name:match('^' .. DOOR_PATTERN .. '(%d+):'))
         if not propertyId then return end
 
+        local trusted = trustedDoors[payload.door.id]
+        if trusted and GetGameTimer() < trusted then return true end
+
         local player = exports.qbx_core:GetPlayer(payload.source)
         if not player then return false end
 
@@ -198,13 +214,13 @@ function UnlockPropertyDoorsTemporarily(propertyId, seconds)
     if #affected == 0 then return false end
 
     for i = 1, #affected do
-        pcall(function() exports.ox_doorlock:setDoorState(affected[i], 0) end)
+        SetPropertyDoorState(affected[i], 0)
     end
 
     SetTimeout((seconds or 10) * 1000, function()
         if IsBreached and IsBreached(propertyId) then return end
         for i = 1, #affected do
-            pcall(function() exports.ox_doorlock:setDoorState(affected[i], 1) end)
+            SetPropertyDoorState(affected[i], 1)
         end
     end)
 
@@ -224,7 +240,7 @@ function SetPropertyDoorsBreached(propertyId, breached)
         for i = 1, #doors do
             local door = doors[i]
             if door.name and door.name:sub(1, #prefix) == prefix then
-                exports.ox_doorlock:setDoorState(door.id, breached and 0 or 1)
+                SetPropertyDoorState(door.id, breached and 0 or 1)
             end
         end
     end)

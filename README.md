@@ -229,7 +229,7 @@ And at the end of the authorisation function (right after the `::continue::` lab
     return authorised or hookResult
 ```
 
-qbx_properties registers a `doorAuthorization` hook on its own doors to let owners, keyholders and realtors through, and to unlock everything while a door is breached — normal ox_doorlock doors are untouched thanks to the hook's name filter.
+qbx_properties registers a `doorAuthorization` hook on its own doors to let owners, keyholders and realtors through, and to unlock everything while a door is breached — normal ox_doorlock doors are untouched thanks to the hook's name filter. State changes the resource makes itself (the doorcam's *Let in*, breaches, the phone lock toggle) are marked trusted for that hook while they run, because ox_doorlock's `setDoorState` export authorises against whatever `source` its runtime last saw rather than the caller.
 
 **2. Two exports** in `server/main.lua`, slotted in after the existing ones — `createDoorProgrammatic` to register doors at runtime and `removeDoorByName` to clean them up:
 

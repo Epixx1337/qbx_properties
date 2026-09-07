@@ -58,7 +58,11 @@ local function setLocked(row, locked)
     for i = 1, #names do
         local ok, door = pcall(function() return exports.ox_doorlock:getDoorFromName(names[i]) end)
         if ok and door then
-            pcall(function() exports.ox_doorlock:setDoorState(door.id, state) end)
+            if SetPropertyDoorState then
+                SetPropertyDoorState(door.id, state)
+            else
+                pcall(function() exports.ox_doorlock:setDoorState(door.id, state) end)
+            end
             changed = true
         end
     end
