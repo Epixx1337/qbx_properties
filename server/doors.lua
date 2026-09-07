@@ -128,7 +128,7 @@ function SyncPropertyDoors(propertyId, doors)
     end
 end
 
-CreateThread(function()
+local function bootDoorlock()
     if GetResourceState('ox_doorlock') ~= 'started' then
         lib.print.warn('ox_doorlock is not started, apartment doors will not be registered')
         return
@@ -191,6 +191,12 @@ CreateThread(function()
     if synced > 0 then
         lib.print.info(('registered the doors of %d propert(ies)'):format(synced))
     end
+end
+
+CreateThread(bootDoorlock)
+
+AddEventHandler('onResourceStart', function(resource)
+    if resource == 'ox_doorlock' then CreateThread(bootDoorlock) end
 end)
 
 ---@param propertyId integer
