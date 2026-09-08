@@ -41,6 +41,28 @@ local function indexDoors()
     end
 end
 
+---@param entry table door_data entry
+---@return vector3
+function DoorEntryCoords(entry)
+    if entry.double and #entry.leaves == 2 then
+        local a, b = entry.leaves[1].coords, entry.leaves[2].coords
+        return vec3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2)
+    end
+    local coords = entry.leaves[1].coords
+    return vec3(coords.x, coords.y, coords.z)
+end
+
+---@param coords vector3|table
+---@param propertyId integer? the asking property, its own doors do not count
+---@return integer? another property with a door on that spot
+function FindPropertyDoorAt(coords, propertyId)
+    local owners = doorSpots[spotKey(coords)]
+    if not owners then return end
+    for otherId in pairs(owners) do
+        if otherId ~= propertyId then return otherId end
+    end
+end
+
 ---@param leaf table
 ---@return boolean
 local function usableLeaf(leaf)
@@ -101,18 +123,23 @@ function RegisterUnitDoors(propertyId, buildingKey, floor, room)
 
         if not exports.ox_doorlock:getDoorFromName(name) then
             local coords = RotateOffset(anchor, doors[i].coords)
+            local other = FindPropertyDoorAt(coords, propertyId)
 
-            local id = exports.ox_doorlock:createDoorProgrammatic({
-                name = name,
-                coords = vec3(coords.x, coords.y, coords.z),
-                model = doors[i].model,
-                heading = doors[i].heading or ((anchor.w + (doors[i].headingOffset or 0.0)) % 360.0),
-                maxDistance = doors[i].maxDistance or 1.5,
-                state = 1,
-                characters = { DOOR_PREFIX .. propertyId },
-            })
+            if other then
+                lib.print.error(('the door of unit %d sits on a door of property %d and was not registered, the units are duplicates'):format(propertyId, other))
+            else
+                local id = exports.ox_doorlock:createDoorProgrammatic({
+                    name = name,
+                    coords = vec3(coords.x, coords.y, coords.z),
+                    model = doors[i].model,
+                    heading = doors[i].heading or ((anchor.w + (doors[i].headingOffset or 0.0)) % 360.0),
+                    maxDistance = doors[i].maxDistance or 1.5,
+                    state = 1,
+                    characters = { DOOR_PREFIX .. propertyId },
+                })
 
-            if id then created += 1 end
+                if id then created += 1 end
+            end
         end
     end
 
@@ -178,19 +205,19 @@ function SyncPropertyDoors(propertyId, doors)
                 { model = entry.leaves[1].model, coords = entry.leaves[1].coords, heading = entry.leaves[1].heading },
                 { model = entry.leaves[2].model, coords = entry.leaves[2].coords, heading = entry.leaves[2].heading },
             }
-            payload.coords = vec3(
-                (entry.leaves[1].coords.x + entry.leaves[2].coords.x) / 2,
-                (entry.leaves[1].coords.y + entry.leaves[2].coords.y) / 2,
-                (entry.leaves[1].coords.z + entry.leaves[2].coords.z) / 2
-            )
         else
             local leaf = entry.leaves[1]
             payload.model = leaf.model
-            payload.coords = vec3(leaf.coords.x, leaf.coords.y, leaf.coords.z)
             payload.heading = leaf.heading
         end
+        payload.coords = DoorEntryCoords(entry)
 
-        exports.ox_doorlock:createDoorProgrammatic(payload)
+        local other = FindPropertyDoorAt(payload.coords, propertyId)
+        if other then
+            lib.print.error(('door %d of property %d sits on a door of property %d and was not registered, the properties are duplicates'):format(i, propertyId, other))
+        else
+            exports.ox_doorlock:createDoorProgrammatic(payload)
+        end
     end
 
     indexDoors()
@@ -287,6 +314,8 @@ local function bootDoorlock()
         lib.print.info(('dropped empty door entries from %d propert(ies)'):format(repaired))
     end
 
+    indexDoors()
+
     local duplicates = MySQL.query.await('SELECT building, floor, room, GROUP_CONCAT(id) AS ids FROM properties WHERE building IS NOT NULL GROUP BY building, floor, room HAVING COUNT(*) > 1') or {}
     for i = 1, #duplicates do
         lib.print.error(('properties %s all claim room %d%02d of %s, their doors fight over the same entity - delete the duplicates'):format(duplicates[i].ids, duplicates[i].floor, duplicates[i].room, duplicates[i].building))
@@ -321,7 +350,7 @@ local function bootDoorlock()
 
     indexDoors()
 
-    local reported = {}
+    local groups, reported = {}, {}
     for _, owners in pairs(doorSpots) do
         local list = {}
         for propertyId in pairs(owners) do list[#list + 1] = propertyId end
@@ -329,15 +358,41 @@ local function bootDoorlock()
         if #list > 1 then
             table.sort(list)
             local key = table.concat(list, ',')
-
             if not reported[key] then
                 reported[key] = true
-                local names = MySQL.query.await(('SELECT id, property_name, owner FROM properties WHERE id IN (%s)'):format(key)) or {}
-                local parts = {}
-                for i = 1, #names do
-                    parts[#parts + 1] = ('%d "%s"%s'):format(names[i].id, names[i].property_name, names[i].owner and '' or ' (unowned)')
+                groups[#groups + 1] = { key = key, first = list[1] }
+            end
+        end
+    end
+
+    for g = 1, #groups do
+        local twins = MySQL.query.await(('SELECT id, property_name, owner, building, floor, room, door_data FROM properties WHERE id IN (%s)'):format(groups[g].key)) or {}
+
+        local winner, owned = groups[g].first, 0
+        for i = 1, #twins do
+            if twins[i].owner then
+                owned += 1
+                winner = twins[i].id
+            end
+        end
+        if owned ~= 1 then winner = groups[g].first end
+
+        local parts = {}
+        for i = 1, #twins do
+            parts[#parts + 1] = ('%d "%s"%s'):format(twins[i].id, twins[i].property_name, twins[i].owner and '' or ' (unowned)')
+        end
+        lib.print.error(('properties %s share a door - they are the same house twice, keep %d and delete the others from the Manage tab'):format(table.concat(parts, ', '), winner))
+
+        for i = 1, #twins do
+            local row = twins[i]
+            if row.id ~= winner then
+                if row.building then
+                    exports.ox_doorlock:removeDoorByName(string.format('%s%d:', DOOR_PREFIX, row.id))
+                    RegisterUnitDoors(row.id, row.building, row.floor, row.room)
+                else
+                    local ok, doors = pcall(json.decode, row.door_data or 'null')
+                    SyncPropertyDoors(row.id, ok and type(doors) == 'table' and doors or {})
                 end
-                lib.print.error(('properties %s share a door - they are the same house twice, keep the owned one and delete the others from the Manage tab'):format(table.concat(parts, ', ')))
             end
         end
     end

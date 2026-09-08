@@ -372,7 +372,7 @@ function EnterProperty(playerSource, id, isSpawn, inPlace)
 end
 
 ---@param playerSource integer
-local function exitProperty(playerSource, isLogout)
+local function exitProperty(playerSource, isLogout, fallbackCoords)
     local propertyId = enteredProperty[playerSource]
     if not propertyId then return end
 
@@ -381,8 +381,8 @@ local function exitProperty(playerSource, isLogout)
 
     if not isLogout and not enteredInPlace[playerSource] then
         local property = MySQL.single.await('SELECT coords FROM properties WHERE id = ?', {propertyId})
-        if property then
-            local enterCoords = json.decode(property.coords)
+        local enterCoords = property and json.decode(property.coords) or fallbackCoords
+        if enterCoords then
             SetEntityCoords(GetPlayerPed(playerSource), enterCoords.x, enterCoords.y, enterCoords.z, false, false, false, false)
         end
     end
@@ -1861,7 +1861,22 @@ RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
         return
     end
 
-    EvictProperty(propertyId)
+    local slots = MySQL.query.await('SELECT stash_slot FROM properties_decorations WHERE property_id = ? AND stash_slot IS NOT NULL', {propertyId}) or {}
+    local occupants = {}
+    for i = 1, #(insideProperty[propertyId] or {}) do occupants[i] = insideProperty[propertyId][i] end
+    local coords = json.decode(property.coords)
+
+    local ok, affected = pcall(MySQL.update.await, 'DELETE FROM properties WHERE id = ?', {propertyId})
+    if not ok or affected ~= 1 then
+        lib.print.error(('could not delete property %d (%s): %s'):format(propertyId, property.property_name, ok and 'no row was deleted' or tostring(affected)))
+        exports.qbx_core:Notify(playerSource, 'The property could not be deleted, check the server console.', 'error')
+        return
+    end
+
+    for i = 1, #occupants do
+        exitProperty(occupants[i], false, coords)
+    end
+    RefreshCustomGarages()
 
     local owner = property.owner and exports.qbx_core:GetPlayerByCitizenId(property.owner)
     if owner then
@@ -1869,7 +1884,6 @@ RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
         exports.qbx_core:Notify(owner.PlayerData.source, string.format('%s has been demolished.', property.property_name), 'error')
     end
 
-    local slots = MySQL.query.await('SELECT stash_slot FROM properties_decorations WHERE property_id = ? AND stash_slot IS NOT NULL', {propertyId}) or {}
     pcall(function() exports.ox_inventory:ClearInventory(GetStashId(property)) end)
     for i = 1, #slots do
         pcall(function() exports.ox_inventory:ClearInventory(GetStashId(property, slots[i].stash_slot)) end)
@@ -1878,8 +1892,8 @@ RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
     pcall(function() exports.ox_doorlock:removeDoorByName(string.format('%s%d:', GetDoorPrefix(), propertyId)) end)
 
     if property.images and DeletePropertyImagesRemote then
-        local ok, images = pcall(json.decode, property.images)
-        if ok and type(images) == 'table' then DeletePropertyImagesRemote(images) end
+        local ok2, images = pcall(json.decode, property.images)
+        if ok2 and type(images) == 'table' then DeletePropertyImagesRemote(images) end
     end
 
     local garageName = GetPropertyGarageName(property.property_name)
@@ -1887,9 +1901,6 @@ RegisterNetEvent('qbx_properties:server:deleteProperty', function(propertyId)
 
     pcall(MySQL.update.await, 'DELETE FROM properties_access WHERE property_id = ?', {propertyId})
     pcall(MySQL.update.await, 'DELETE FROM properties_raids WHERE property_id = ?', {propertyId})
-    MySQL.update.await('DELETE FROM properties WHERE id = ?', {propertyId})
-
-    local coords = json.decode(property.coords)
     TriggerClientEvent('qbx_properties:client:removeProperty', -1, vec3(coords.x, coords.y, coords.z))
     TriggerClientEvent('qbx_properties:client:removeShell', -1, propertyId)
     TriggerClientEvent('qbx_properties:client:removeGarden', -1, propertyId)

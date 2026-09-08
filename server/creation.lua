@@ -82,6 +82,26 @@ lib.callback.register('qbx_properties:callback:createProperty', function(source,
     local doors = sanitiseDoors(data.doors)
     if not doors then return false end
 
+    if FindPropertyDoorAt then
+        for i = 1, #doors do
+            local other = FindPropertyDoorAt(DoorEntryCoords(doors[i]))
+            if other then
+                local name = MySQL.scalar.await('SELECT property_name FROM properties WHERE id = ?', {other})
+                exports.qbx_core:Notify(source, string.format('That door already belongs to %s (#%d).', name or 'another property', other), 'error')
+                return false
+            end
+        end
+    end
+
+    local existing = MySQL.query.await('SELECT id, property_name, coords FROM properties WHERE building IS NULL') or {}
+    for i = 1, #existing do
+        local ok, point = pcall(json.decode, existing[i].coords)
+        if ok and point and #(vec3(entrance.x, entrance.y, entrance.z) - vec3(point.x, point.y, point.z)) < 1.0 then
+            exports.qbx_core:Notify(source, string.format('%s (#%d) already uses this spot.', existing[i].property_name, existing[i].id), 'error')
+            return false
+        end
+    end
+
     local garden, gardenOk = sanitiseGarden(data.garden)
     if not gardenOk then return false end
 
@@ -824,6 +844,14 @@ lib.callback.register('qbx_properties:callback:addPropertyDoor', function(source
 
     local property = MySQL.single.await('SELECT id, property_name, door_data FROM properties WHERE id = ? AND building IS NULL', {propertyId})
     if not property then return false end
+
+    if FindPropertyDoorAt then
+        local other = FindPropertyDoorAt(DoorEntryCoords(sanitised[1]), propertyId)
+        if other then
+            exports.qbx_core:Notify(source, string.format('That door already belongs to property #%d.', other), 'error')
+            return false
+        end
+    end
 
     local doors = property.door_data and json.decode(property.door_data) or {}
     doors[#doors + 1] = sanitised[1]

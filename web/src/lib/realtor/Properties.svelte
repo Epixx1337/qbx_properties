@@ -12,6 +12,7 @@
   let mapFocus = $state(null)
   let bulk = $state(null)
   let bulkBusy = $state(false)
+  let detailCollapsed = $state(false)
   let editPrice = $state(0)
   let editSize = $state('medium')
   let editRental = $state(false)
@@ -55,6 +56,7 @@
   }
 
   function select(property) {
+    detailCollapsed = false
     if (selected?.id === property.id) return
     selected = property
     realtor.details = null
@@ -331,10 +333,14 @@
             {#if selected.listed}<span class="badge yellow">Listed</span>{/if}
             {#if selected.owner}<span class="badge red">Owned</span>{:else}<span class="badge green">Free</span>{/if}
             <span class="badge">ID {selected.id}</span>
+            <button class="chip" title={detailCollapsed ? 'Expand' : 'Collapse'} onclick={() => (detailCollapsed = !detailCollapsed)}>{detailCollapsed ? '▾' : '▴'}</button>
+            <button class="chip" title="Close" onclick={() => (selected = null)}>×</button>
           </div>
         </div>
 
-        {#if !details}
+        {#if detailCollapsed}
+          <span class="collapsed-hint">Expand to edit, list or place things for this property.</span>
+        {:else if !details}
           <div class="empty">Loading details...</div>
         {:else}
           <div class="detail-grid">
@@ -694,6 +700,12 @@
     border: 1px solid var(--dark-4);
     border-radius: 8px;
     flex: none;
+    order: -1;
+  }
+
+  .collapsed-hint {
+    font-size: 12px;
+    color: var(--dark-3);
   }
 
   .detail-head {
@@ -711,6 +723,7 @@
 
   .detail-badges {
     display: flex;
+    align-items: center;
     gap: 6px;
   }
 
