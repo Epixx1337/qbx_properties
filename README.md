@@ -231,6 +231,8 @@ And at the end of the authorisation function (right after the `::continue::` lab
 
 qbx_properties registers a `doorAuthorization` hook on its own doors to let owners, keyholders and realtors through, and to unlock everything while a door is breached — normal ox_doorlock doors are untouched thanks to the hook's name filter. State changes the resource makes itself (the doorcam's *Let in*, breaches, the phone lock toggle) are marked trusted for that hook while they run, because ox_doorlock's `setDoorState` export authorises against whatever `source` its runtime last saw rather than the caller.
 
+Every boot validates the door records: doors whose property no longer exists are removed, door entries without a real position are dropped from the property and re-synced, and properties that share a door — the same house created twice — are reported by name and id with their ownership. Such a shared door still opens for anyone who has access to *any* of the properties on that spot, so a buyer is never locked out by a duplicate row, but the duplicate should be deleted from the Manage tab all the same.
+
 **2. Two exports** in `server/main.lua`, slotted in after the existing ones — `createDoorProgrammatic` to register doors at runtime and `removeDoorByName` to clean them up:
 
 ```lua

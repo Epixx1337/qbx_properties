@@ -19,6 +19,66 @@ function SetPropertyDoorState(doorId, state)
     return ok
 end
 
+local doorSpots = {}
+
+---@param coords vector3|table
+---@return string
+local function spotKey(coords)
+    return ('%.1f,%.1f,%.1f'):format(coords.x, coords.y, coords.z)
+end
+
+local function indexDoors()
+    table.wipe(doorSpots)
+    local all = exports.ox_doorlock:getAllDoors() or {}
+    for i = 1, #all do
+        local door = all[i]
+        local propertyId = door.name and ToId(door.name:match('^' .. DOOR_PATTERN .. '(%d+):'))
+        if propertyId and door.coords then
+            local key = spotKey(door.coords)
+            doorSpots[key] = doorSpots[key] or {}
+            doorSpots[key][propertyId] = true
+        end
+    end
+end
+
+---@param leaf table
+---@return boolean
+local function usableLeaf(leaf)
+    local coords = leaf and leaf.coords
+    if not coords or not leaf.model or leaf.model == 0 then return false end
+    return not (coords.x == 0 and coords.y == 0 and coords.z == 0)
+end
+
+---@param doors table door_data entries
+---@return table clean, boolean changed
+function CleanDoorData(doors)
+    local clean, changed = {}, false
+
+    for i = 1, #doors do
+        local entry = doors[i]
+        local leaves = {}
+        for j = 1, #(entry.leaves or {}) do
+            if usableLeaf(entry.leaves[j]) then
+                leaves[#leaves + 1] = entry.leaves[j]
+            else
+                changed = true
+            end
+        end
+
+        if #leaves > 0 then
+            local copy = {}
+            for k, v in pairs(entry) do copy[k] = v end
+            copy.leaves = leaves
+            copy.double = entry.double and #leaves == 2 or false
+            clean[#clean + 1] = copy
+        else
+            changed = true
+        end
+    end
+
+    return clean, changed
+end
+
 ---@param propertyId integer
 ---@param buildingKey string
 ---@param floor integer
@@ -56,6 +116,7 @@ function RegisterUnitDoors(propertyId, buildingKey, floor, room)
         end
     end
 
+    if created > 0 then indexDoors() end
     return created
 end
 
@@ -69,6 +130,7 @@ function SyncFurnitureDoors(property)
     local types = GetFurnitureTypes()
     local decorations = GetPropertyDecorations(property)
     local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
+    local created = 0
 
     for i = 1, #decorations do
         if types[decorations[i].model] == 'door' then
@@ -86,8 +148,11 @@ function SyncFurnitureDoors(property)
                 state = 1,
                 characters = { DOOR_PREFIX .. property.id },
             })
+            created += 1
         end
     end
+
+    if created > 0 then indexDoors() end
 end
 
 ---@param propertyId integer
@@ -97,6 +162,7 @@ function SyncPropertyDoors(propertyId, doors)
 
     local prefix = string.format('%s%d:d', DOOR_PREFIX, propertyId)
     exports.ox_doorlock:removeDoorByName(prefix)
+    doors = CleanDoorData(doors)
 
     for i = 1, #doors do
         local entry = doors[i]
@@ -126,6 +192,8 @@ function SyncPropertyDoors(propertyId, doors)
 
         exports.ox_doorlock:createDoorProgrammatic(payload)
     end
+
+    indexDoors()
 end
 
 local function bootDoorlock()
@@ -155,12 +223,27 @@ local function bootDoorlock()
 
         if IsBreached and IsBreached(propertyId) then return payload.door.state == 1 end
 
+        local citizenId = player.PlayerData.citizenid
+        local realtor = IsRealtor(player.PlayerData.job)
         local property = MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant FROM properties WHERE id = ?', {propertyId})
-        if not property then return false end
 
-        if not property.owner and IsRealtor(player.PlayerData.job) then return true end
+        if property and ((not property.owner and realtor) or HasPropertyAccess(citizenId, property, 'door')) then
+            return true
+        end
 
-        return HasPropertyAccess(player.PlayerData.citizenid, property, 'door')
+        local siblings = payload.door.coords and doorSpots[spotKey(payload.door.coords)]
+        if siblings then
+            for otherId in pairs(siblings) do
+                if otherId ~= propertyId then
+                    local other = MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant FROM properties WHERE id = ?', {otherId})
+                    if other and ((not other.owner and realtor) or HasPropertyAccess(citizenId, other, 'door')) then
+                        return true
+                    end
+                end
+            end
+        end
+
+        return false
     end, {
         nameFilter = '^' .. DOOR_PATTERN,
     })
@@ -169,22 +252,11 @@ local function bootDoorlock()
     local rows = MySQL.query.await('SELECT id FROM properties') or {}
     for i = 1, #rows do ids[rows[i].id] = true end
 
-    local orphans, seen = {}, {}
+    local orphans = {}
     local existing = exports.ox_doorlock:getAllDoors() or {}
     for i = 1, #existing do
-        local door = existing[i]
-        local propertyId = door.name and ToId(door.name:match('^' .. DOOR_PATTERN .. '(%d+):'))
-
-        if propertyId and not ids[propertyId] then
-            orphans[propertyId] = true
-        elseif propertyId and door.coords then
-            local spot = ('%.1f,%.1f,%.1f'):format(door.coords.x, door.coords.y, door.coords.z)
-            if seen[spot] and seen[spot] ~= propertyId then
-                lib.print.error(('door %s shares its spot with a door of property %d, only one of them can work - remove the stale one from ox_doorlock'):format(door.name, seen[spot]))
-            else
-                seen[spot] = propertyId
-            end
-        end
+        local propertyId = existing[i].name and ToId(existing[i].name:match('^' .. DOOR_PATTERN .. '(%d+):'))
+        if propertyId and not ids[propertyId] then orphans[propertyId] = true end
     end
 
     local pruned = 0
@@ -195,6 +267,24 @@ local function bootDoorlock()
 
     if pruned > 0 then
         lib.print.info(('removed the doors of %d deleted propert(ies) from ox_doorlock'):format(pruned))
+    end
+
+    local repaired = 0
+    local withDoors = MySQL.query.await('SELECT id, door_data FROM properties WHERE building IS NULL AND door_data IS NOT NULL') or {}
+    for i = 1, #withDoors do
+        local ok, doors = pcall(json.decode, withDoors[i].door_data)
+        if ok and type(doors) == 'table' then
+            local clean, changed = CleanDoorData(doors)
+            if changed then
+                MySQL.update.await('UPDATE properties SET door_data = ? WHERE id = ?', {#clean > 0 and json.encode(clean) or nil, withDoors[i].id})
+                SyncPropertyDoors(withDoors[i].id, clean)
+                repaired += 1
+            end
+        end
+    end
+
+    if repaired > 0 then
+        lib.print.info(('dropped empty door entries from %d propert(ies)'):format(repaired))
     end
 
     local duplicates = MySQL.query.await('SELECT building, floor, room, GROUP_CONCAT(id) AS ids FROM properties WHERE building IS NOT NULL GROUP BY building, floor, room HAVING COUNT(*) > 1') or {}
@@ -227,6 +317,29 @@ local function bootDoorlock()
 
     if synced > 0 then
         lib.print.info(('registered the doors of %d propert(ies)'):format(synced))
+    end
+
+    indexDoors()
+
+    local reported = {}
+    for _, owners in pairs(doorSpots) do
+        local list = {}
+        for propertyId in pairs(owners) do list[#list + 1] = propertyId end
+
+        if #list > 1 then
+            table.sort(list)
+            local key = table.concat(list, ',')
+
+            if not reported[key] then
+                reported[key] = true
+                local names = MySQL.query.await(('SELECT id, property_name, owner FROM properties WHERE id IN (%s)'):format(key)) or {}
+                local parts = {}
+                for i = 1, #names do
+                    parts[#parts + 1] = ('%d "%s"%s'):format(names[i].id, names[i].property_name, names[i].owner and '' or ' (unowned)')
+                end
+                lib.print.error(('properties %s share a door - they are the same house twice, keep the owned one and delete the others from the Manage tab'):format(table.concat(parts, ', ')))
+            end
+        end
     end
 end
 
