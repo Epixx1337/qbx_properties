@@ -165,6 +165,43 @@ local function bootDoorlock()
         nameFilter = '^' .. DOOR_PATTERN,
     })
 
+    local ids = {}
+    local rows = MySQL.query.await('SELECT id FROM properties') or {}
+    for i = 1, #rows do ids[rows[i].id] = true end
+
+    local orphans, seen = {}, {}
+    local existing = exports.ox_doorlock:getAllDoors() or {}
+    for i = 1, #existing do
+        local door = existing[i]
+        local propertyId = door.name and ToId(door.name:match('^' .. DOOR_PATTERN .. '(%d+):'))
+
+        if propertyId and not ids[propertyId] then
+            orphans[propertyId] = true
+        elseif propertyId and door.coords then
+            local spot = ('%.1f,%.1f,%.1f'):format(door.coords.x, door.coords.y, door.coords.z)
+            if seen[spot] and seen[spot] ~= propertyId then
+                lib.print.error(('door %s shares its spot with a door of property %d, only one of them can work - remove the stale one from ox_doorlock'):format(door.name, seen[spot]))
+            else
+                seen[spot] = propertyId
+            end
+        end
+    end
+
+    local pruned = 0
+    for propertyId in pairs(orphans) do
+        exports.ox_doorlock:removeDoorByName(string.format('%s%d:', DOOR_PREFIX, propertyId))
+        pruned += 1
+    end
+
+    if pruned > 0 then
+        lib.print.info(('removed the doors of %d deleted propert(ies) from ox_doorlock'):format(pruned))
+    end
+
+    local duplicates = MySQL.query.await('SELECT building, floor, room, GROUP_CONCAT(id) AS ids FROM properties WHERE building IS NOT NULL GROUP BY building, floor, room HAVING COUNT(*) > 1') or {}
+    for i = 1, #duplicates do
+        lib.print.error(('properties %s all claim room %d%02d of %s, their doors fight over the same entity - delete the duplicates'):format(duplicates[i].ids, duplicates[i].floor, duplicates[i].room, duplicates[i].building))
+    end
+
     local units = MySQL.query.await('SELECT id, building, floor, room FROM properties WHERE building IS NOT NULL')
     local created = 0
     for i = 1, #units do
