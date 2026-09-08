@@ -97,8 +97,15 @@ local function destroyFreecam()
     camera = nil
 end
 
+local lastFreecamToggle = 0
+
+-- the NUI reports the F keydown and the world loop the release of the same press, so one tap must not count twice
 function ToggleFreecam()
     if not IsDecorating then return end
+
+    local now = GetGameTimer()
+    if now - lastFreecamToggle < 300 then return end
+    lastFreecamToggle = now
 
     ensureFreecam()
     freecamMoving = not freecamMoving
