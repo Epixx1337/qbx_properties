@@ -376,8 +376,19 @@ RegisterNetEvent('qbx_properties:client:refreshInteractions', function(interacti
     if sharedConfig.targetShellInteractions then createInteractionTargets() end
 end)
 
+-- external multicharacters hide and freeze the ped for their menus and leave it that way when they hand off to
+-- the apartment picker, so every place a spawn lands puts the ped back the way qbx_core's own flow does
+function RestoreSpawnPed()
+    local ped = cache.ped
+    SetEntityVisible(ped, true, false)
+    ResetEntityAlpha(ped)
+    SetEntityCollision(ped, true, true)
+    FreezeEntityPosition(ped, false)
+end
+
 RegisterNetEvent('qbx_properties:client:updateInteractions', function(interactionsData, interiorString, isRental, propertyId)
     if propertyId then CurrentPropertyId = propertyId end
+    RestoreSpawnPed()
 
     if IsRealtor(QBX.PlayerData.job) and CurrentPropertyId and interiorString ~= 'mlo' then
         AddPropertyRadial('qbx_properties_points', {
@@ -411,8 +422,8 @@ RegisterNetEvent('qbx_properties:client:createInterior', function(interiorHash, 
 end)
 
 RegisterNetEvent('qbx_properties:client:finishSpawn', function()
+    RestoreSpawnPed()
     DoScreenFadeIn(1000)
-    FreezeEntityPosition(cache.ped, false)
 end)
 
 RegisterNetEvent('qbx_properties:client:loadDecorations', function(decorations)

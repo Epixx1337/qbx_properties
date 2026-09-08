@@ -197,6 +197,27 @@ Nothing here depends on a specific multicharacter UI. Apartment assignment hooks
 
 **First-login apartments** need `characters.startingApartment = true` in qbx_core's `config/client.lua`. When a character loads with no property and no assigned unit, the apartment picker opens automatically; choosing a building grabs a free unit through the dynamic assignment (or creates an owned IPL apartment). There is no export to assign a unit because none is needed — it all happens on login. If you ever want to reopen the picker manually (say from your own intro flow), trigger the client event `apartments:client:setupSpawnUI` for that player.
 
+The picker is safe to trigger more than once per login (a second trigger while one is running is ignored), and every spawn path puts the ped back — visible, solid, unfrozen — before the clothing menu opens, so a multicharacter that hides the ped for its own menu and hands off straight to the picker works without changes. The server event `qbx_properties:server:apartmentSelect` accepts either the index of the picker's option list or a building key / interior name from `config/buildings.lua` (`'wiwang'`, `'DellPerroHeightsApt4'`); an unknown choice assigns the first available apartment rather than leaving a new character without one.
+
+**um-multicharacter** hands new characters to the picker on its own once `setr um:NewPlayerApartmentInsideStart "true"` is in `server.cfg` — its bridge reads that convar, not the `Config.ApartmentStart` value in its config file. With **um-spawn** added, its `bridge/apartments/list/qbx_properties.lua` lists the six stock IPL apartments with `type = '1'` to `'6'`; those indexes only line up with a server that runs no building maps. Replace the list with your buildings, using their config keys as `type`:
+
+```lua
+UM_apartments = {
+    ['Wiwang Hotel'] = {
+        type = 'wiwang',
+        coords = vec4(-824.2, -699.8, 28.05, 0.0),
+        text = 'Wiwang Hotel',
+        image = '',
+        features = { beds = '1', bath = '1', sqft = '1' },
+        desc = 'A room at the Wiwang Hotel.',
+        star = 3,
+        tag = 'rent',
+    },
+}
+```
+
+and in um-spawn's `main/client/spawn.lua` change the qbx_properties line under `rentApartment` from `tonumber(data.type)` to `tonumber(data.type) or data.type` so the key reaches the server as text.
+
 **Spawn selectors** are equally swappable. Without qbx_spawn, qbx_core spawns characters at their last location and everything still works — players who logged out inside an MLO wake up where they stood, and players who logged out inside a shell or IPL interior are re-entered through their property automatically. A custom spawn selector only needs two integration points:
 
 - To spawn a player into a property they own, trigger the server event `qbx_properties:server:enterProperty` with `{ id = propertyId }` shortly after `QBCore:Server:OnPlayerLoaded` — within the first minute after loading it is treated as a spawn, so the distance check is skipped and the screen fades in once they are inside.

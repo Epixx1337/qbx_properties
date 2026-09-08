@@ -183,7 +183,7 @@ end
 local function inputConfirm(apartmentIndex)
     DoScreenFadeOut(500)
     while not IsScreenFadedOut() do Wait(0) end
-    FreezeEntityPosition(cache.ped, false)
+    RestoreSpawnPed()
     SetEntityCoords(cache.ped, ApartmentOptions[apartmentIndex].enter.x, ApartmentOptions[apartmentIndex].enter.y, ApartmentOptions[apartmentIndex].enter.z - 2.0, false, false, false, false)
     Wait(0)
     TriggerServerEvent('qbx_properties:server:apartmentSelect', ApartmentOptions[apartmentIndex].index or apartmentIndex)
@@ -240,7 +240,9 @@ local function InputHandler()
     StopCamera()
 end
 
-RegisterNetEvent('apartments:client:setupSpawnUI', function(data)
+local spawnUiActive = false
+
+local function runSpawnUI(data)
     ApartmentOptions = lib.callback.await('qbx_properties:callback:getApartmentChoices', false) or GetApartmentOptions()
     currentButtonID = 1
 
@@ -249,7 +251,7 @@ RegisterNetEvent('apartments:client:setupSpawnUI', function(data)
 
         if type(data) == 'table' then
             local spawn = require '@qbx_core.config.shared'.defaultSpawn
-            FreezeEntityPosition(cache.ped, false)
+            RestoreSpawnPed()
             SetEntityCoords(cache.ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
             SetEntityHeading(cache.ped, spawn.w)
             Wait(500)
@@ -273,4 +275,14 @@ RegisterNetEvent('apartments:client:setupSpawnUI', function(data)
     StartScaleform()
     SetupScaleform()
     InputHandler()
+end
+
+-- qbx_core triggers this once, but external multicharacters tend to fire it themselves and through
+-- QBCore:Server:OnPlayerLoaded at the same time, and two pickers on one screen strand the player
+RegisterNetEvent('apartments:client:setupSpawnUI', function(data)
+    if spawnUiActive then return end
+    spawnUiActive = true
+    local ok, err = pcall(runSpawnUI, data)
+    spawnUiActive = false
+    if not ok then error(err) end
 end)

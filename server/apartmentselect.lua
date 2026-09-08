@@ -2,10 +2,35 @@ local config = require 'config.server'
 local sharedConfig = require 'config.shared'
 
 local selecting = {}
+local pickerSent = {}
 
 ---@param playerSource integer
 function ClearApartmentLock(playerSource)
     selecting[playerSource] = nil
+    pickerSent[playerSource] = nil
+end
+
+-- external spawn menus may send a building key instead of an index, or an index from their own list
+-- that means nothing here; anything unknown falls back to the first available apartment
+---@param choice any
+---@return table? option, integer? index
+local function resolveApartmentChoice(choice)
+    local options = GetApartmentOptions()
+    if #options == 0 then return nil end
+
+    local index = ToId(choice)
+    if index and options[index] then return options[index], index end
+
+    if type(choice) == 'string' then
+        for i = 1, #options do
+            if options[i].building == choice or options[i].interior == choice then
+                return options[i], i
+            end
+        end
+    end
+
+    lib.print.warn(('unknown apartment choice %s, assigning the first available apartment'):format(tostring(choice)))
+    return options[1], 1
 end
 
 ---@param playerSource integer
@@ -55,9 +80,9 @@ RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentInde
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)
     if not player or selecting[playerSource] then return end
-    apartmentIndex = ToId(apartmentIndex)
+    pickerSent[playerSource] = os.time()
 
-    local option = apartmentIndex and GetApartmentOptions()[apartmentIndex]
+    local option = resolveApartmentChoice(apartmentIndex)
     if not option then
         TriggerClientEvent('qbx_properties:client:finishSpawn', playerSource)
         return
@@ -145,9 +170,14 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     if not player then return end
 
     if player.PlayerData.metadata.apartmentBuilding then return end
+    if selecting[playerSource] then return end
 
     local hasApartment = MySQL.single.await('SELECT id FROM properties WHERE owner = ?', {player.PlayerData.citizenid})
-    if not hasApartment then
-        TriggerClientEvent('apartments:client:setupSpawnUI', playerSource)
-    end
+    if hasApartment or selecting[playerSource] then return end
+
+    -- a picker or a spawn menu's own selection is already in flight for this login
+    if pickerSent[playerSource] and os.time() - pickerSent[playerSource] < 30 then return end
+    pickerSent[playerSource] = os.time()
+
+    TriggerClientEvent('apartments:client:setupSpawnUI', playerSource)
 end)
