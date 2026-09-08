@@ -379,6 +379,7 @@ end)
 -- external multicharacters hide and freeze the ped for their menus and leave it that way when they hand off to
 -- the apartment picker, so every place a spawn lands puts the ped back the way qbx_core's own flow does
 function RestoreSpawnPed()
+    if IsPhotoTouring and IsPhotoTouring() then return end
     local ped = cache.ped
     SetEntityVisible(ped, true, false)
     ResetEntityAlpha(ped)

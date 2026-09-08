@@ -80,7 +80,7 @@ RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentInde
     local playerSource = source --[[@as number]]
     local player = exports.qbx_core:GetPlayer(playerSource)
     if not player or selecting[playerSource] then return end
-    pickerSent[playerSource] = os.time()
+    pickerSent[playerSource] = { cid = player.PlayerData.citizenid, at = os.time() }
 
     local option = resolveApartmentChoice(apartmentIndex)
     if not option then
@@ -175,9 +175,10 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     local hasApartment = MySQL.single.await('SELECT id FROM properties WHERE owner = ?', {player.PlayerData.citizenid})
     if hasApartment or selecting[playerSource] then return end
 
-    -- a picker or a spawn menu's own selection is already in flight for this login
-    if pickerSent[playerSource] and os.time() - pickerSent[playerSource] < 30 then return end
-    pickerSent[playerSource] = os.time()
+    -- a picker or a spawn menu's own selection is already in flight for this character
+    local sent = pickerSent[playerSource]
+    if sent and sent.cid == player.PlayerData.citizenid and os.time() - sent.at < 30 then return end
+    pickerSent[playerSource] = { cid = player.PlayerData.citizenid, at = os.time() }
 
     TriggerClientEvent('apartments:client:setupSpawnUI', playerSource)
 end)

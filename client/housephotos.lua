@@ -1,6 +1,11 @@
 local touring = false
 local tourCam = nil
 
+---@return boolean
+function IsPhotoTouring()
+    return touring
+end
+
 local function rotToDir(rot)
     local z = math.rad(rot.z)
     local x = math.rad(rot.x)
