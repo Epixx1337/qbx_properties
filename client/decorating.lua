@@ -644,42 +644,46 @@ function ApplyGizmoMatrix(entity, view)
     )
 end
 
-local SCENARIO_PROPS = { `p_amb_clipboard_01`, `prop_notepad_01`, `prop_pencil_01` }
+-- the clipboard is our own object attached to the hand rather than a scenario prop, so leaving the
+-- editor deletes it by handle instead of hunting for whatever the scenario system dropped
+local CLIPBOARD_MODEL <const> = `p_amb_clipboard_01`
+local CLIPBOARD_DICT <const> = 'amb@world_human_clipboard@male@base'
+local clipboardProp
 
-local function clearScenarioProps()
-    local coords = GetEntityCoords(cache.ped)
-
-    for i = 1, #SCENARIO_PROPS do
-        local model = SCENARIO_PROPS[i]
-
-        for _ = 1, 4 do
-            local object = GetClosestObjectOfType(coords.x, coords.y, coords.z, 2.5, model, false, false, false)
-            if object == 0 or not DoesEntityExist(object) then break end
-
-            if not NetworkGetEntityIsNetworked(object) then
-                SetEntityAsMissionEntity(object, true, true)
-            end
-            DeleteObject(object)
-            if DoesEntityExist(object) then DeleteEntity(object) end
-        end
-
-        SetModelAsNoLongerNeeded(model)
+function RemoveClipboard()
+    if clipboardProp and DoesEntityExist(clipboardProp) then
+        DetachEntity(clipboardProp, true, false)
+        DeleteEntity(clipboardProp)
     end
+    clipboardProp = nil
+    SetModelAsNoLongerNeeded(CLIPBOARD_MODEL)
+end
+
+local function attachClipboard()
+    RemoveClipboard()
+    lib.requestModel(CLIPBOARD_MODEL, 5000)
+
+    local coords = GetEntityCoords(cache.ped)
+    clipboardProp = CreateObject(CLIPBOARD_MODEL, coords.x, coords.y, coords.z, false, false, false)
+    SetEntityAsMissionEntity(clipboardProp, true, true)
+    SetEntityCollision(clipboardProp, false, false)
+    AttachEntityToEntity(clipboardProp, cache.ped, GetPedBoneIndex(cache.ped, 36029), 0.16, 0.08, 0.1, -130.0, -50.0, 0.0, true, true, false, true, 1, true)
 end
 
 local function setDecoratingPose(active)
     if active then
         FreezeEntityPosition(cache.ped, true)
         SetEntityInvincible(cache.ped, true)
-        TaskStartScenarioInPlace(cache.ped, 'WORLD_HUMAN_CLIPBOARD', 0, true)
+        lib.requestAnimDict(CLIPBOARD_DICT, 5000)
+        TaskPlayAnim(cache.ped, CLIPBOARD_DICT, 'base', 8.0, -8.0, -1, 49, 0.0, false, false, false)
+        attachClipboard()
     else
-        ClearPedTasksImmediately(cache.ped)
+        RemoveClipboard()
+        StopAnimTask(cache.ped, CLIPBOARD_DICT, 'base', 1.0)
         ClearPedSecondaryTask(cache.ped)
+        RemoveAnimDict(CLIPBOARD_DICT)
         SetEntityInvincible(cache.ped, false)
         FreezeEntityPosition(cache.ped, false)
-        clearScenarioProps()
-        SetTimeout(250, clearScenarioProps)
-        SetTimeout(1000, clearScenarioProps)
     end
 end
 
