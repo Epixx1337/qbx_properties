@@ -50,6 +50,7 @@ local function selectBuildingUnit(playerSource, player, buildingKey)
 
     LogAction(playerSource, 'qbx_properties:server:apartmentSelect', locale('logs.apartment_selected', player.PlayerData.citizenid, building.label, id))
 
+    player.Functions.SetMetaData('apartmentMigration', 'chosen')
     TriggerClientEvent('qbx_properties:client:addProperty', -1, building.entrance)
     EnterProperty(playerSource, id, true)
     return true
@@ -153,6 +154,7 @@ RegisterNetEvent('qbx_properties:server:apartmentSelect', function(apartmentInde
 
     LogAction(playerSource, 'qbx_properties:server:apartmentSelect', locale('logs.apartment_selected', player.PlayerData.citizenid, option.label, apartmentNumber))
 
+    player.Functions.SetMetaData('apartmentMigration', 'chosen')
     TriggerClientEvent('qbx_properties:client:addProperty', -1, option.enter)
     EnterProperty(playerSource, id, true)
     selecting[playerSource] = nil
