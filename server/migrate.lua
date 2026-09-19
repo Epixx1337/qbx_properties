@@ -61,7 +61,11 @@ local columns = {
         timecycle = 'VARCHAR(50) DEFAULT NULL',
         maintenance_paid_until = 'DATETIME DEFAULT NULL',
         lock_version = 'INT NOT NULL DEFAULT 1',
+        furniture_anchored = 'TINYINT(1) NOT NULL DEFAULT 0',
         doorcam = 'JSON DEFAULT NULL',
+    },
+    properties_layouts = {
+        interior = 'VARCHAR(255) DEFAULT NULL',
     },
     properties_access = {
         utilities = 'TINYINT(1) NOT NULL DEFAULT 0',
@@ -149,6 +153,46 @@ MySQL.ready(function()
 
     if #missing > 0 then
         lib.print.error(('the database schema is incomplete and things WILL misbehave: %s — check that the database user may CREATE and ALTER, or run schema.sql by hand'):format(table.concat(missing, ', ')))
+    end
+
+    -- shell furniture used to be written as world coordinates under the entrance; it is kept relative to
+    -- the shell now so the shell can be placed and moved with everything in it
+    local ok, err = pcall(function()
+        local shells = MySQL.query.await([==[
+            SELECT `id`, `coords` FROM `properties`
+            WHERE `building` IS NULL AND `furniture_anchored` = 0 AND `interior` REGEXP '^-?[0-9]+$'
+        ]==]) or {}
+
+        local offset = require('config.shared').shellUndergroundOffset
+        local moved = 0
+
+        for i = 1, #shells do
+            local ok, origin = pcall(json.decode, shells[i].coords)
+            if ok and origin then
+                local rows = MySQL.query.await('SELECT `id`, `coords` FROM `properties_decorations` WHERE `property_id` = ? AND IFNULL(`garden`, 0) = 0', {shells[i].id}) or {}
+
+                for j = 1, #rows do
+                    local point = json.decode(rows[j].coords)
+                    if point then
+                        MySQL.update.await('UPDATE `properties_decorations` SET `coords` = ? WHERE `id` = ?', {
+                            json.encode({ x = point.x - origin.x, y = point.y - origin.y, z = point.z - (origin.z - offset) }),
+                            rows[j].id,
+                        })
+                        moved += 1
+                    end
+                end
+            end
+
+            MySQL.update.await('UPDATE `properties` SET `furniture_anchored` = 1 WHERE `id` = ?', {shells[i].id})
+        end
+
+        if moved > 0 then
+            lib.print.info(('anchored %d piece(s) of furniture to their shell'):format(moved))
+        end
+    end)
+
+    if not ok then
+        lib.print.error(('could not anchor shell furniture, it keeps its old position: %s'):format(err))
     end
 
     migrated = true

@@ -110,6 +110,32 @@ local function queryDecorations(query, params)
     end
 end
 
+local ANCHOR_COLUMNS <const> = 'id, building, floor, room, interior, coords, shell_coords'
+
+-- furniture is kept relative to whatever holds the interior so the interior can move and carry it:
+-- apartment rooms follow their room anchor, shells their own origin, placed or under the entrance.
+-- MLO and IPL interiors are fixed in the world and keep world coordinates
+---@param property table needs id, or building, floor, room, interior, coords and shell_coords
+---@return vector4?
+function GetFurnitureAnchor(property)
+    if property.interior == nil or property.coords == nil then
+        local row = property.id and MySQL.single.await(('SELECT %s FROM properties WHERE id = ?'):format(ANCHOR_COLUMNS), {property.id})
+        if row then property = row end
+    end
+
+    if property.building then return GetRoomCoords(property.building, property.floor, property.room) end
+    if not tonumber(property.interior) then return end
+
+    if property.shell_coords then
+        local ok, placed = pcall(json.decode, property.shell_coords)
+        if ok and placed then return vec4(placed.x, placed.y, placed.z, placed.w or 0.0) end
+    end
+
+    local coords = type(property.coords) == 'string' and json.decode(property.coords) or property.coords
+    if not coords then return end
+    return vec4(coords.x, coords.y, coords.z - sharedConfig.shellUndergroundOffset, 0.0)
+end
+
 ---@param property table
 ---@return table
 function GetPropertyDecorations(property)
@@ -120,7 +146,7 @@ function GetPropertyDecorations(property)
         lib.print.error('properties_apartment_decorations is missing the layout column, restart the resource so the migrator adds it or run schema.sql by hand')
         return queryDecorations('SELECT %s FROM `properties_apartment_decorations` WHERE `citizenid` = ? ORDER BY `id`', {property.owner}) or {}
     end
-    return queryDecorations('SELECT %s FROM `properties_decorations` WHERE `property_id` = ? ORDER BY `id`', {property.id}) or {}
+    return queryDecorations('SELECT %s FROM `properties_decorations` WHERE `property_id` = ? AND IFNULL(`garden`, 0) = 0 ORDER BY `id`', {property.id}) or {}
 end
 
 ---@param property table needs id, property_name, owner, building, type, stash_options
@@ -129,12 +155,13 @@ function BuildDecorationPayload(property)
     local decorations = GetPropertyDecorations(property)
     local indexes = RegisterPropertyStashes(property, decorations)
     local types = GetFurnitureTypes()
+    local anchor = GetFurnitureAnchor(property)
 
     for i = 1, #decorations do
         local temp = json.decode(decorations[i].coords)
-        decorations[i].coords = vec3(temp.x, temp.y, temp.z)
+        decorations[i].coords = anchor and RotateOffset(anchor, vec3(temp.x, temp.y, temp.z)) or vec3(temp.x, temp.y, temp.z)
         temp = json.decode(decorations[i].rotation)
-        decorations[i].rotation = vec3(temp.x, temp.y, temp.z)
+        decorations[i].rotation = anchor and vec3(temp.x, temp.y, (temp.z + anchor.w) % 360.0) or vec3(temp.x, temp.y, temp.z)
         decorations[i].interaction = types[decorations[i].model]
         decorations[i].stashIndex = indexes[decorations[i].id]
     end
@@ -1399,8 +1426,9 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
     if not paid and #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
 
     local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
-    local storedCoords = anchor and UnrotateOffset(anchor, coords) or coords
-    local storedRotation = anchor and vec3(rotation.x, rotation.y, (rotation.z - anchor.w) % 360.0) or rotation
+    local furnitureAnchor = GetFurnitureAnchor(property)
+    local storedCoords = furnitureAnchor and UnrotateOffset(furnitureAnchor, coords) or coords
+    local storedRotation = furnitureAnchor and vec3(rotation.x, rotation.y, (rotation.z - furnitureAnchor.w) % 360.0) or rotation
     local interaction = GetFurnitureTypes()[hash]
 
     tint = ToId(tint)
@@ -1737,8 +1765,9 @@ RegisterNetEvent('qbx_properties:server:placeItemDecoration', function(item, slo
     end
 
     local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
-    local storedCoords = anchor and UnrotateOffset(anchor, coords) or coords
-    local storedRotation = anchor and vec3(rotation.x, rotation.y, (rotation.z - anchor.w) % 360.0) or rotation
+    local furnitureAnchor = GetFurnitureAnchor(property)
+    local storedCoords = furnitureAnchor and UnrotateOffset(furnitureAnchor, coords) or coords
+    local storedRotation = furnitureAnchor and vec3(rotation.x, rotation.y, (rotation.z - furnitureAnchor.w) % 360.0) or rotation
 
     local id
     if anchor then

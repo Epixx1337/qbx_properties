@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS `properties` (
     `maintenance_paid_until` DATETIME DEFAULT NULL,
     `doorcam` JSON DEFAULT NULL,
     `lock_version` INT NOT NULL DEFAULT 1,
+    `furniture_anchored` TINYINT(1) NOT NULL DEFAULT 0,
     FOREIGN KEY (owner) REFERENCES `players` (`citizenid`),
     PRIMARY KEY (id)
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -229,6 +230,7 @@ CREATE TABLE IF NOT EXISTS `properties_layouts` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `property_id` INT NOT NULL,
     `name` VARCHAR(40) NOT NULL,
+    `interior` VARCHAR(255) DEFAULT NULL,
     `creator` VARCHAR(50) COLLATE utf8mb4_unicode_ci NOT NULL,
     `creator_name` VARCHAR(100) DEFAULT NULL,
     `data` LONGTEXT NOT NULL,

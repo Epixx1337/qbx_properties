@@ -166,8 +166,8 @@ lib.callback.register('qbx_properties:callback:createProperty', function(source,
 
     local propertyId = MySQL.insert.await([[
         INSERT INTO `properties`
-            (`coords`, `property_name`, `price`, `interior`, `interact_options`, `stash_options`, `rent_interval`, `garage`, `shell_coords`, `garden_zone`, `door_data`, `size`, `created_by`, `type`, `group_name`, `description`)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (`coords`, `property_name`, `price`, `interior`, `interact_options`, `stash_options`, `rent_interval`, `garage`, `shell_coords`, `garden_zone`, `door_data`, `size`, `created_by`, `type`, `group_name`, `description`, `furniture_anchored`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     ]], {
         json.encode({ x = entrance.x, y = entrance.y, z = entrance.z }),
         propertyName,

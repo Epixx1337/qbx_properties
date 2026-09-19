@@ -156,7 +156,7 @@ function SyncFurnitureDoors(property)
 
     local types = GetFurnitureTypes()
     local decorations = GetPropertyDecorations(property)
-    local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
+    local anchor = GetFurnitureAnchor(property)
     local created = 0
 
     for i = 1, #decorations do
