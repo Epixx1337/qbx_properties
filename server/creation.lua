@@ -219,17 +219,18 @@ function BuildPropertyInteractions(property)
     local coords = json.decode(property.coords)
     local origin = vec3(coords.x, coords.y, coords.z)
     local isShell = tonumber(property.interior) ~= nil
+    local placed = isShell and property.shell_coords and json.decode(property.shell_coords) or nil
     local interactions = {}
 
     local stashes = json.decode(property.stash_options) or {}
     for i = 1, #stashes do
-        local point = isShell and CalculateOffsetCoords(origin, stashes[i].coords) or stashes[i].coords
+        local point = isShell and ShellPointCoords(placed, origin, stashes[i].coords) or stashes[i].coords
         interactions[#interactions + 1] = { type = 'stash', coords = vec3(point.x, point.y, point.z) }
     end
 
     local interact = json.decode(property.interact_options) or {}
     for i = 1, #interact do
-        local point = isShell and CalculateOffsetCoords(origin, interact[i].coords) or interact[i].coords
+        local point = isShell and ShellPointCoords(placed, origin, interact[i].coords) or interact[i].coords
         interactions[#interactions + 1] = {
             type = interact[i].type,
             coords = interact[i].type == 'exit' and vec4(point.x, point.y, point.z, point.w or 0.0) or vec3(point.x, point.y, point.z),
@@ -445,7 +446,7 @@ lib.callback.register('qbx_properties:callback:savePropertyPoints', function(sou
     MySQL.update.await('UPDATE properties SET interact_options = ?, stash_options = ? WHERE id = ?',
         {json.encode(interactData), json.encode(stashes), propertyId})
 
-    local fresh = MySQL.single.await('SELECT id, coords, interior, interact_options, stash_options FROM properties WHERE id = ?', {propertyId})
+    local fresh = MySQL.single.await('SELECT id, coords, interior, shell_coords, interact_options, stash_options FROM properties WHERE id = ?', {propertyId})
     if fresh then
         local interactions = BuildPropertyInteractions(fresh)
         local occupants = GetPropertyOccupants(propertyId)

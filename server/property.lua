@@ -299,10 +299,11 @@ function EnterProperty(playerSource, id, isSpawn, inPlace)
 
     local interactions = {}
     local isInteriorShell = tonumber(property.interior) ~= nil
+    local placedShell = isInteriorShell and property.shell_coords and json.decode(property.shell_coords) or nil
     local isBuildingUnit = property.building ~= nil and sharedConfig.targetInteractions
     local stashes = json.decode(property.stash_options)
     for i = 1, #stashes do
-        local stashCoords = isInteriorShell and CalculateOffsetCoords(propertyCoords, stashes[i].coords) or stashes[i].coords
+        local stashCoords = isInteriorShell and ShellPointCoords(placedShell, propertyCoords, stashes[i].coords) or stashes[i].coords
         if not isBuildingUnit then
             interactions[#interactions + 1] = {
                 type = 'stash',
@@ -313,7 +314,14 @@ function EnterProperty(playerSource, id, isSpawn, inPlace)
         end
     end
 
-    if isInteriorShell and not inPlace then
+    -- a placed shell already stands in the world and is streamed in by its zone, spawning the legacy
+    -- copy under the entrance as well would leave the owner inside a second, identical house
+    if placedShell and not inPlace then
+        TriggerClientEvent('qbx_properties:client:ensureShell', playerSource, id, tonumber(property.interior),
+            vec4(placedShell.x, placedShell.y, placedShell.z, placedShell.w or 0.0))
+    end
+
+    if isInteriorShell and not inPlace and not placedShell then
         TriggerClientEvent('qbx_properties:client:createInterior', playerSource, tonumber(property.interior), vec3(propertyCoords.x, propertyCoords.y, propertyCoords.z - sharedConfig.shellUndergroundOffset))
     end
 
@@ -334,7 +342,7 @@ function EnterProperty(playerSource, id, isSpawn, inPlace)
         for i = 1, #interactData do
             local skipped = (interactData[i].type == 'clothing' and typeConfig.wardrobe == false)
                 or (interactData[i].type == 'logout' and typeConfig.logout == false)
-            local coords = isInteriorShell and CalculateOffsetCoords(propertyCoords, interactData[i].coords) or interactData[i].coords
+            local coords = isInteriorShell and ShellPointCoords(placedShell, propertyCoords, interactData[i].coords) or interactData[i].coords
             if not skipped then
                 interactions[#interactions + 1] = {
                     type = interactData[i].type,

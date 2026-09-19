@@ -96,6 +96,13 @@ RegisterNetEvent('qbx_properties:client:registerShell', function(propertyId, mod
     RegisterShellZone(propertyId, model, coords)
 end)
 
+-- entering a placed shell teleports the player inside it, which can outrun the streaming zone when they
+-- come from far away or spawn there on login
+RegisterNetEvent('qbx_properties:client:ensureShell', function(propertyId, model, coords)
+    if not shellZones[propertyId] then RegisterShellZone(propertyId, model, coords) end
+    createShell(propertyId, model, coords)
+end)
+
 RegisterNetEvent('qbx_properties:client:removeShell', function(propertyId)
     RemoveShellZone(propertyId)
 end)

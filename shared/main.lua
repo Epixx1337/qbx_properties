@@ -87,6 +87,20 @@ function CalculateOffsetCoords(propertyCoords, offset)
     return vec4(propertyCoords.x + offset.x, propertyCoords.y + offset.y, (propertyCoords.z - sharedConfig.shellUndergroundOffset) + offset.z, propertyCoords.w or 0.0)
 end
 
+-- a shell placed in the world is the interior itself, so its points rotate with it; shells without a
+-- placement keep the legacy copy spawned under the entrance
+---@param anchor table? decoded shell_coords
+---@param propertyCoords vector3
+---@param offset table
+---@return vector4
+function ShellPointCoords(anchor, propertyCoords, offset)
+    if not anchor then return CalculateOffsetCoords(propertyCoords, offset) end
+
+    local heading = anchor.w or 0.0
+    local point = RotateOffset(vec4(anchor.x, anchor.y, anchor.z, heading), offset)
+    return vec4(point.x, point.y, point.z, (heading + (offset.w or 0.0)) % 360.0)
+end
+
 ---@return table[]
 function GetApartmentOptions()
     local options = {}
