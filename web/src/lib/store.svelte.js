@@ -154,4 +154,5 @@ export const creationFormDefaults = () => ({
 export const creation = $state({
   draft: null,
   form: creationFormDefaults(),
+  step: 1,
 })

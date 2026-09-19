@@ -3,7 +3,12 @@
   import { realtor, market, creation } from '../store.svelte.js'
 
   let search = $state('')
-  let step = $state(1)
+  // each capture closes the housing UI, which unmounts this component, so the wizard step lives in the store
+  let step = $state(creation.step)
+
+  $effect(() => {
+    creation.step = step
+  })
 
   const form = $derived(creation.form)
   const draft = $derived(creation.draft)
