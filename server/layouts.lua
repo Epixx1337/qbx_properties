@@ -24,7 +24,7 @@ local function getEditableProperty(source)
     local propertyId = GetPlayerEnteredProperty(source)
     if not player or not propertyId then return end
 
-    local property = MySQL.single.await('SELECT id, property_name, owner, keyholders, building, type, group_name, tenant, size, stash_options FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT id, property_name, owner, keyholders, building, interior, type, group_name, tenant, size, stash_options FROM properties WHERE id = ?', {propertyId})
     if not property or property.building then return end
     if not HasPropertyAccess(player.PlayerData.citizenid, property, 'furniture') then return end
 
@@ -118,8 +118,8 @@ lib.callback.register('qbx_properties:callback:saveLayout', function(source, nam
     if not code then return false, 'Try again in a moment.' end
 
     local charinfo = player.PlayerData.charinfo
-    MySQL.insert.await('INSERT INTO properties_layouts (property_id, name, creator, creator_name, data, share_code) VALUES (?, ?, ?, ?, ?, ?)', {
-        property.id, name, player.PlayerData.citizenid,
+    MySQL.insert.await('INSERT INTO properties_layouts (property_id, name, interior, creator, creator_name, data, share_code) VALUES (?, ?, ?, ?, ?, ?, ?)', {
+        property.id, name, property.interior, player.PlayerData.citizenid,
         string.format('%s %s', charinfo.firstname, charinfo.lastname),
         json.encode(items), code,
     })
@@ -170,6 +170,16 @@ end)
 local function applyLayout(source, player, property, layout)
     if GetRaid and GetRaid(property.id) then
         return false, 'You cannot rearrange furniture right now.'
+    end
+
+    -- furniture is stored in the coordinate space of the interior it was saved in, so a layout only fits
+    -- the same interior; every MLO answers to 'mlo' yet each one is its own building, so those stay home
+    if layout.interior ~= property.interior then
+        return false, 'This layout was saved in a different kind of interior.'
+    end
+
+    if (layout.interior == nil or layout.interior == 'mlo') and layout.property_id ~= property.id then
+        return false, 'This layout only fits the property it was saved in.'
     end
 
     local ok, items = pcall(json.decode, layout.data)
@@ -238,7 +248,7 @@ lib.callback.register('qbx_properties:callback:applyLayout', function(source, la
     layoutId = ToId(layoutId)
     if not player or not property or not layoutId then return false, 'You cannot manage layouts here.' end
 
-    local layout = MySQL.single.await('SELECT id, name, data FROM properties_layouts WHERE id = ? AND property_id = ?', {layoutId, property.id})
+    local layout = MySQL.single.await('SELECT id, name, data, property_id, interior FROM properties_layouts WHERE id = ? AND property_id = ?', {layoutId, property.id})
     if not layout then return false, 'Layout not found.' end
 
     return applyLayout(source, player, property, layout)
@@ -249,7 +259,7 @@ lib.callback.register('qbx_properties:callback:importLayout', function(source, c
     if not player or not property then return false, 'You cannot manage layouts here.' end
     if type(code) ~= 'string' then return false, 'Enter a share code.' end
 
-    local layout = MySQL.single.await('SELECT id, name, data FROM properties_layouts WHERE share_code = ?', {code:upper():gsub('%s', '')})
+    local layout = MySQL.single.await('SELECT id, name, data, property_id, interior FROM properties_layouts WHERE share_code = ?', {code:upper():gsub('%s', '')})
     if not layout then return false, 'No layout matches that code.' end
 
     return applyLayout(source, player, property, layout)

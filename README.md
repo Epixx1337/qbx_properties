@@ -106,7 +106,7 @@ Walk the building capturing the entrance, receptionist, elevators, floor heights
 - Maintenance: standalone properties owe a recurring ownership fee (a percentage of the price with a floor), auto-charged from the owner's bank, payable by roommates from the tablet, with seizure after too long unpaid
 - Owner-to-player leasing from the tablet's Rent tab: contract periods, the first payment charged on acceptance, prepayable rent, a payment history, roommate permissions for rent and utilities, and eviction notices when the owner ends a lease
 - Job access on commercial and warehouse properties: owners grant a whole job (with a minimum grade) door, stash, furniture or garage access — made for storefronts and depots, residential homes keep personal keys only
-- Furniture layouts: save the current furnishing as a named snapshot, re-apply it later, or hand its share code to a friend so they can import it into their own property (applying pays for the furniture like a fresh purchase)
+- Furniture layouts: save the current furnishing as a named snapshot, re-apply it later, or hand its share code to a friend so they can import it into their own property (applying pays for the furniture like a fresh purchase). A layout fits any property using the same interior, so shells of one model share layouts freely; MLO layouts stay in the property they were saved in, since every MLO is its own building
 - Owners can authorise realtors to sell their occupied property on the market — the proceeds still come to the owner — and every ownership change lands in a sales ledger with the seller's profit
 - Doorbell and doorcam: visitors ring at MLO doors, shell entrances and apartment unit doors; everyone inside gets notified, sees who is outside on the tablet's Doorcam tab, can watch a live camera over the door (multi-door houses cycle between every registered door), and lets them in — teleported inside for shells and apartments, a 10-second door unlock for MLOs. Realtors can also place an exact doorcam with the laser from the Manage tab, which overrides the automatic camera
 - Physical keys (optional): doors demand a key item instead of the access list — spares are cut and locks changed from the housing tablet for a fee, a lock change kills every old key, and every sale hands the buyer a fresh key with a new lock ([docs below](#physical-door-keys))
@@ -402,6 +402,8 @@ Options worth knowing about:
 ## Setting up shells
 
 `/shellsetup` walks a realtor through every shell that still needs its points (exit, stash, wardrobe, logout) using the laser pointer, and `/shellsetup all` re-runs every shell and IPL. Points are saved to the database and override `config/shell_defaults.lua`.
+
+A shell positioned with the gizmo is the interior itself: entering puts the owner in that shell rather than in a copy, and its furniture, points and doors are stored relative to it, so moving the shell takes the whole home with it. MLO and IPL interiors are fixed in the world and keep world coordinates. Furniture placed in a shell before this was true is converted on the next start, which shows as `anchored N piece(s) of furniture to their shell` in the console.
 
 ## Editor controls
 
