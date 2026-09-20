@@ -47,23 +47,44 @@ CreateThread(function()
 end)
 ```
 
-Then in `openElevatorMenu`, swap the `LocalPlayer.state.apartment` block for:
+Then replace the **entire** `openElevatorMenu` function with this version — do not copy only the inner `isMine`/`floorOptions` lines, the surrounding `for floorIndex, floor in ipairs(...)` loop must stay intact or the file will fail to load:
 
 ```lua
-local isMine = myUnit
-    and myUnit.building == qbxBuildingKeys[elevator]
-    and myUnit.floor == getFloorNumber(floor.floor)
+local function openElevatorMenu(elevator, index)
+    local elevatorData = apartments[elevator]
 
-floorOptions[#floorOptions + 1] = {
-    title = locale("FLOOR") .. " - " .. getFloorLabel(floor.floor) .. (isMine and " " .. locale("YOUR_ROOM") or ""),
-    description = isCurrent and locale("CURRENTLY_ON_THIS_FLOOR") or (isMine and myUnit.label or nil),
-    icon = isMine and "house" or "elevator",
-    iconColor = isMine and "#40c057" or nil,
-    onSelect = function()
-        useElevator(floor.location, floor.heading)
-    end,
-    disabled = isCurrent
-}
+    if not elevatorData then
+        return
+    end
+
+    local floorOptions = {}
+
+    for floorIndex, floor in ipairs(elevatorData.floors) do
+        local isCurrent = floorIndex == index
+        local isMine = myUnit
+            and myUnit.building == qbxBuildingKeys[elevator]
+            and myUnit.floor == getFloorNumber(floor.floor)
+
+        floorOptions[#floorOptions + 1] = {
+            title = locale("FLOOR") .. " - " .. getFloorLabel(floor.floor) .. (isMine and " " .. locale("YOUR_ROOM") or ""),
+            description = isCurrent and locale("CURRENTLY_ON_THIS_FLOOR") or (isMine and myUnit.label or nil),
+            icon = isMine and "house" or "elevator",
+            iconColor = isMine and "#40c057" or nil,
+            onSelect = function()
+                useElevator(floor.location, floor.heading)
+            end,
+            disabled = isCurrent
+        }
+    end
+
+    lib.registerContext({
+        id = "elevator_menu_" .. elevator,
+        title = getElevatorLabel(elevatorData) or locale("ELEVATOR"),
+        options = floorOptions
+    })
+
+    lib.showContext("elevator_menu_" .. elevator)
+end
 ```
 
 `getMyUnit` returns `{ building, floor, room, label }` for the unit the player owns, so the elevator shows the floor with a green house icon and the unit name underneath. The Wiwang map resource's optional `elevators.lua` uses the same export the same way.
