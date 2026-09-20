@@ -17,7 +17,8 @@
         "price": "Prijs",
         "price_description": "De koopprijs of de prijs voor het afschrijven van huur.",
         "rent_interval": "Huur interval",
-        "rent_interval_description": "Het interval waarin huur wordt afgeschreven in uren (maakt het vastgoed huurbaar in plaats van koopbaar)"
+        "rent_interval_description": "Het interval waarin huur wordt afgeschreven in uren (maakt het vastgoed huurbaar in plaats van koopbaar)",
+        "add_garage": "Garage toevoegen"
     },
     "menu": {
         "add_keyholder": "Sleutelhouder Toevoegen",
@@ -32,7 +33,9 @@
         "properties": "Vastgoed",
         "retrieve_properties": "Haal Jouw Vastgoed Op",
         "show_owned_properties": "Alleen jouw vastgoed laten zien",
-        "interior_preview": "Interieur Voorbeeld"
+        "interior_preview": "Interieur Voorbeeld",
+        "start_decorating": "Begin met decoreren",
+        "decorating_categories": "Categorieën"
     },
     "instructButtons": {
         "up": "Omhoog",
@@ -51,5 +54,19 @@
         "clothing": "[E] - Kleding | [G] - Outfits",
         "logout": "[E] - Logout",
         "view_property": "[E] - Bekijk Vastgoed"
+    },
+    "logs": {
+        "create_property": "Proberen een eigendom te creëren.",
+        "property_created": "Eigendom %s is succesvol aangemaakt.",
+        "enter_property": "Speler %s is eigendom %s binnengegaan.",
+        "exit_property": "Speler %s heeft eigendom %s verlaten.",
+        "apartment_selected": "Speler %s selecteerde appartement %s %s.",
+        "added_keyholder": "%s toegevoegd als sleutelhouder aan eigendom %s.",
+        "removed_keyholder": "%s verwijderd als sleutelhouder van eigendom %s.",
+        "rent_property": "Speler %s huurde eigendom %s.",
+        "buy_property": "Speler %s heeft eigendom %s gekocht.",
+        "stop_renting": "Speler %s is gestopt met het huren van eigendom %s.",
+        "add_decoration": "Speler %s heeft decoratie %s toegevoegd aan eigendom %s.",
+        "remove_decoration": "Speler %s heeft decoratie %s verwijderd van eigendom %s."
     }
 }
