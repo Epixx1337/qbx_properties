@@ -77,7 +77,7 @@ return {
         radius = 24, -- cells drawn out from the piece before the grid fades out
         alpha = 90, -- brightness at the centre, the edge fades to nothing
         color = { 255, 255, 255 },
-        snap = false, -- start with grid snapping already on
+        snap = true, -- start with grid snapping on, X toggles it in the editor
         rotation = 15.0, -- degrees each rotation step rounds to while snapping, 0 leaves rotation free
     },
     furnitureShop = true, -- false ignores furniture prices, everything places instantly for free
