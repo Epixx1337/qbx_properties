@@ -26,6 +26,37 @@ return {
         ['RichardMajesticApt2'] = {`hei_bh1_08_bld2`, `bh1_emissive_bh1_08`, `bh1_08_bld2_LOD`, `hei_bh1_08_bld2`, `bh1_08_em`},
         ['TinselTowersApt42'] = {`apa_ss1_02_building01`, `SS1_02_Building01_LOD`},
     },
+    -- Furniture and interaction points that hand over to another resource do it through these, so a
+    -- different clothing script only needs its own export here instead of an edit in the client files.
+    -- `wardrobe` runs on a wardrobe and on the clothing point, `outfits` on their second option. Add
+    -- your own and point a wardrobe at it with `action = 'yourkey'` in its furniture entry below.
+    interactions = {
+        wardrobe = {
+            label = 'Change clothing',
+            icon = 'fa-solid fa-shirt',
+            run = function()
+                exports['illenium-appearance']:startPlayerCustomization(function(appearance)
+                    if appearance then
+                        TriggerServerEvent('illenium-appearance:server:saveAppearance', appearance)
+                    end
+                end, {
+                    components = true,
+                    componentConfig = { masks = true, upperBody = true, lowerBody = true, bags = true, shoes = true, scarfAndChains = true, bodyArmor = true, shirts = true, decals = true, jackets = true },
+                    props = true,
+                    propConfig = { hats = true, glasses = true, ear = true, watches = true, bracelets = true },
+                    enableExit = true,
+                })
+            end,
+        },
+        outfits = {
+            label = 'Outfits',
+            icon = 'fa-solid fa-person-booth',
+            run = function()
+                TriggerEvent('illenium-appearance:client:openOutfitMenu')
+            end,
+        },
+    },
+
     furniture = {
         utility = {
             {

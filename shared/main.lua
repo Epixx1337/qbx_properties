@@ -153,6 +153,7 @@ local function buildFurnitureIndex()
             furnitureSpecs[entry.object] = {
                 label = entry.label,
                 type = entry.type,
+                action = entry.action,
                 tint = entry.tint == true,
                 snapGroup = entry.snapGroup,
                 power = entry.power or 0,
@@ -178,6 +179,7 @@ function RegisterFurniture(entry)
     furnitureSpecs[entry.object] = {
         label = entry.label or entry.object,
         type = entry.type,
+        action = entry.action,
         tint = entry.tint == true,
         snapGroup = entry.snapGroup,
         power = entry.power or 0,

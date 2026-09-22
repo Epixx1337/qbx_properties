@@ -119,24 +119,16 @@ local function interactionOptions(decoration)
     local options = {}
 
     if decoration.interaction == 'wardrobe' then
+        local spec = GetFurnitureSpecs()[decoration.model]
+        local key = spec and spec.action or 'wardrobe'
+        local action = GetInteractionAction(key)
+
         options[#options + 1] = {
             name = 'qbx_properties_wardrobe_' .. decoration.id,
-            label = 'Change clothing',
-            icon = 'fa-solid fa-shirt',
+            label = action and action.label or 'Change clothing',
+            icon = action and action.icon or 'fa-solid fa-shirt',
             distance = TargetDistance('furniture', 1.5),
-            onSelect = function()
-                exports['illenium-appearance']:startPlayerCustomization(function(appearance)
-                    if appearance then
-                        TriggerServerEvent('illenium-appearance:server:saveAppearance', appearance)
-                    end
-                end, {
-                    components = true,
-                    componentConfig = { masks = true, upperBody = true, lowerBody = true, bags = true, shoes = true, scarfAndChains = true, bodyArmor = true, shirts = true, decals = true, jackets = true },
-                    props = true,
-                    propConfig = { hats = true, glasses = true, ear = true, watches = true, bracelets = true },
-                    allowExit = true,
-                })
-            end
+            onSelect = function() RunInteractionAction(key) end
         }
     elseif decoration.interaction == 'tablet' then
         options[#options + 1] = {

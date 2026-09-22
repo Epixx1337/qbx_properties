@@ -197,20 +197,29 @@ local function exitPropertyInteract()
     TriggerServerEvent('qbx_properties:server:exitProperty')
 end
 
+---@param key string
+---@return table? entry from the interactions config
+function GetInteractionAction(key)
+    local actions = clientConfig.interactions
+    return type(actions) == 'table' and actions[key] or nil
+end
+
+---@param key string
+function RunInteractionAction(key)
+    local action = GetInteractionAction(key)
+    if type(action) ~= 'table' or type(action.run) ~= 'function' then
+        lib.print.warn(('nothing is set up for the %s interaction, see interactions in config/client.lua'):format(key))
+        return
+    end
+    action.run()
+end
+
 local function openClothingInteract()
-    exports['illenium-appearance']:startPlayerCustomization(function(appearance)
-        if appearance then
-            TriggerServerEvent("illenium-appearance:server:saveAppearance", appearance)
-        end
-    end, {
-        components = true, componentConfig = { masks = true, upperBody = true, lowerBody = true, bags = true, shoes = true, scarfAndChains = true, bodyArmor = true, shirts = true, decals = true, jackets = true },
-        props = true, propConfig = { hats = true, glasses = true, ear = true, watches = true, bracelets = true },
-        enableExit = true,
-    })
+    RunInteractionAction('wardrobe')
 end
 
 local function openOutfitsInteract()
-    TriggerEvent('illenium-appearance:client:openOutfitMenu')
+    RunInteractionAction('outfits')
 end
 
 local function logoutInteract()
@@ -313,16 +322,17 @@ local function createInteractionTargets()
             }
         end,
         ['clothing'] = function()
+            local wardrobe, outfits = GetInteractionAction('wardrobe'), GetInteractionAction('outfits')
             return {
                 {
-                    label = 'Change clothing',
-                    icon = 'fas fa-shirt',
+                    label = wardrobe and wardrobe.label or 'Change clothing',
+                    icon = wardrobe and wardrobe.icon or 'fas fa-shirt',
                     canInteract = notDecorating,
                     onSelect = openClothingInteract,
                 },
                 {
-                    label = 'Outfits',
-                    icon = 'fas fa-person-booth',
+                    label = outfits and outfits.label or 'Outfits',
+                    icon = outfits and outfits.icon or 'fas fa-person-booth',
                     canInteract = notDecorating,
                     onSelect = openOutfitsInteract,
                 },
