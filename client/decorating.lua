@@ -116,6 +116,8 @@ function ToggleFreecam()
         SetCursorMode(previewObject ~= nil)
         SetUIFocus(true, previewObject ~= nil)
     end
+    -- the ped stays put while the camera is off flying
+    SetPlacementMobility(IsCarrying() and not freecamMoving)
     PushDecoratingState()
 end
 
@@ -946,6 +948,10 @@ local function cycleCategory(delta)
     selectCatalogEntry((at and at.category or 1) + delta, 1)
 end
 
+function IsCarrying()
+    return carrying
+end
+
 function SetCarrying(active)
     if carryConfig.enabled ~= true then
         SetCursorMode(true)
@@ -958,6 +964,7 @@ function SetCarrying(active)
     -- carrying aims down the camera, so the mouse has to steer the camera rather than the NUI cursor
     SetCursorMode(not carrying)
     SetUIFocus(not carrying, true)
+    SetPlacementMobility(carrying and not freecamMoving)
 
     if not carrying then return end
     SendUI('gizmo:sync', nil)
@@ -994,6 +1001,23 @@ local function attachClipboard()
     AttachEntityToEntity(clipboardProp, cache.ped, GetPedBoneIndex(cache.ped, 36029), 0.16, 0.08, 0.1, -130.0, -50.0, 0.0, true, true, false, true, 1, true)
 end
 
+-- removing player control takes the camera with it unless SPC_LEAVE_CAMERA_CONTROL_ON is set, which
+-- is what left the mouse doing nothing while carrying
+local SPC_LEAVE_CAMERA_CONTROL_ON <const> = 256
+
+---@param mobile boolean walking around while carrying, rather than posed with the clipboard
+function SetPlacementMobility(mobile)
+    if not IsDecorating then return end
+
+    if mobile then
+        FreezeEntityPosition(cache.ped, false)
+        SetPlayerControl(cache.playerId, true, 0)
+    else
+        FreezeEntityPosition(cache.ped, true)
+        SetPlayerControl(cache.playerId, false, SPC_LEAVE_CAMERA_CONTROL_ON)
+    end
+end
+
 local function setDecoratingPose(active)
     if active then
         FreezeEntityPosition(cache.ped, true)
@@ -1014,7 +1038,7 @@ end
 function ToggleDecorating()
     IsDecorating = not IsDecorating
     setDecoratingPose(IsDecorating)
-    SetPlayerControl(cache.playerId, not IsDecorating, 0)
+    SetPlayerControl(cache.playerId, not IsDecorating, IsDecorating and SPC_LEAVE_CAMERA_CONTROL_ON or 0)
 
     -- emote keybinds (hands up etc.) fire through RegisterKeyMapping and ignore disabled controls
     if GetResourceState('scully_emotemenu') == 'started' then
@@ -1152,6 +1176,8 @@ function ToggleDecorating()
             DisableControlAction(0, 140, true)
             DisableControlAction(0, 141, true)
             DisableControlAction(0, 142, true)
+            DisableControlAction(0, 22, true) -- walking while carrying must not jump or board a vehicle
+            DisableControlAction(0, 23, true)
             DisableControlAction(0, 26, true) -- C picks the piece up and puts it down
             DisableControlAction(0, 73, true) -- X toggles grid snapping
             DisableControlAction(0, 44, true) -- Q and E walk the catalog while carrying

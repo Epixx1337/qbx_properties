@@ -234,6 +234,7 @@
 
         <div class="keys">
           {#if furniture.carrying}
+            <div><kbd>W A S D</kbd> Walk it into place</div>
             <div><kbd>Scroll</kbd> Turn</div>
             <div><kbd>Ctrl</kbd> + <kbd>Scroll</kbd> Turn faster</div>
             <div><kbd>Shift</kbd> + <kbd>Scroll</kbd> Hold nearer / further</div>
