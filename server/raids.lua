@@ -98,10 +98,29 @@ end
 ---@param propertyId integer
 local function pushRaidState(propertyId)
     local raid = raids[propertyId]
-    TriggerClientEvent('qbx_properties:client:raidState', -1, propertyId, raid and {
-        breached = raid.breached,
-        lockdown = raid.lockdown,
-    } or nil)
+    local state = raid and { breached = raid.breached, lockdown = raid.lockdown } or nil
+
+    local occupants = GetPropertyOccupants and GetPropertyOccupants(propertyId) or {}
+    local targets, seen = {}, {}
+    for i = 1, #occupants do
+        targets[i] = occupants[i]
+        seen[occupants[i]] = true
+    end
+
+    for _, playerId in pairs(GetPlayers()) do
+        local id = tonumber(playerId)
+        if id and not seen[id] then
+            local player = exports.qbx_core:GetPlayer(id)
+            if player and IsPolice(player.PlayerData.job) then
+                targets[#targets + 1] = id
+                seen[id] = true
+            end
+        end
+    end
+
+    if #targets > 0 then
+        lib.triggerClientEvent('qbx_properties:client:raidState', targets, propertyId, state)
+    end
 end
 
 ---@param player table

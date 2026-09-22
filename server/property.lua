@@ -477,12 +477,18 @@ lib.callback.register('qbx_properties:callback:requestProperties', function(sour
 
     local rows = MySQL.query.await("SELECT property_name, owner, id, price, rent_interval, keyholders, tenant, coords FROM properties WHERE building IS NULL AND interior <> 'mlo'")
     local result = {}
+    local caller = exports.qbx_core:GetPlayer(source)
+    local callerCid = caller and caller.PlayerData.citizenid
 
     for i = 1, #rows do
         local coords = json.decode(rows[i].coords)
         if coords and #(propertyCoords - vec3(coords.x, coords.y, coords.z)) < 1.0 then
             rows[i].coords = nil
             if PhysicalKeysEnabled() then rows[i].hasKey = HasPropertyKey(source, rows[i]) end
+
+            local mine = callerCid and lib.table.contains(GetPropertyKeyholders(rows[i]), callerCid)
+            rows[i].keyholders = json.encode(mine and { callerCid } or {})
+            rows[i].tenant = rows[i].tenant == callerCid and callerCid or nil
             result[#result + 1] = rows[i]
         end
     end
@@ -1233,16 +1239,19 @@ local function startRentThread(propertyId)
     rentThreads[propertyId] = true
 
     CreateThread(function()
+        local unpaid = false
+
         while true do
             local property = MySQL.single.await('SELECT owner, price, rent_interval, property_name, UNIX_TIMESTAMP(rent_last_paid) AS lastPaid FROM properties WHERE id = ?', {propertyId})
             if not property or not property.owner or not property.rent_interval then break end
 
+            local tenant = property.owner
             local due = (property.lastPaid or os.time()) + property.rent_interval * 3600
             local remaining = due - os.time()
             if remaining > 0 then Wait(remaining * 1000) end
 
             property = MySQL.single.await('SELECT owner, price, property_name FROM properties WHERE id = ?', {propertyId})
-            if not property or not property.owner then break end
+            if not property or not property.owner or property.owner ~= tenant then break end
 
             local function chargeRent()
                 local player = exports.qbx_core:GetPlayerByCitizenId(property.owner) or exports.qbx_core:GetOfflinePlayer(property.owner)
@@ -1267,7 +1276,10 @@ local function startRentThread(propertyId)
 
             if not chargeRent() then
                 local grace = (sharedConfig.rentGraceHours or 0) * 3600
-                if grace <= 0 then break end
+                if grace <= 0 then
+                    unpaid = true
+                    break
+                end
 
                 local onlineOwner = exports.qbx_core:GetPlayerByCitizenId(property.owner)
                 if onlineOwner then
@@ -1276,8 +1288,11 @@ local function startRentThread(propertyId)
                 Wait(grace * 1000)
 
                 property = MySQL.single.await('SELECT owner, price, property_name FROM properties WHERE id = ?', {propertyId})
-                if not property or not property.owner then break end
-                if not chargeRent() then break end
+                if not property or not property.owner or property.owner ~= tenant then break end
+                if not chargeRent() then
+                    unpaid = true
+                    break
+                end
             end
 
             local reason = string.format('Rent for %s', property.property_name)
@@ -1287,7 +1302,7 @@ local function startRentThread(propertyId)
         end
 
         rentThreads[propertyId] = nil
-        EvictProperty(propertyId)
+        if unpaid then EvictProperty(propertyId) end
     end)
 end
 

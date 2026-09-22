@@ -187,9 +187,19 @@ local function applyLayout(source, player, property, layout)
 
     local specs = GetFurnitureSpecs()
     for i = 1, #items do
-        if type(items[i]) ~= 'table' or not specs[items[i].model] then
+        local entry = items[i]
+        if type(entry) ~= 'table' or not specs[entry.model] then
             return false, 'This layout uses furniture that no longer exists.'
         end
+        if type(entry.coords) ~= 'table' or type(entry.rotation) ~= 'table' then
+            return false, 'This layout is corrupted.'
+        end
+    end
+
+    local limit = property.building and sharedConfig.utilities.apartment.furniture
+        or GetPropertySize(property.size).furniture
+    if limit and #items > limit then
+        return false, string.format('This layout has %d pieces but the property holds %d.', #items, limit)
     end
 
     local cost, stashes = layoutCost(items)

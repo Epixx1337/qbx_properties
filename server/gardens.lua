@@ -7,12 +7,14 @@ lib.callback.register('qbx_properties:callback:getGardens', function()
     local result = {}
 
     for i = 1, #rows do
-        local zone = json.decode(rows[i].garden_zone)
-        result[i] = {
-            id = rows[i].id,
-            points = zone.points or zone,
-            height = zone.height or sharedConfig.gardens.height,
-        }
+        local ok, zone = pcall(json.decode, rows[i].garden_zone)
+        if ok and type(zone) == 'table' then
+            result[#result + 1] = {
+                id = rows[i].id,
+                points = zone.points or zone,
+                height = zone.height or sharedConfig.gardens.height,
+            }
+        end
     end
 
     return result
@@ -29,17 +31,21 @@ lib.callback.register('qbx_properties:callback:getGardenDecorations', function(_
     local result = {}
 
     for i = 1, #rows do
-        local coords = json.decode(rows[i].coords)
-        local rotation = json.decode(rows[i].rotation)
-        result[i] = {
-            id = rows[i].id,
-            model = rows[i].model,
-            coords = vec3(coords.x, coords.y, coords.z),
-            rotation = vec3(rotation.x, rotation.y, rotation.z),
-            tint = rows[i].tint,
-            item = rows[i].item,
-            metadata = rows[i].item_metadata and json.decode(rows[i].item_metadata) or nil,
-        }
+        local okCoords, coords = pcall(json.decode, rows[i].coords)
+        local okRotation, rotation = pcall(json.decode, rows[i].rotation)
+
+        if okCoords and okRotation and type(coords) == 'table' and type(rotation) == 'table' then
+            local _, metadata = pcall(json.decode, rows[i].item_metadata or 'null')
+            result[#result + 1] = {
+                id = rows[i].id,
+                model = rows[i].model,
+                coords = vec3(coords.x or 0.0, coords.y or 0.0, coords.z or 0.0),
+                rotation = vec3(rotation.x or 0.0, rotation.y or 0.0, rotation.z or 0.0),
+                tint = rows[i].tint,
+                item = rows[i].item,
+                metadata = metadata,
+            }
+        end
     end
 
     return result
@@ -110,10 +116,12 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
     local player = exports.qbx_core:GetPlayer(playerSource)
     local propertyId = inGarden[playerSource]
     if not player or not propertyId then return end
-    if (type(hash) ~= 'string' and type(hash) ~= 'number') or type(coords) ~= 'vector3' or type(rotation) ~= 'vector3' then return end
+    if (type(hash) ~= 'string' and type(hash) ~= 'number') or not IsFiniteVector(coords) or not IsFiniteVector(rotation) then return end
+    if not GetFurnitureSpecs()[hash] then return end
 
     local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
     if not property or not CanEditFurniture(player, property) then return end
+    if GetRaid and GetRaid(propertyId) then return end
 
     if not ToId(objectId) and (GetFurnitureSpecs()[hash] or {}).item then return end
 
@@ -141,7 +149,7 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
 
     objectId = ToId(objectId)
     if objectId then
-        local updated = MySQL.update.await('UPDATE properties_decorations SET coords = ?, rotation = ?, tint = ? WHERE id = ? AND property_id = ? AND garden = 1',
+        local updated = MySQL.update.await('UPDATE properties_decorations SET coords = ?, rotation = ?, tint = ? WHERE id = ? AND property_id = ? AND garden = 1 AND item IS NULL',
             {json.encode(coords), json.encode(rotation), tint, objectId, propertyId})
         if updated ~= 1 then return end
 
