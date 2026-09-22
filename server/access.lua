@@ -68,6 +68,7 @@ end
 function ClearPropertyAccess(propertyId)
     if not propertyId then return end
     pcall(MySQL.update.await, 'DELETE FROM properties_access WHERE property_id = ?', {propertyId})
+    if ClearMovingAuth then ClearMovingAuth(propertyId) end
 end
 
 ---@param citizenId string
@@ -259,6 +260,7 @@ lib.callback.register('qbx_properties:callback:setJobAccess', function(source, d
 
     LogAction(source, 'qbx_properties:server:setJobAccess', string.format('%s set job access %s (grade %d+) on %s', player.PlayerData.citizenid, job, grade, property.property_name))
 
+    ClearMovingAuth(property.id)
     TriggerClientEvent('qbx_properties:client:invalidateUnitAccess', -1)
     return true
 end)
@@ -308,12 +310,12 @@ lib.callback.register('qbx_properties:callback:setAccess', function(source, data
 end)
 
 lib.callback.register('qbx_properties:callback:getNearbyCitizens', function(source)
-    local coords = GetEntityCoords(GetPlayerPed(source))
+    local players = lib.getNearbyPlayers(GetEntityCoords(GetPlayerPed(source)), 5.0)
     local nearby = {}
 
-    for _, playerId in ipairs(GetPlayers()) do
-        local id = tonumber(playerId) --[[@as number]]
-        if id ~= source and #(GetEntityCoords(GetPlayerPed(id)) - coords) <= 5.0 then
+    for i = 1, #players do
+        local id = players[i].id
+        if id ~= source then
             local target = exports.qbx_core:GetPlayer(id)
             if target then
                 nearby[#nearby + 1] = {

@@ -106,7 +106,9 @@ RegisterNetEvent('qbx_properties:server:respondToOffer', function(accepted)
         return
     end
 
-    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ? AND owner <=> ?', {buyer.PlayerData.citizenid, offer.propertyId, property.owner}) ~= 1 then
+    local limitSql, limitParams = OwnershipLimitSql(buyer.PlayerData.citizenid, property.type)
+    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ? AND owner <=> ?' .. limitSql,
+        AppendParams({buyer.PlayerData.citizenid, offer.propertyId, property.owner}, limitParams)) ~= 1 then
         buyer.Functions.AddMoney(account, offer.price, 'Property purchase refund')
         exports.qbx_core:Notify(playerSource, 'That property is no longer available.', 'error')
         return

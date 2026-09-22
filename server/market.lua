@@ -61,7 +61,9 @@ local function transferProperty(propertyId, buyerCid, amount)
     if not property then return false end
     if not CanOwnAnotherProperty(buyerCid, property.type) then return false end
 
-    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ? AND owner <=> ?', {buyerCid, propertyId, property.owner}) ~= 1 then
+    local limitSql, limitParams = OwnershipLimitSql(buyerCid, property.type)
+    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ? AND owner <=> ?' .. limitSql,
+        AppendParams({buyerCid, propertyId, property.owner}, limitParams)) ~= 1 then
         return false
     end
 

@@ -568,6 +568,48 @@ end
 ---@param citizenId string
 ---@param propertyType string?
 ---@return boolean
+-- folded into the acquiring UPDATE so the count and the write happen in one statement; a plain
+-- CanOwnAnotherProperty check yields before the write and lets concurrent buys share one count
+---@param citizenId string
+---@param propertyType string?
+---@return string clause, table params
+function OwnershipLimitSql(citizenId, propertyType)
+    local limits = sharedConfig.propertyLimit
+    if not limits then return '', {} end
+
+    local limit, typeSql, typeParam
+
+    if type(limits) ~= 'table' then
+        limit = ToId(limits)
+        typeSql = ''
+    else
+        propertyType = propertyType or 'residential'
+        limit = ToId(limits[propertyType])
+        if propertyType == 'residential' then
+            typeSql = " AND (o.type IS NULL OR o.type = 'residential')"
+        else
+            typeSql = ' AND o.type = ?'
+            typeParam = propertyType
+        end
+    end
+
+    if not limit or limit <= 0 then return '', {} end
+
+    local params = { citizenId }
+    if typeParam then params[#params + 1] = typeParam end
+    params[#params + 1] = limit
+
+    return (' AND (SELECT COUNT(*) FROM (SELECT o.id FROM properties o WHERE o.owner = ? AND o.building IS NULL%s) lim) < ?'):format(typeSql), params
+end
+
+---@param base table
+---@param extra table
+---@return table
+function AppendParams(base, extra)
+    for i = 1, #extra do base[#base + 1] = extra[i] end
+    return base
+end
+
 function CanOwnAnotherProperty(citizenId, propertyType)
     local limits = sharedConfig.propertyLimit
     if not limits then return true end
@@ -1005,6 +1047,7 @@ RegisterNetEvent('qbx_properties:server:addKeyholder', function(keyholderCid)
     else
         keyholders[#keyholders + 1] = keyholderCid
         MySQL.update.await('UPDATE properties SET keyholders = ? WHERE id = ?', {json.encode(keyholders), propertyId})
+        ClearMovingAuth(propertyId)
     end
 
     RefreshCustomGarages()
@@ -1036,6 +1079,7 @@ RegisterNetEvent('qbx_properties:server:removeKeyholder', function(keyholderCid)
             end
         end
         MySQL.update.await('UPDATE properties SET keyholders = ? WHERE id = ?', {json.encode(keyholders), propertyId})
+        ClearMovingAuth(propertyId)
     end
 
     RefreshCustomGarages()
@@ -1335,7 +1379,12 @@ RegisterNetEvent('qbx_properties:server:rentProperty', function(propertyId)
         return
     end
 
-    if MySQL.update.await('UPDATE properties SET owner = ?, rent_last_paid = NOW() WHERE id = ? AND owner IS NULL', {player.PlayerData.citizenid, propertyId}) ~= 1 then return end
+    local limitSql, limitParams = OwnershipLimitSql(player.PlayerData.citizenid, property.type)
+    if MySQL.update.await('UPDATE properties SET owner = ?, rent_last_paid = NOW() WHERE id = ? AND owner IS NULL' .. limitSql,
+        AppendParams({player.PlayerData.citizenid, propertyId}, limitParams)) ~= 1 then
+        exports.qbx_core:Notify(playerSource, 'That property is no longer available.', 'error')
+        return
+    end
     ClearPropertyAccess(propertyId)
 
     if not player.Functions.RemoveMoney('bank', property.price, string.format('Rent for %s', property.property_name)) then
@@ -1378,8 +1427,11 @@ RegisterNetEvent('qbx_properties:server:buyProperty', function(propertyId)
         return
     end
 
-    if MySQL.update.await('UPDATE properties SET owner = ?, maintenance_paid_until = NULL WHERE id = ? AND owner IS NULL', {player.PlayerData.citizenid, propertyId}) ~= 1 then
+    local limitSql, limitParams = OwnershipLimitSql(player.PlayerData.citizenid, property.type)
+    if MySQL.update.await('UPDATE properties SET owner = ?, maintenance_paid_until = NULL WHERE id = ? AND owner IS NULL' .. limitSql,
+        AppendParams({player.PlayerData.citizenid, propertyId}, limitParams)) ~= 1 then
         player.Functions.AddMoney(account, property.price, string.format('Refund for %s', property.property_name))
+        exports.qbx_core:Notify(playerSource, 'That property is no longer available.', 'error')
         return
     end
 
@@ -1670,6 +1722,18 @@ function FirstFreeModels(model)
 end
 
 local movingAuth = {}
+
+---@param propertyId integer?
+function ClearMovingAuth(propertyId)
+    if not propertyId then
+        movingAuth = {}
+        return
+    end
+
+    for playerSource, auth in pairs(movingAuth) do
+        if auth.propertyId == propertyId then movingAuth[playerSource] = nil end
+    end
+end
 
 RegisterNetEvent('qbx_properties:server:decorationMoving', function(objectId, coords, rotation)
     local playerSource = source --[[@as number]]
