@@ -117,7 +117,7 @@ function ToggleFreecam()
         SetUIFocus(true, previewObject ~= nil)
     end
     -- the ped stays put while the camera is off flying
-    SetPlacementMobility(IsCarrying() and not freecamMoving)
+    SetPlacementMobility(IsFreePlacing() and not freecamMoving)
     PushDecoratingState()
 end
 
@@ -130,10 +130,12 @@ local gizmoBuffer = DataView.ArrayBuffer(64)
 local gridConfig = sharedConfig.furnitureGrid or {}
 local gridSnap = gridConfig.snap == true
 local gridHeading = 0.0
-local carryConfig = sharedConfig.carryPlacement or {}
-local carrying = false
-local carryDistance = carryConfig.distance or 4.0
-local carryHeading = 0.0
+local placeConfig = sharedConfig.freePlacement or {}
+local freePlacing = false
+local placeDistance = placeConfig.distance or 4.0
+local placeHeading = 0.0
+local placeLift = 0.0
+local groundFollow = placeConfig.ground ~= false
 
 ---@param value boolean
 function SetCursorMode(value)
@@ -327,7 +329,7 @@ function SelectPlacedDecoration(id)
     currentlySelected = nil
     currentTint = DecorationTints[id] or 0
     SetEntityDrawOutline(entity, true)
-    SetCarrying(false)
+    SetFreePlacing(false)
     PushDecoratingState()
 end
 
@@ -624,8 +626,9 @@ function PushDecoratingState()
         mode = 'move',
         gridSnap = gridSnap,
         gridSize = gridConfig.size,
-        carrying = carrying,
-        carrySupported = carryConfig.enabled == true,
+        freePlacing = freePlacing,
+        freePlaceSupported = placeConfig.enabled == true,
+        groundFollow = groundFollow,
         selected = placing and {
             label = currentlySelected and currentlySelected.label or 'Placed object',
             objectId = objectId,
@@ -742,27 +745,43 @@ local function drawFurnitureGrid(origin)
     DrawLine(ax, ay, z, bx, by, z, red, green, blue, 255)
 end
 
-local function carryTarget()
+-- the probe runs the whole reach rather than the float distance, otherwise looking across the room
+-- still drops the piece an arm's length away
+---@return vector3 coords, boolean onSurface
+local function placeTarget()
     local camPos, camRot = GetDecoratingCam()
     local pitch, yaw = math.rad(camRot.x), math.rad(camRot.z)
     local cp = math.cos(pitch)
     local dir = vec3(-math.sin(yaw) * cp, math.cos(yaw) * cp, math.sin(pitch))
-    local dest = camPos + dir * carryDistance
+
+    local reach = placeConfig.reach or 15.0
+    local dest = camPos + dir * reach
 
     local probe = StartExpensiveSynchronousShapeTestLosProbe(
         camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, 1 | 16 | 256, previewObject, 4)
     local status, hit, endCoords = GetShapeTestResult(probe)
 
-    if status == 2 and (hit == true or hit == 1) then return endCoords end
-    return dest
+    if status == 2 and (hit == true or hit == 1) then return endCoords, true end
+    return camPos + dir * math.min(placeDistance, reach), false
 end
 
-local function updateCarry()
+-- props whose origin is not at their base would sink into the floor without this
+---@param entity integer
+---@return number
+local function baseOffset(entity)
+    local minimum = GetModelDimensions(GetEntityModel(entity))
+    return minimum and -minimum.z or 0.0
+end
+
+local function updateFreePlace()
     if not previewObject or not DoesEntityExist(previewObject) then return end
 
-    local target = carryTarget()
-    SetEntityCoordsNoOffset(previewObject, target.x, target.y, target.z, false, false, false)
-    SetEntityRotation(previewObject, 0.0, 0.0, carryHeading % 360.0, 2, false)
+    local target, onSurface = placeTarget()
+    local lift = placeLift
+    if onSurface and groundFollow then lift = lift + baseOffset(previewObject) end
+
+    SetEntityCoordsNoOffset(previewObject, target.x, target.y, target.z + lift, false, false, false)
+    SetEntityRotation(previewObject, 0.0, 0.0, placeHeading % 360.0, 2, false)
     if gridSnap then applyGridSnap(previewObject) end
     ApplySelectionOffsets()
 end
@@ -881,7 +900,7 @@ local function updateCrosshair()
     if GetGameTimer() - lastAimProbe < 80 then return end
     lastAimProbe = GetGameTimer()
 
-    local id = carrying and nil or raycastDecoration()
+    local id = freePlacing and nil or raycastDecoration()
     if id == aimedDecoration then return end
 
     aimedDecoration = id
@@ -927,8 +946,8 @@ local function selectCatalogEntry(categoryIndex, itemIndex)
     local entry = entries[((itemIndex - 1) % #entries) + 1]
     if not entry or not SpawnPreview(entry.object, entry.label) then return end
 
-    carryHeading = GetEntityHeading(previewObject)
-    SetCarrying(true)
+    placeHeading = GetEntityHeading(previewObject)
+    SetFreePlacing(true)
     SendUI('furniture:highlight', { category = category, object = entry.object })
     PushDecoratingState()
 end
@@ -948,30 +967,30 @@ local function cycleCategory(delta)
     selectCatalogEntry((at and at.category or 1) + delta, 1)
 end
 
-function IsCarrying()
-    return carrying
+function IsFreePlacing()
+    return freePlacing
 end
 
-function SetCarrying(active)
-    if carryConfig.enabled ~= true then
+function SetFreePlacing(active)
+    if placeConfig.enabled ~= true then
         SetCursorMode(true)
         SetUIFocus(true, true)
         return
     end
 
-    carrying = active == true
+    freePlacing = active == true
 
-    -- carrying aims down the camera, so the mouse has to steer the camera rather than the NUI cursor
-    SetCursorMode(not carrying)
-    SetUIFocus(not carrying, true)
-    SetPlacementMobility(carrying and not freecamMoving)
+    -- freePlacing aims down the camera, so the mouse has to steer the camera rather than the NUI cursor
+    SetCursorMode(not freePlacing)
+    SetUIFocus(not freePlacing, true)
+    SetPlacementMobility(freePlacing and not freecamMoving)
 
-    if not carrying then return end
+    if not freePlacing then return end
     SendUI('gizmo:sync', nil)
 
     if previewObject and DoesEntityExist(previewObject) then
-        carryHeading = GetEntityHeading(previewObject)
-        updateCarry()
+        placeHeading = GetEntityHeading(previewObject)
+        updateFreePlace()
     end
 end
 
@@ -1002,10 +1021,10 @@ local function attachClipboard()
 end
 
 -- removing player control takes the camera with it unless SPC_LEAVE_CAMERA_CONTROL_ON is set, which
--- is what left the mouse doing nothing while carrying
+-- is what left the mouse doing nothing while freePlacing
 local SPC_LEAVE_CAMERA_CONTROL_ON <const> = 256
 
----@param mobile boolean walking around while carrying, rather than posed with the clipboard
+---@param mobile boolean walking around while freePlacing, rather than posed with the clipboard
 function SetPlacementMobility(mobile)
     if not IsDecorating then return end
 
@@ -1073,7 +1092,7 @@ function ToggleDecorating()
         previewObject = nil
         currentlySelected = nil
         lastMatrix = nil
-        carrying = false
+        freePlacing = false
         aimedDecoration = nil
         SetCursorMode(false)
         destroyFreecam()
@@ -1094,12 +1113,12 @@ function ToggleDecorating()
             end
             RequestStopDecorating()
         end
-        if IsDisabledControlJustReleased(0, 38) and not carrying then
+        if IsDisabledControlJustReleased(0, 38) and not freePlacing then
             SetUIFocus(true)
             PushDecoratingState()
         end
 
-        if carrying then
+        if freePlacing then
             if IsDisabledControlJustPressed(0, 174) then cycleFurniture(-1) end
             if IsDisabledControlJustPressed(0, 175) then cycleFurniture(1) end
             if IsDisabledControlJustPressed(0, 44) then cycleCategory(-1) end
@@ -1109,7 +1128,7 @@ function ToggleDecorating()
         updateCrosshair()
 
         -- look at a placed piece and click to take hold of it, ctrl adds it to the group instead
-        if not carrying and not pendingObject and IsDisabledControlJustReleased(0, 24) then
+        if not freePlacing and not pendingObject and IsDisabledControlJustReleased(0, 24) then
             local id, entity = raycastDecoration()
             if id and entity then
                 if IsDisabledControlPressed(0, 36) then
@@ -1119,10 +1138,10 @@ function ToggleDecorating()
                 else
                     ClearExtraSelection()
                     local camPos = GetDecoratingCam()
-                    carryDistance = math.min(math.max(#(GetEntityCoords(entity) - camPos),
-                        carryConfig.minDistance or 1.0), carryConfig.maxDistance or 12.0)
+                    placeDistance = math.min(math.max(#(GetEntityCoords(entity) - camPos),
+                        placeConfig.minDistance or 1.0), placeConfig.maxDistance or 12.0)
                     SelectPlacedDecoration(id)
-                    SetCarrying(true)
+                    SetFreePlacing(true)
                 end
             end
         end
@@ -1134,7 +1153,17 @@ function ToggleDecorating()
             RemoveSelectedDecoration()
         end
         if IsDisabledControlJustReleased(0, 47) and previewObject and DoesEntityExist(previewObject) then
-            PlaceObjectOnGroundProperly(previewObject)
+            if freePlacing then
+                groundFollow = not groundFollow
+                placeLift = 0.0
+                if not groundFollow then
+                    placeDistance = math.min(math.max(#(GetEntityCoords(previewObject) - GetDecoratingCam()),
+                        placeConfig.minDistance or 1.0), placeConfig.reach or 15.0)
+                end
+                PushDecoratingState()
+            else
+                PlaceObjectOnGroundProperly(previewObject)
+            end
         end
         if IsDisabledControlJustReleased(0, 73) then
             gridSnap = not gridSnap
@@ -1144,7 +1173,7 @@ function ToggleDecorating()
             PushDecoratingState()
         end
         if IsDisabledControlJustReleased(0, 26) and previewObject and DoesEntityExist(previewObject) then
-            SetCarrying(not carrying)
+            SetFreePlacing(not freePlacing)
             PushDecoratingState()
         end
         if IsDisabledControlJustReleased(0, 191) then
@@ -1176,11 +1205,11 @@ function ToggleDecorating()
             DisableControlAction(0, 140, true)
             DisableControlAction(0, 141, true)
             DisableControlAction(0, 142, true)
-            DisableControlAction(0, 22, true) -- walking while carrying must not jump or board a vehicle
+            DisableControlAction(0, 22, true) -- walking while freePlacing must not jump or board a vehicle
             DisableControlAction(0, 23, true)
             DisableControlAction(0, 26, true) -- C picks the piece up and puts it down
             DisableControlAction(0, 73, true) -- X toggles grid snapping
-            DisableControlAction(0, 44, true) -- Q and E walk the catalog while carrying
+            DisableControlAction(0, 44, true) -- Q and E walk the catalog while freePlacing
             DisableControlAction(0, 172, true)
             DisableControlAction(0, 173, true)
             DisableControlAction(0, 174, true)
@@ -1189,7 +1218,7 @@ function ToggleDecorating()
             DisablePlayerFiring(cache.playerId, true)
 
 
-            if carrying then
+            if freePlacing then
                 if not freecamMoving then
                     local up = IsDisabledControlJustPressed(0, 241)
                     local down = IsDisabledControlJustPressed(0, 242)
@@ -1197,20 +1226,25 @@ function ToggleDecorating()
                     if up or down then
                         local direction = up and 1.0 or -1.0
                         if IsDisabledControlPressed(0, 21) then
-                            carryDistance = math.min(math.max(carryDistance + direction * 0.25,
-                                carryConfig.minDistance or 1.0), carryConfig.maxDistance or 12.0)
+                            if groundFollow then
+                                placeLift = math.min(math.max(placeLift + direction * (placeConfig.liftStep or 0.05), 0.0),
+                                    placeConfig.maxLift or 4.0)
+                            else
+                                placeDistance = math.min(math.max(placeDistance + direction * 0.25,
+                                    placeConfig.minDistance or 1.0), placeConfig.reach or 15.0)
+                            end
                         else
-                            local step = IsDisabledControlPressed(0, 36) and (carryConfig.coarseStep or 45.0)
-                                or (carryConfig.rotationStep or 5.0)
-                            carryHeading = carryHeading + direction * step
+                            local step = IsDisabledControlPressed(0, 36) and (placeConfig.coarseStep or 45.0)
+                                or (placeConfig.rotationStep or 5.0)
+                            placeHeading = placeHeading + direction * step
                         end
                     end
                 end
 
-                updateCarry()
+                updateFreePlace()
 
                 if IsDisabledControlJustReleased(0, 24) then
-                    SetCarrying(false)
+                    SetFreePlacing(false)
                     PushDecoratingState()
                 end
             elseif sharedConfig.nuiGizmo then
@@ -1329,9 +1363,10 @@ RegisterNUICallback('furniture:place', function(data, cb)
         return
     end
 
-    carryDistance = carryConfig.distance or 4.0
-    carryHeading = GetEntityHeading(previewObject)
-    SetCarrying(carryConfig.default ~= false)
+    placeDistance = placeConfig.distance or 4.0
+    placeLift = 0.0
+    placeHeading = GetEntityHeading(previewObject)
+    SetFreePlacing(placeConfig.default ~= false)
     PushDecoratingState()
 end)
 

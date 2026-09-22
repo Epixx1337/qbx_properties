@@ -233,32 +233,33 @@
         <div class="hint">Pick another item from the catalog to swap it out.</div>
 
         <div class="keys">
-          {#if furniture.carrying}
+          {#if furniture.freePlacing}
             <div><kbd>W A S D</kbd> Walk it into place</div>
             <div><kbd>Scroll</kbd> Turn</div>
             <div><kbd>Ctrl</kbd> + <kbd>Scroll</kbd> Turn faster</div>
-            <div><kbd>Shift</kbd> + <kbd>Scroll</kbd> Hold nearer / further</div>
+            <div><kbd>Shift</kbd> + <kbd>Scroll</kbd> {furniture.groundFollow ? 'Raise off the surface' : 'Hold nearer / further'}</div>
             <div><kbd>←</kbd> <kbd>→</kbd> Previous / next piece</div>
             <div><kbd>Q</kbd> <kbd>E</kbd> Previous / next category</div>
             <div><kbd>Click</kbd> Put it down</div>
             <div><kbd>C</kbd> Switch to handles</div>
+            <div><kbd>G</kbd> {furniture.groundFollow ? 'Let it float' : 'Rest on surfaces'}</div>
           {:else}
             <div><kbd>T</kbd> Move</div>
             <div><kbd>R</kbd> Rotate</div>
             <div><kbd>L</kbd> Camera / world / local</div>
             <div><kbd>G</kbd> Snap to ground</div>
             <div><kbd>H</kbd> Snap to wall</div>
-            {#if furniture.carrySupported}
-              <div><kbd>C</kbd> Pick it back up</div>
+            {#if furniture.freePlaceSupported}
+              <div><kbd>C</kbd> Free place</div>
             {/if}
           {/if}
           <div><kbd>X</kbd> Snap to grid</div>
           <div><kbd>F</kbd> Freecam</div>
         </div>
 
-        <div class="grid-state" class:on={furniture.carrying}>
-          {#if furniture.carrying}
-            Carrying, it follows where you look
+        <div class="grid-state" class:on={furniture.freePlacing}>
+          {#if furniture.freePlacing}
+            Free placing{furniture.groundFollow ? ', resting on surfaces' : ', floating'}
           {:else if furniture.gridSnap}
             Grid snapping on, {furniture.gridSize}m steps
           {:else}
@@ -390,7 +391,7 @@
         <span><kbd>T</kbd> Move</span>
         <span><kbd>R</kbd> Rotate</span>
         <span><kbd>L</kbd> Axis space</span>
-        {#if furniture.carrying}
+        {#if furniture.freePlacing}
           <span><kbd>Scroll</kbd> Turn</span>
           <span><kbd>Click</kbd> Put down</span>
         {:else}
@@ -399,7 +400,7 @@
           <span><kbd>Click</kbd> Pick up</span>
           <span><kbd>Ctrl</kbd> + <kbd>Click</kbd> Add to group</span>
         {/if}
-        <span class:active={furniture.carrying}><kbd>C</kbd> Carry</span>
+        <span class:active={furniture.freePlacing}><kbd>C</kbd> Free place</span>
         <span class:active={furniture.gridSnap}><kbd>X</kbd> Grid</span>
         <span><kbd>Enter</kbd> Confirm</span>
         <span><kbd>F</kbd> Freecam</span>

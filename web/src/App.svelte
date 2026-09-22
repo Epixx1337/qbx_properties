@@ -91,8 +91,9 @@
     furniture.pickup = data.pickup ?? false
     furniture.gridSnap = data.gridSnap ?? false
     furniture.gridSize = data.gridSize ?? 0.25
-    furniture.carrying = data.carrying ?? false
-    furniture.carrySupported = data.carrySupported ?? false
+    furniture.freePlacing = data.freePlacing ?? false
+    furniture.freePlaceSupported = data.freePlaceSupported ?? false
+    furniture.groundFollow = data.groundFollow ?? true
   })
 
   onMessage('furniture:highlight', (data) => {
