@@ -297,10 +297,17 @@
 
     const tag = event.target?.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-      if (event.key !== 'Escape') return
+      if (event.key !== 'Escape' && event.key !== 'Tab') return
     }
 
     const key = event.key === 'Escape' ? 'Escape' : event.key.toLowerCase()
+
+    // CEF hands Tab to its own focus ring before any of this runs unless it is claimed here
+    if (app.view === 'furniture' && key === 'tab') {
+      event.preventDefault()
+      fetchNui('setFocus', { focus: false })
+      return
+    }
 
     if (app.view === 'furniture' && furniture.gizmo) {
       if (key === 't' || key === 'r') {

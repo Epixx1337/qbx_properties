@@ -345,8 +345,8 @@
       </div>
     {:else}
       <div class="body">
-        <div class="hint">Pick furniture from the catalog to start placing, or return to the world to fly around and select something you already placed.</div>
-        <button class="btn subtle wide" onclick={backToWorld}>Back to world <kbd>Tab</kbd></button>
+        <div class="hint">Pick furniture from the catalog to start placing, or take control to walk around and pick up something you already placed.</div>
+        <button class="btn subtle wide" onclick={backToWorld}>Control furniture <kbd>Tab</kbd></button>
         <div class="keys">
           <div><kbd>W A S D</kbd> Fly</div>
           <div><kbd>Space</kbd> / <kbd>Ctrl</kbd> Up / down</div>
