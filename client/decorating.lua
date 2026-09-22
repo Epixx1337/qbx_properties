@@ -637,8 +637,6 @@ local function writeGizmoMatrix(entity, view)
     return view
 end
 
--- callers that keep the matrix around (undo snapshots) need their own buffer, the per-frame gizmo
--- reuses one so dragging an object does not allocate 64 bytes every frame
 function MakeGizmoMatrix(entity)
     return writeGizmoMatrix(entity, DataView.ArrayBuffer(64))
 end
@@ -662,8 +660,6 @@ function ApplyGizmoMatrix(entity, view)
     )
 end
 
--- rooms and placed shells sit at an angle, so the grid turns with them and furniture snapped in one
--- unit lines up with the walls rather than with world north
 function SetGridHeading(heading)
     gridHeading = tonumber(heading) or 0.0
 end
@@ -678,8 +674,6 @@ local function quantise(value, step)
     return math.floor(value / step + 0.5) * step
 end
 
--- snapping rounds in grid space against a fixed world origin, so two pieces snapped in different
--- sessions still share the same lines
 local function applyGridSnap(entity)
     local step = gridConfig.size or 0.25
     if step < 0.01 then return end
@@ -708,7 +702,6 @@ local function drawFurnitureGrid(origin)
     local span = step * radius
     local z = origin.z + 0.01
 
-    -- centre the drawn lines on the nearest snap intersection so they mark where a piece would land
     local gx, gy = rotateGrid(origin.x, origin.y, -gridHeading)
     local cx, cy = quantise(gx, step), quantise(gy, step)
 
@@ -732,7 +725,6 @@ local function drawFurnitureGrid(origin)
         end
     end
 
-    -- snapping lands on intersections, so mark the one the piece is sitting on rather than a cell
     if not gridSnap then return end
     local arm = step * 0.45
     local ax, ay = rotateGrid(cx - arm, cy, gridHeading)
@@ -744,8 +736,6 @@ local function drawFurnitureGrid(origin)
     DrawLine(ax, ay, z, bx, by, z, red, green, blue, 255)
 end
 
--- the piece rides on the point you are looking at, so it slides along walls and floors instead of
--- hanging in the air at a fixed range
 local function carryTarget()
     local camPos, camRot = GetDecoratingCam()
     local pitch, yaw = math.rad(camRot.x), math.rad(camRot.z)
@@ -775,7 +765,6 @@ function SetCarrying(active)
     carrying = active == true
 
     if not carrying then return end
-    -- the UI gizmo would otherwise keep drawing handles over a piece it no longer controls
     SendUI('gizmo:sync', nil)
 
     if previewObject and DoesEntityExist(previewObject) then
@@ -913,8 +902,6 @@ function ToggleDecorating()
             ConfirmDecoration()
         end
         if previewObject and DoesEntityExist(previewObject) then
-            -- a parked object still counted as movement, which kept a transform going out to every
-            -- nearby player twice a second for as long as it stayed selected
             if GetGameTimer() - lastTransformPush > 150 then
                 local pos = GetEntityCoords(previewObject)
                 local rot = GetEntityRotation(previewObject, 2)
@@ -945,12 +932,9 @@ function ToggleDecorating()
             DisableControlAction(0, 74, true) -- H stays with the NUI wall snap
             DisablePlayerFiring(cache.playerId, true)
 
-            -- only a freshly spawned piece is ever carried, so selecting something already placed
-            -- never yanks it across the room to the camera
             if carrying and previewObject ~= pendingObject then carrying = false end
 
             if carrying then
-                -- scroll turns the piece while carrying, the freecam only claims it while flying
                 if not freecamMoving then
                     local up = IsDisabledControlJustPressed(0, 241)
                     local down = IsDisabledControlJustPressed(0, 242)

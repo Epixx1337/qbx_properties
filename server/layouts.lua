@@ -152,7 +152,7 @@ lib.callback.register('qbx_properties:callback:previewLayoutCode', function(sour
     if not player or not property then return end
     if type(code) ~= 'string' then return end
 
-    local layout = MySQL.single.await('SELECT name, creator_name, data FROM properties_layouts WHERE share_code = ?', {code:upper():gsub('%s', '')})
+    local layout = MySQL.single.await('SELECT name, creator_name, data FROM properties_layouts WHERE share_code = ?', {(code:upper():gsub('%s', ''))})
     if not layout then return end
 
     local ok, items = pcall(json.decode, layout.data)
@@ -259,7 +259,7 @@ lib.callback.register('qbx_properties:callback:importLayout', function(source, c
     if not player or not property then return false, 'You cannot manage layouts here.' end
     if type(code) ~= 'string' then return false, 'Enter a share code.' end
 
-    local layout = MySQL.single.await('SELECT id, name, data, property_id, interior FROM properties_layouts WHERE share_code = ?', {code:upper():gsub('%s', '')})
+    local layout = MySQL.single.await('SELECT id, name, data, property_id, interior FROM properties_layouts WHERE share_code = ?', {(code:upper():gsub('%s', ''))})
     if not layout then return false, 'No layout matches that code.' end
 
     return applyLayout(source, player, property, layout)

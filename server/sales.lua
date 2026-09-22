@@ -19,6 +19,12 @@ lib.callback.register('qbx_properties:callback:offerProperty', function(source, 
         return false, 'You cannot sell this property.'
     end
 
+    local market = sharedConfig.market
+    if not property.owner and price < (market and market.minPrice or 0) then
+        return false, string.format('Unsold properties start at $%d.', market.minPrice)
+    end
+    if price > (market and market.maxPrice or math.maxinteger) then return false, 'That price is too high.' end
+
     local target
     if data.serverId then
         local id = ToId(data.serverId)
@@ -100,19 +106,28 @@ RegisterNetEvent('qbx_properties:server:respondToOffer', function(accepted)
         return
     end
 
-    RecordPropertySale(offer.propertyId, property.owner, buyer.PlayerData.citizenid, offer.price)
-
-    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ?', {buyer.PlayerData.citizenid, offer.propertyId}) ~= 1 then
+    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ? AND owner <=> ?', {buyer.PlayerData.citizenid, offer.propertyId, property.owner}) ~= 1 then
         buyer.Functions.AddMoney(account, offer.price, 'Property purchase refund')
+        exports.qbx_core:Notify(playerSource, 'That property is no longer available.', 'error')
         return
     end
 
+    RecordPropertySale(offer.propertyId, property.owner, buyer.PlayerData.citizenid, offer.price)
+    ClearPropertyAccess(offer.propertyId)
     HandoverPropertyKeys(offer.propertyId, buyer.PlayerData.source)
 
     if property.owner then
         local seller = exports.qbx_core:GetPlayerByCitizenId(property.owner)
         if seller then
             seller.Functions.AddMoney('bank', offer.price, string.format('Sold %s', property.property_name))
+        else
+            local offline = exports.qbx_core:GetOfflinePlayer(property.owner)
+            if offline then
+                offline.PlayerData.money.bank = offline.PlayerData.money.bank + offer.price
+                exports.qbx_core:SaveOffline(offline.PlayerData)
+            else
+                lib.print.warn(('unable to pay %s $%d for %s'):format(property.owner, offer.price, property.property_name))
+            end
         end
     elseif config.marketSociety then
         pcall(function()

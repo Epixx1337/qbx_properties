@@ -334,11 +334,11 @@ return {
     -- Property sizes; stashes is the base stash placements for that size, storage upgrades add their bonus on top.
     -- Properties without a stashes value fall back to the global stashLimit above.
     propertySizes = {
-        tiny = { label = 'Tiny', power = 3000, cost = 500, stashes = 1 },
-        small = { label = 'Small', power = 5000, cost = 750, stashes = 2 },
-        medium = { label = 'Medium', power = 10000, cost = 1500, stashes = 3 },
-        large = { label = 'Large', power = 20000, cost = 3000, stashes = 4 },
-        mansion = { label = 'Mansion', power = 40000, cost = 6000, stashes = 6 },
+        tiny = { label = 'Tiny', power = 3000, cost = 500, stashes = 1, furniture = 150 },
+        small = { label = 'Small', power = 5000, cost = 750, stashes = 2, furniture = 250 },
+        medium = { label = 'Medium', power = 10000, cost = 1500, stashes = 3, furniture = 400 },
+        large = { label = 'Large', power = 20000, cost = 3000, stashes = 4, furniture = 600 },
+        mansion = { label = 'Mansion', power = 40000, cost = 6000, stashes = 6, furniture = 1000 },
     },
     propertySizeOrder = { 'tiny', 'small', 'medium', 'large', 'mansion' },
     defaultPropertySize = 'medium',
@@ -352,6 +352,7 @@ return {
         apartment = {
             power = 4000,
             cost = 0,
+            furniture = 300,
         },
 
         humidity = {

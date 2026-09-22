@@ -53,8 +53,12 @@ local function transferProperty(propertyId, buyerCid, amount)
     if not property then return false end
     if not CanOwnAnotherProperty(buyerCid, property.type) then return false end
 
+    if MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ? AND owner <=> ?', {buyerCid, propertyId, property.owner}) ~= 1 then
+        return false
+    end
+
     RecordPropertySale(propertyId, property.owner, buyerCid, amount)
-    MySQL.update.await('UPDATE properties SET owner = ?, keyholders = JSON_OBJECT(), sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ?', {buyerCid, propertyId})
+    ClearPropertyAccess(propertyId)
 
     local buyer = exports.qbx_core:GetPlayerByCitizenId(buyerCid)
     HandoverPropertyKeys(propertyId, buyer and buyer.PlayerData.source or nil)
@@ -461,8 +465,9 @@ end)
 local function refundActiveBids(listingId, status)
     local bids = MySQL.query.await("SELECT id, bidder, amount FROM properties_bids WHERE listing_id = ? AND status = 'active'", {listingId})
     for i = 1, #bids do
-        MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ?", {bids[i].id})
-        payOut(bids[i].bidder, bids[i].amount, string.format('Auction refund (listing %d)', listingId))
+        if MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ? AND status = 'active'", {bids[i].id}) == 1 then
+            payOut(bids[i].bidder, bids[i].amount, string.format('Auction refund (listing %d)', listingId))
+        end
     end
     MySQL.update.await('UPDATE properties_listings SET status = ? WHERE id = ?', {status, listingId})
 end
@@ -556,8 +561,7 @@ lib.callback.register('qbx_properties:callback:placeOffer', function(source, lis
         return false, 'Not enough money in your bank.'
     end
 
-    if previous then
-        MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ?", {previous.id})
+    if previous and MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ? AND status = 'active'", {previous.id}) == 1 then
         payOut(citizenId, previous.amount, string.format('Replaced offer (listing %d)', listingId))
     end
 
@@ -586,7 +590,7 @@ local function settleOffer(source, listingId, bidId, accept)
     if not bid then return false end
 
     if not accept then
-        MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ?", {bid.id})
+        if MySQL.update.await("UPDATE properties_bids SET status = 'refunded' WHERE id = ? AND status = 'active'", {bid.id}) ~= 1 then return false end
         payOut(bid.bidder, bid.amount, string.format('Offer declined (listing %d)', listingId))
 
         local bidder = exports.qbx_core:GetPlayerByCitizenId(bid.bidder)
@@ -614,8 +618,7 @@ local function settleOffer(source, listingId, bidId, accept)
         return false
     end
 
-    refundActiveBids(listingId, 'refunded')
-    MySQL.update.await("UPDATE properties_listings SET status = 'sold' WHERE id = ?", {listingId})
+    refundActiveBids(listingId, 'sold')
 
     local buyer = exports.qbx_core:GetPlayerByCitizenId(bid.bidder)
     if buyer then

@@ -129,7 +129,6 @@ AddEventHandler('onResourceStop', function(resource)
     end
 end)
 
--- furniture snapping lines up with the walls of a rotated shell rather than with world north
 ---@return number
 function GetCurrentShellHeading()
     local shell = CurrentPropertyId and streamedShells[CurrentPropertyId]

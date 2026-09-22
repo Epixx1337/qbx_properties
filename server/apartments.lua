@@ -213,6 +213,7 @@ function ReleaseRooms(citizenId)
 
     local units = MySQL.query.await('SELECT id FROM properties WHERE building IS NOT NULL AND owner = ?', {citizenId}) or {}
     MySQL.update.await('UPDATE properties SET owner = NULL WHERE building IS NOT NULL AND owner = ?', {citizenId})
+    ClearTenantAccess(citizenId)
     for i = 1, #units do
         HandoverPropertyKeys(units[i].id)
     end
@@ -274,6 +275,12 @@ lib.callback.register('qbx_properties:callback:getRoomDecorations', function(sou
     local anchor = GetRoomCoords(buildingKey, floor, room)
     if not anchor then return {} end
 
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player then return {} end
+
+    local citizenId = player.PlayerData.citizenid
+    if not HasPropertyAccess(citizenId, property, 'door') and not IsRealtor(player.PlayerData.job) then return {} end
+
     local decorations = GetPropertyDecorations(property)
     local stashIndexes = RegisterPropertyStashes(property, decorations)
     local types = GetFurnitureTypes()
@@ -282,9 +289,7 @@ lib.callback.register('qbx_properties:callback:getRoomDecorations', function(sou
     if SyncFurnitureDoors then SyncFurnitureDoors(property) end
 
     result.propertyId = property.id
-
-    local player = exports.qbx_core:GetPlayer(source)
-    result.access = player and GetAccessFlags(player.PlayerData.citizenid, property) or nil
+    result.access = GetAccessFlags(citizenId, property)
     result.breached = IsBreached ~= nil and IsBreached(property.id) or false
 
     for i = 1, #decorations do

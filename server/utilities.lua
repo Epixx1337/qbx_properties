@@ -109,7 +109,7 @@ local function biggestDraws(property)
     local draws = {}
     for _, entry in pairs(byModel) do draws[#draws + 1] = entry end
     table.sort(draws, function(a, b) return a.watts > b.watts end)
-    for i = #draws, 5, -1 do draws[i] = nil end
+    for i = #draws, 6, -1 do draws[i] = nil end
 
     return draws, items
 end
@@ -224,7 +224,7 @@ lib.addCommand('power', {
     elseif args.state == 'off' then
         powered = false
     else
-        powered = state.powered ~= 1
+        powered = not ToBool(state.powered)
     end
 
     MySQL.update.await('UPDATE properties_utilities SET powered = ? WHERE property_id = ?', {powered and 1 or 0, propertyId})

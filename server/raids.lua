@@ -5,6 +5,23 @@ if not police.enabled then return end
 
 local raids = {}
 
+---@param source number
+---@param property table needs building, floor, room and coords
+---@return boolean
+local function IsAtProperty(source, property)
+    local target
+    if property.building then
+        local anchor = GetRoomCoords(property.building, property.floor, property.room)
+        target = anchor and anchor.xyz
+    elseif property.coords then
+        local ok, decoded = pcall(json.decode, property.coords)
+        target = ok and decoded and vec3(decoded.x, decoded.y, decoded.z) or nil
+    end
+
+    if not target then return false end
+    return #(GetEntityCoords(GetPlayerPed(source)) - target) <= 20.0
+end
+
 ---@param propertyId integer
 ---@return table?
 function GetRaid(propertyId)
@@ -273,10 +290,11 @@ lib.callback.register('qbx_properties:callback:breachDoor', function(source, pro
     if not player or not propertyId then return false end
     if not hasItem(player, police.breachItem, police.breachRequiresEquipped) then return false end
 
-    local property = MySQL.single.await('SELECT id, property_name, building FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT id, property_name, building, floor, room, coords FROM properties WHERE id = ?', {propertyId})
     if not property then return false end
 
-    if not raids[propertyId] and property.building then return false end
+    if not raids[propertyId] then return false end
+    if not IsAtProperty(source, property) then return false end
     if not MarkBreached(propertyId, player.PlayerData.citizenid) then return false end
 
     LogAction(source, 'qbx_properties:server:breachDoor', string.format('%s breached %s', player.PlayerData.citizenid, property.property_name))

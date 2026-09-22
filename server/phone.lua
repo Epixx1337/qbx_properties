@@ -200,7 +200,8 @@ end)
 
 exports('GetLocked', function(propertyId)
     local row = getRow(propertyId)
-    return row and getLocked(row) or nil
+    if not row then return nil end
+    return getLocked(row)
 end)
 
 exports('SetLocked', function(propertyId, actorCid, locked)

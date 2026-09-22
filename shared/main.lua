@@ -345,6 +345,16 @@ end
 
 ---@param value any
 ---@return boolean
+function IsFiniteVector(value)
+    if type(value) ~= 'vector3' then return false end
+    for _, axis in ipairs({ value.x, value.y, value.z }) do
+        if axis ~= axis or axis == math.huge or axis == -math.huge or math.abs(axis) > 20000.0 then return false end
+    end
+    return true
+end
+
+---@param value any
+---@return boolean
 function ToBool(value)
     return value == true or value == 1
 end

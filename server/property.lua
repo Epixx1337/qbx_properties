@@ -1204,6 +1204,7 @@ end)
 
 function EvictProperty(propertyId)
     MySQL.update.await('UPDATE properties SET owner = NULL, keyholders = JSON_OBJECT(), wall_color = NULL, sale_authorized = 0, maintenance_paid_until = NULL WHERE id = ?', {propertyId})
+    ClearPropertyAccess(propertyId)
     HandoverPropertyKeys(propertyId)
 
     local occupants = insideProperty[propertyId] or {}
@@ -1301,6 +1302,7 @@ RegisterNetEvent('qbx_properties:server:rentProperty', function(propertyId)
     end
 
     if MySQL.update.await('UPDATE properties SET owner = ?, rent_last_paid = NOW() WHERE id = ? AND owner IS NULL', {player.PlayerData.citizenid, propertyId}) ~= 1 then return end
+    ClearPropertyAccess(propertyId)
 
     if not player.Functions.RemoveMoney('bank', property.price, string.format('Rent for %s', property.property_name)) then
         MySQL.update.await('UPDATE properties SET owner = NULL, rent_last_paid = NULL WHERE id = ?', {propertyId})
@@ -1348,6 +1350,7 @@ RegisterNetEvent('qbx_properties:server:buyProperty', function(propertyId)
     end
 
     RecordPropertySale(propertyId, nil, player.PlayerData.citizenid, property.price)
+    ClearPropertyAccess(propertyId)
     HandoverPropertyKeys(propertyId, playerSource)
 
     if property.garage then
@@ -1391,7 +1394,14 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
     if not player or not propertyId then return end
     local property = MySQL.single.await('SELECT id, owner, keyholders, property_name, building, floor, room, type, group_name, tenant, size FROM properties WHERE id = ?', {propertyId})
     if not property or not CanEditFurniture(player, property) then return end
-    if (type(hash) ~= 'string' and type(hash) ~= 'number') or type(coords) ~= 'vector3' or type(rotation) ~= 'vector3' then return end
+    if (type(hash) ~= 'string' and type(hash) ~= 'number') or not IsFiniteVector(coords) or not IsFiniteVector(rotation) then return end
+
+    if not GetFurnitureSpecs()[hash] then return end
+
+    if not objectId and not CanPlaceMoreFurniture(property) then
+        exports.qbx_core:Notify(playerSource, 'This property is full, remove something first.', 'error')
+        return
+    end
 
     if GetRaid and GetRaid(propertyId) then
         exports.qbx_core:Notify(playerSource, 'You cannot rearrange furniture right now.', 'error')
@@ -1547,7 +1557,7 @@ lib.callback.register('qbx_properties:callback:payFurniture', function(source, m
     for model, count in pairs(manifest) do
         count = ToId(count)
         local spec = type(model) == 'string' and specs[model]
-        if not count or count > 100 or not spec or (spec.price or 0) <= 0 then return false end
+        if not count or count < 1 or count > 100 or not spec or (spec.price or 0) <= 0 then return false end
         total += spec.price * count
     end
     if total <= 0 then return false end
@@ -1567,6 +1577,24 @@ lib.callback.register('qbx_properties:callback:payFurniture', function(source, m
 
     return true
 end)
+
+---@param property table
+---@return boolean
+function CanPlaceMoreFurniture(property)
+    local limit = property.building and sharedConfig.utilities.apartment.furniture
+        or GetPropertySize(property.size).furniture
+    if not limit then return true end
+
+    local count
+    if property.building then
+        count = MySQL.scalar.await('SELECT COUNT(*) FROM properties_apartment_decorations WHERE citizenid = ? AND layout = ?',
+            {property.owner, GetBuildingLayout(property.building)})
+    else
+        count = MySQL.scalar.await('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND IFNULL(`garden`, 0) = 0', {property.id})
+    end
+
+    return (count or 0) < limit
+end
 
 ---@param playerSource integer
 ---@param model string
@@ -1955,7 +1983,7 @@ exports('removeItemDecoration', function(decorationId)
     local row = MySQL.single.await('SELECT id, property_id, garden FROM properties_decorations WHERE id = ? AND item IS NOT NULL', {decorationId})
     if row then
         MySQL.update.await('DELETE FROM properties_decorations WHERE id = ?', {decorationId})
-        if row.garden == 1 then
+        if ToBool(row.garden) then
             TriggerClientEvent('qbx_properties:client:gardenDecoration', -1, row.property_id, { id = decorationId, removed = true })
         else
             lib.triggerClientEvent('qbx_properties:client:removeDecoration', insideProperty[row.property_id] or {}, decorationId)

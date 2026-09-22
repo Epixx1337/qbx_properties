@@ -64,13 +64,28 @@ local function jobAccessRow(citizenId, property, permission)
     return ok and row or nil
 end
 
+---@param propertyId integer
+function ClearPropertyAccess(propertyId)
+    if not propertyId then return end
+    pcall(MySQL.update.await, 'DELETE FROM properties_access WHERE property_id = ?', {propertyId})
+end
+
+---@param citizenId string
+function ClearTenantAccess(citizenId)
+    if not citizenId then return end
+    pcall(MySQL.update.await, 'DELETE FROM properties_access WHERE tenant = ?', {citizenId})
+end
+
 ---@param citizenId string
 ---@param property table
 ---@param permission string
 ---@return boolean
 function HasPropertyAccess(citizenId, property, permission)
     if not property or not citizenId then return false end
-    if IsBreached and IsBreached(property.id) and BREACH_OPEN[permission] then return true end
+    if IsBreached and IsBreached(property.id) and BREACH_OPEN[permission] then
+        local breacher = exports.qbx_core:GetPlayerByCitizenId(citizenId)
+        if breacher and IsPolice(breacher.PlayerData.job) then return true end
+    end
 
     if permission == 'door' and PhysicalKeysEnabled and PhysicalKeysEnabled() then
         if isGroupMember(citizenId, property) then return true end

@@ -238,7 +238,7 @@ local function bootDoorlock()
         return
     end
 
-    exports.ox_doorlock:registerHook('doorAuthorization', function(payload)
+    local function authorizeDoor(payload)
         local propertyId = ToId(payload.door.name:match('^' .. DOOR_PATTERN .. '(%d+):'))
         if not propertyId then return end
 
@@ -270,6 +270,14 @@ local function bootDoorlock()
             end
         end
 
+        return false
+    end
+
+    exports.ox_doorlock:registerHook('doorAuthorization', function(payload)
+        local ok, result = pcall(authorizeDoor, payload)
+        if ok then return result end
+
+        lib.print.error(('door authorization failed for %s, denying: %s'):format(payload.door and payload.door.name or '?', result))
         return false
     end, {
         nameFilter = '^' .. DOOR_PATTERN,

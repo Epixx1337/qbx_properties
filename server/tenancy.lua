@@ -50,6 +50,7 @@ end
 ---@param property table needs property_name, owner, tenant
 local function endTenancy(propertyId, property, reason)
     MySQL.update.await('UPDATE properties SET tenant = NULL, tenant_rent = NULL, tenant_interval = NULL, tenant_last_paid = NULL, tenant_paid_until = NULL, tenant_contract_end = NULL, tenant_notice_end = NULL WHERE id = ?', {propertyId})
+    ClearPropertyAccess(propertyId)
     RefreshCustomGarages()
 
     local owner = property.owner and exports.qbx_core:GetPlayerByCitizenId(property.owner)
