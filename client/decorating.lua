@@ -957,7 +957,7 @@ local function updateCrosshair()
     if GetGameTimer() - lastAimProbe < 80 then return end
     lastAimProbe = GetGameTimer()
 
-    local entity = freePlacing and nil or raycastDecoration()
+    local entity = (freePlacing or freecamMoving) and nil or raycastDecoration()
     if entity == aimedDecoration then return end
 
     aimedDecoration = entity
@@ -1183,7 +1183,7 @@ function ToggleDecorating()
 
         updateCrosshair()
 
-        if not freePlacing and not pendingObject and IsDisabledControlJustReleased(0, 24) then
+        if not freePlacing and not pendingObject and not freecamMoving and IsDisabledControlJustReleased(0, 24) then
             local entity = raycastDecoration()
             local id = entity and decorationIdFor(entity)
             local cartIndex = entity and not id and cartIndexFor(entity)
