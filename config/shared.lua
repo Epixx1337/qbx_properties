@@ -73,6 +73,8 @@ return {
         liftStep = 0.05, -- metres per scroll notch when raising a piece off the surface
         maxLift = 4.0,
     },
+    placementReach = 15.0, -- how far from the player a piece may be put down, enforced server side
+    interiorRadius = 30.0, -- how far from a shell or room anchor a piece may sit, keeps furniture in its own unit
     furnitureGrid = { -- reference grid drawn under the piece you are moving
         enabled = true,
         size = 0.5, -- cell size in metres, also the step grid snapping rounds to

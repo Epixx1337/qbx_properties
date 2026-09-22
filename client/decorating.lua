@@ -754,15 +754,28 @@ local function placeTarget()
     local cp = math.cos(pitch)
     local dir = vec3(-math.sin(yaw) * cp, math.cos(yaw) * cp, math.sin(pitch))
 
-    local reach = placeConfig.reach or 15.0
+    -- never propose further than the server will accept, otherwise a piece looks placed and is not
+    local reach = math.min(placeConfig.reach or 15.0, sharedConfig.placementReach)
     local dest = camPos + dir * reach
 
     local probe = StartExpensiveSynchronousShapeTestLosProbe(
         camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, 1 | 16 | 256, previewObject, 4)
     local status, hit, endCoords = GetShapeTestResult(probe)
 
-    if status == 2 and (hit == true or hit == 1) then return endCoords, true end
-    return camPos + dir * math.min(placeDistance, reach), false
+    local landed = status == 2 and (hit == true or hit == 1)
+    local point = landed and endCoords or camPos + dir * math.min(placeDistance, reach)
+
+    -- the server measures from the ped while this casts from the camera, and the freecam can drift
+    -- well away from it, so the result is pulled back inside what the server will take
+    local pedCoords = GetEntityCoords(cache.ped)
+    local offset = point - pedCoords
+    local limit = sharedConfig.placementReach - 0.5
+
+    if #(offset) > limit then
+        return pedCoords + offset / #(offset) * limit, false
+    end
+
+    return point, landed
 end
 
 -- props whose origin is not at their base would sink into the floor without this

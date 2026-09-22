@@ -53,6 +53,44 @@ end)
 
 ---@param propertyId integer
 ---@return boolean
+---@param points table
+---@param x number
+---@param y number
+---@return boolean
+local function insidePolygon(points, x, y)
+    local inside = false
+    local j = #points
+
+    for i = 1, #points do
+        local a, b = points[i], points[j]
+        local ay, by = a.y or a[2], b.y or b[2]
+        local ax, bx = a.x or a[1], b.x or b[1]
+
+        if ay and by and ax and bx and (ay > y) ~= (by > y)
+            and x < (bx - ax) * (y - ay) / (by - ay) + ax then
+            inside = not inside
+        end
+        j = i
+    end
+
+    return inside
+end
+
+---@param property table needs garden_zone
+---@param coords vector3
+---@return boolean
+function IsInsideGarden(property, coords)
+    if not property.garden_zone then return false end
+
+    local ok, zone = pcall(json.decode, property.garden_zone)
+    if not ok or type(zone) ~= 'table' then return false end
+
+    local points = zone.points or zone
+    if type(points) ~= 'table' or #points < 3 then return false end
+
+    return insidePolygon(points, coords.x, coords.y)
+end
+
 function CanPlaceGardenFurniture(propertyId)
     local count = MySQL.scalar.await('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND garden = 1', {propertyId}) or 0
     return count < sharedConfig.gardens.furnitureLimit
@@ -119,13 +157,17 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
     if (type(hash) ~= 'string' and type(hash) ~= 'number') or not IsFiniteVector(coords) or not IsFiniteVector(rotation) then return end
     if not GetFurnitureSpecs()[hash] then return end
 
-    local property = MySQL.single.await('SELECT id, owner, keyholders, building FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building, garden_zone FROM properties WHERE id = ? AND garden_zone IS NOT NULL', {propertyId})
     if not property or not CanEditFurniture(player, property) then return end
     if GetRaid and GetRaid(propertyId) then return end
 
+    if not IsInsideGarden(property, coords) then
+        exports.qbx_core:Notify(playerSource, 'That is outside the garden.', 'error')
+        return
+    end
+
     if not ToId(objectId) and (GetFurnitureSpecs()[hash] or {}).item then return end
 
-    local paid = false
     if not ToId(objectId) then
         local existing
         if IsFirstFreeFurniture(hash) then
@@ -135,14 +177,12 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
             existing = MySQL.scalar.await(('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model IN (%s) AND garden = 1'):format(placeholders), params)
         end
 
-        local ok, usedCredit = ConsumeFurnitureCredit(playerSource, hash, existing)
-        if not ok then
+        if not ConsumeFurnitureCredit(playerSource, hash, existing) then
             exports.qbx_core:Notify(playerSource, 'This piece has to be paid for through the cart.', 'error')
             return
         end
-        paid = usedCredit
     end
-    if not paid and #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
+    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > sharedConfig.placementReach then return end
 
     tint = ToId(tint)
     if tint and (tint < 1 or tint > 31 or not (GetFurnitureSpecs()[hash] or {}).tint) then tint = nil end

@@ -1496,7 +1496,6 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
 
     if not objectId and (GetFurnitureSpecs()[hash] or {}).item then return end
 
-    local paid = false
     if not objectId then
         local existing
         if IsFirstFreeFurniture(hash) then
@@ -1512,18 +1511,24 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
             end
         end
 
-        local ok, usedCredit = ConsumeFurnitureCredit(playerSource, hash, existing)
-        if not ok then
+        if not ConsumeFurnitureCredit(playerSource, hash, existing) then
             exports.qbx_core:Notify(playerSource, 'This piece has to be paid for through the cart.', 'error')
             return
         end
-        paid = usedCredit
     end
-    if not paid and #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > 15.0 then return end
+    -- this used to be skipped for anything already paid for, which let a credit be spent anywhere
+    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > sharedConfig.placementReach then return end
 
     local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
     local furnitureAnchor = GetFurnitureAnchor(property)
     local storedCoords = furnitureAnchor and UnrotateOffset(furnitureAnchor, coords) or coords
+
+    -- the offset is measured from the unit's own anchor, so this keeps a piece inside the interior
+    -- it belongs to rather than through a wall in a neighbour's
+    if furnitureAnchor and #(storedCoords) > sharedConfig.interiorRadius then
+        exports.qbx_core:Notify(playerSource, 'That is outside the property.', 'error')
+        return
+    end
     local storedRotation = furnitureAnchor and vec3(rotation.x, rotation.y, (rotation.z - furnitureAnchor.w) % 360.0) or rotation
     local interaction = GetFurnitureTypes()[hash]
 
