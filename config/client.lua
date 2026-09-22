@@ -11,7 +11,8 @@ return {
         couches = { label = 'Couches', icon = 'fa-solid fa-couch', order = 4 },
         tables = { label = 'Tables', icon = 'fa-solid fa-table', order = 5 },
         beds = { label = 'Beds', icon = 'fa-solid fa-bed', order = 6 },
-        structure = { label = 'Structure', icon = 'fa-solid fa-cubes', order = 7 },
+        security = { label = 'Security', icon = 'fa-solid fa-video', order = 7 },
+        structure = { label = 'Structure', icon = 'fa-solid fa-cubes', order = 8 },
         walls = { label = 'Walls', icon = 'fa-solid fa-grip-lines-vertical', parent = 'structure' },
         arches = { label = 'Arches', icon = 'fa-solid fa-archway', parent = 'structure' },
         stairs = { label = 'Stairs', icon = 'fa-solid fa-stairs', parent = 'structure' },
@@ -58,6 +59,26 @@ return {
     },
 
     furniture = {
+        security = {
+            {
+                object = 'qbx_doorbell',
+                label = 'Doorbell Camera',
+                price = 1500,
+                power = 40,
+            },
+            {
+                object = 'qbx_cctv_mount',
+                label = 'Camera Mount',
+                price = 500,
+            },
+            {
+                object = 'qbx_cctv_head',
+                label = 'Security Camera',
+                price = 2000,
+                power = 60,
+            },
+        },
+
         utility = {
             {
                 object = 'v_res_tre_wardrobe',

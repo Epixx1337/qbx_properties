@@ -114,9 +114,11 @@ files {
     'stream/data/qbx_properties_sounds.dat54.rel',
     'stream/props/qbx_props.ytyp',
     'stream/props/cdx_intercom_prop.ytyp',
+    'stream/props/qbx_properties_props.ytyp',
 }
 
 data_file 'AUDIO_WAVEPACK' 'stream/audiodirectory'
 data_file 'AUDIO_SOUNDDATA' 'stream/data/qbx_properties_sounds.dat'
 data_file 'DLC_ITYP_REQUEST' 'stream/props/qbx_props.ytyp'
 data_file 'DLC_ITYP_REQUEST' 'stream/props/cdx_intercom_prop.ytyp'
+data_file 'DLC_ITYP_REQUEST' 'stream/props/qbx_properties_props.ytyp'
