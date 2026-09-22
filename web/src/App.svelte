@@ -100,6 +100,10 @@
     furniture.highlight = data?.object ?? null
   })
 
+  onMessage('furniture:aim', (data) => {
+    furniture.aiming = data?.target ?? false
+  })
+
   onMessage('furniture:cart', (data) => {
     furniture.cart = data?.items ?? []
     furniture.cartTotal = data?.total ?? 0

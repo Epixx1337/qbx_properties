@@ -374,6 +374,8 @@
   </section>
 
   {#if furniture.worldInput}
+    <div class="crosshair" class:on={furniture.aiming}></div>
+
     <footer class="hud">
       {#if furniture.freecam}
         <span class="mode">Freecam</span>
@@ -393,6 +395,8 @@
         {:else}
           <span><kbd>G</kbd> Snap to ground</span>
           <span><kbd>H</kbd> Snap to wall</span>
+          <span><kbd>Click</kbd> Pick up</span>
+          <span><kbd>Ctrl</kbd> + <kbd>Click</kbd> Add to group</span>
         {/if}
         <span class:active={furniture.carrying}><kbd>C</kbd> Carry</span>
         <span class:active={furniture.gridSnap}><kbd>X</kbd> Grid</span>
@@ -595,6 +599,26 @@
   .hud span.active {
     color: #fff;
     font-weight: 600;
+  }
+
+  .crosshair {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    margin: -3.5px 0 0 -3.5px;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+    transition: background 0.1s ease, transform 0.1s ease;
+    z-index: 11;
+  }
+
+  .crosshair.on {
+    background: var(--accent);
+    transform: scale(1.5);
   }
 
   .panel {

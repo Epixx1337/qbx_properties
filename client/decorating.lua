@@ -325,8 +325,7 @@ function SelectPlacedDecoration(id)
     currentlySelected = nil
     currentTint = DecorationTints[id] or 0
     SetEntityDrawOutline(entity, true)
-    SetCursorMode(true)
-    SetUIFocus(true, true)
+    SetCarrying(false)
     PushDecoratingState()
 end
 
@@ -458,6 +457,8 @@ function ConfirmDecoration()
     end
 
     local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:addGardenDecoration' or 'qbx_properties:server:addDecoration'
+
+    SaveExtraSelection(event)
     TriggerServerEvent(event, model, GetEntityCoords(previewObject), GetEntityRotation(previewObject, 2), objectId, currentTint > 0 and currentTint or nil)
     if objectId then
         SetEntityDrawOutline(previewObject, false)
@@ -480,6 +481,13 @@ function RemoveSelectedDecoration()
     clearOutline()
 
     local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:removeGardenDecoration' or 'qbx_properties:server:removeDecoration'
+
+    local extras = GetExtraSelectionIds()
+    for i = 1, #extras do
+        TriggerServerEvent(event, extras[i])
+    end
+    ClearExtraSelection()
+
     TriggerServerEvent(event, objectId)
     discardPending()
     previewObject = nil
@@ -754,6 +762,128 @@ local function updateCarry()
     SetEntityCoordsNoOffset(previewObject, target.x, target.y, target.z, false, false, false)
     SetEntityRotation(previewObject, 0.0, 0.0, carryHeading % 360.0, 2, false)
     if gridSnap then applyGridSnap(previewObject) end
+    ApplySelectionOffsets()
+end
+
+local extraSelection = {}
+
+function ClearExtraSelection()
+    for i = 1, #extraSelection do
+        if DoesEntityExist(extraSelection[i].entity) then
+            SetEntityDrawOutline(extraSelection[i].entity, false)
+        end
+    end
+    extraSelection = {}
+end
+
+---@param entity integer
+---@return integer?
+local function decorationIdFor(entity)
+    for id, placed in pairs(DecorationObjects) do
+        if placed == entity then return id end
+    end
+end
+
+-- offsets are kept in the primary piece's own frame so the group turns with it instead of sliding
+local function captureSelectionOffsets()
+    if not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local origin = GetEntityCoords(previewObject)
+    local heading = GetEntityHeading(previewObject)
+
+    for i = 1, #extraSelection do
+        local entry = extraSelection[i]
+        if DoesEntityExist(entry.entity) then
+            local world = GetEntityCoords(entry.entity) - origin
+            local lx, ly = rotateGrid(world.x, world.y, -heading)
+            entry.offset = vec3(lx, ly, world.z)
+            entry.heading = GetEntityHeading(entry.entity) - heading
+        end
+    end
+end
+
+function ApplySelectionOffsets()
+    if #extraSelection == 0 or not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local origin = GetEntityCoords(previewObject)
+    local heading = GetEntityHeading(previewObject)
+
+    for i = 1, #extraSelection do
+        local entry = extraSelection[i]
+        if entry.offset and DoesEntityExist(entry.entity) then
+            local wx, wy = rotateGrid(entry.offset.x, entry.offset.y, heading)
+            SetEntityCoordsNoOffset(entry.entity, origin.x + wx, origin.y + wy, origin.z + entry.offset.z, false, false, false)
+            SetEntityHeading(entry.entity, (heading + (entry.heading or 0.0)) % 360.0)
+        end
+    end
+end
+
+---@param id integer
+---@param entity integer
+local function toggleExtraSelection(id, entity)
+    for i = 1, #extraSelection do
+        if extraSelection[i].id == id then
+            SetEntityDrawOutline(entity, false)
+            table.remove(extraSelection, i)
+            return
+        end
+    end
+
+    if entity == previewObject then return end
+    SetEntityDrawOutline(entity, true)
+    extraSelection[#extraSelection + 1] = { id = id, entity = entity }
+    captureSelectionOffsets()
+end
+
+---@return integer? id, integer? entity
+local function raycastDecoration()
+    local camPos, camRot = GetDecoratingCam()
+    local pitch, yaw = math.rad(camRot.x), math.rad(camRot.z)
+    local cp = math.cos(pitch)
+    local dir = vec3(-math.sin(yaw) * cp, math.cos(yaw) * cp, math.sin(pitch))
+    local dest = camPos + dir * 25.0
+
+    local probe = StartExpensiveSynchronousShapeTestLosProbe(
+        camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, 16, previewObject or 0, 4)
+    local status, hit, _, _, entity = GetShapeTestResult(probe)
+    if status ~= 2 or not (hit == true or hit == 1) or not entity or entity == 0 then return end
+
+    local id = decorationIdFor(entity)
+    if id then return id, entity end
+end
+
+---@return integer[]
+function GetExtraSelectionIds()
+    local ids = {}
+    for i = 1, #extraSelection do ids[i] = extraSelection[i].id end
+    return ids
+end
+
+---@param event string
+function SaveExtraSelection(event)
+    for i = 1, #extraSelection do
+        local entry = extraSelection[i]
+        if DoesEntityExist(entry.entity) then
+            TriggerServerEvent(event, GetEntityArchetypeName(entry.entity), GetEntityCoords(entry.entity),
+                GetEntityRotation(entry.entity, 2), entry.id, nil)
+            SetEntityDrawOutline(entry.entity, false)
+        end
+    end
+    extraSelection = {}
+end
+
+local aimedDecoration
+local lastAimProbe = 0
+
+local function updateCrosshair()
+    if GetGameTimer() - lastAimProbe < 80 then return end
+    lastAimProbe = GetGameTimer()
+
+    local id = carrying and nil or raycastDecoration()
+    if id == aimedDecoration then return end
+
+    aimedDecoration = id
+    SendUI('furniture:aim', { target = id ~= nil })
 end
 
 local catalogOrder, catalogIndex
@@ -913,12 +1043,14 @@ function ToggleDecorating()
         end
     else
         clearOutline()
+        ClearExtraSelection()
         discardPending()
         saveCartSnapshot()
         previewObject = nil
         currentlySelected = nil
         lastMatrix = nil
         carrying = false
+        aimedDecoration = nil
         SetCursorMode(false)
         destroyFreecam()
         CloseUI()
@@ -948,6 +1080,27 @@ function ToggleDecorating()
             if IsDisabledControlJustPressed(0, 175) then cycleFurniture(1) end
             if IsDisabledControlJustPressed(0, 44) then cycleCategory(-1) end
             if IsDisabledControlJustPressed(0, 38) then cycleCategory(1) end
+        end
+
+        updateCrosshair()
+
+        -- look at a placed piece and click to take hold of it, ctrl adds it to the group instead
+        if not carrying and not pendingObject and IsDisabledControlJustReleased(0, 24) then
+            local id, entity = raycastDecoration()
+            if id and entity then
+                if IsDisabledControlPressed(0, 36) then
+                    if not previewObject then SelectPlacedDecoration(id) end
+                    toggleExtraSelection(id, entity)
+                    PushDecoratingState()
+                else
+                    ClearExtraSelection()
+                    local camPos = GetDecoratingCam()
+                    carryDistance = math.min(math.max(#(GetEntityCoords(entity) - camPos),
+                        carryConfig.minDistance or 1.0), carryConfig.maxDistance or 12.0)
+                    SelectPlacedDecoration(id)
+                    SetCarrying(true)
+                end
+            end
         end
 
         if IsDisabledControlJustReleased(0, 23) then
@@ -1009,7 +1162,6 @@ function ToggleDecorating()
             DisableControlAction(0, 74, true) -- H stays with the NUI wall snap
             DisablePlayerFiring(cache.playerId, true)
 
-            if carrying and previewObject ~= pendingObject then carrying = false end
 
             if carrying then
                 if not freecamMoving then
