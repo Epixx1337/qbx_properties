@@ -59,6 +59,17 @@ return {
     },
     freecamRange = 10.0, -- how far the decorating freecam may drift from the player
     nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
+    -- carrying holds the piece out in front of the camera so it sweeps along as you look around,
+    -- which places things far quicker than dragging gizmo handles. The gizmo is still a key away
+    carryPlacement = {
+        enabled = true,
+        default = true, -- picking something from the catalog starts you carrying it
+        distance = 4.0, -- how far out in front the piece rides when nothing is in the way
+        minDistance = 1.0,
+        maxDistance = 12.0,
+        rotationStep = 5.0, -- degrees per scroll notch
+        coarseStep = 45.0, -- degrees per scroll notch while holding ctrl
+    },
     furnitureGrid = { -- reference grid drawn under the piece you are moving
         enabled = true,
         size = 0.25, -- cell size in metres, also the step grid snapping rounds to

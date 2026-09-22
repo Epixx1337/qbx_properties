@@ -91,6 +91,8 @@
     furniture.pickup = data.pickup ?? false
     furniture.gridSnap = data.gridSnap ?? false
     furniture.gridSize = data.gridSize ?? 0.25
+    furniture.carrying = data.carrying ?? false
+    furniture.carrySupported = data.carrySupported ?? false
   })
 
   onMessage('furniture:cart', (data) => {

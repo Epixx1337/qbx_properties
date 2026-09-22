@@ -128,6 +128,10 @@ local gizmoBuffer = DataView.ArrayBuffer(64)
 local gridConfig = sharedConfig.furnitureGrid or {}
 local gridSnap = gridConfig.snap == true
 local gridHeading = 0.0
+local carryConfig = sharedConfig.carryPlacement or {}
+local carrying = false
+local carryDistance = carryConfig.distance or 4.0
+local carryHeading = 0.0
 
 ---@param value boolean
 function SetCursorMode(value)
@@ -610,6 +614,8 @@ function PushDecoratingState()
         mode = 'move',
         gridSnap = gridSnap,
         gridSize = gridConfig.size,
+        carrying = carrying,
+        carrySupported = carryConfig.enabled == true,
         selected = placing and {
             label = currentlySelected and currentlySelected.label or 'Placed object',
             objectId = objectId,
@@ -738,6 +744,46 @@ local function drawFurnitureGrid(origin)
     DrawLine(ax, ay, z, bx, by, z, red, green, blue, 255)
 end
 
+-- the piece rides on the point you are looking at, so it slides along walls and floors instead of
+-- hanging in the air at a fixed range
+local function carryTarget()
+    local camPos, camRot = GetDecoratingCam()
+    local pitch, yaw = math.rad(camRot.x), math.rad(camRot.z)
+    local cp = math.cos(pitch)
+    local dir = vec3(-math.sin(yaw) * cp, math.cos(yaw) * cp, math.sin(pitch))
+    local dest = camPos + dir * carryDistance
+
+    local probe = StartExpensiveSynchronousShapeTestLosProbe(
+        camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, 1 | 16 | 256, previewObject, 4)
+    local _, hit, endCoords = GetShapeTestResult(probe)
+
+    if hit == 1 then return endCoords end
+    return dest
+end
+
+local function updateCarry()
+    if not previewObject or not DoesEntityExist(previewObject) then return end
+
+    local target = carryTarget()
+    SetEntityCoordsNoOffset(previewObject, target.x, target.y, target.z, false, false, false)
+    SetEntityRotation(previewObject, 0.0, 0.0, carryHeading % 360.0, 2, false)
+    if gridSnap then applyGridSnap(previewObject) end
+end
+
+function SetCarrying(active)
+    if carryConfig.enabled ~= true then return end
+    carrying = active == true
+
+    if not carrying then return end
+    -- the UI gizmo would otherwise keep drawing handles over a piece it no longer controls
+    SendUI('gizmo:sync', nil)
+
+    if previewObject and DoesEntityExist(previewObject) then
+        carryHeading = GetEntityHeading(previewObject)
+        updateCarry()
+    end
+end
+
 -- the clipboard is our own object attached to the hand rather than a scenario prop, so leaving the
 -- editor deletes it by handle instead of hunting for whatever the scenario system dropped
 local CLIPBOARD_MODEL <const> = `p_amb_clipboard_01`
@@ -818,6 +864,7 @@ function ToggleDecorating()
         previewObject = nil
         currentlySelected = nil
         lastMatrix = nil
+        carrying = false
         SetCursorMode(false)
         destroyFreecam()
         CloseUI()
@@ -858,6 +905,10 @@ function ToggleDecorating()
             end
             PushDecoratingState()
         end
+        if IsDisabledControlJustReleased(0, 26) and previewObject and DoesEntityExist(previewObject) then
+            SetCarrying(not carrying)
+            PushDecoratingState()
+        end
         if IsDisabledControlJustReleased(0, 191) then
             ConfirmDecoration()
         end
@@ -889,11 +940,41 @@ function ToggleDecorating()
             DisableControlAction(0, 140, true)
             DisableControlAction(0, 141, true)
             DisableControlAction(0, 142, true)
+            DisableControlAction(0, 26, true) -- C picks the piece up and puts it down
             DisableControlAction(0, 73, true) -- X toggles grid snapping
             DisableControlAction(0, 74, true) -- H stays with the NUI wall snap
             DisablePlayerFiring(cache.playerId, true)
 
-            if sharedConfig.nuiGizmo then
+            -- only a freshly spawned piece is ever carried, so selecting something already placed
+            -- never yanks it across the room to the camera
+            if carrying and previewObject ~= pendingObject then carrying = false end
+
+            if carrying then
+                -- scroll turns the piece while carrying, the freecam only claims it while flying
+                if not freecamMoving then
+                    local up = IsDisabledControlJustPressed(0, 241)
+                    local down = IsDisabledControlJustPressed(0, 242)
+
+                    if up or down then
+                        local direction = up and 1.0 or -1.0
+                        if IsDisabledControlPressed(0, 21) then
+                            carryDistance = math.min(math.max(carryDistance + direction * 0.25,
+                                carryConfig.minDistance or 1.0), carryConfig.maxDistance or 12.0)
+                        else
+                            local step = IsDisabledControlPressed(0, 36) and (carryConfig.coarseStep or 45.0)
+                                or (carryConfig.rotationStep or 5.0)
+                            carryHeading = carryHeading + direction * step
+                        end
+                    end
+                end
+
+                updateCarry()
+
+                if IsDisabledControlJustReleased(0, 24) then
+                    SetCarrying(false)
+                    PushDecoratingState()
+                end
+            elseif sharedConfig.nuiGizmo then
                 local pos = GetEntityCoords(previewObject)
                 local rot = GetEntityRotation(previewObject, 2)
                 local camRot = GetFinalRenderedCamRot(2)
@@ -988,6 +1069,9 @@ RegisterNUICallback('furniture:place', function(data, cb)
 
     pendingObject = previewObject
     lastMatrix = nil
+    carryDistance = carryConfig.distance or 4.0
+    carryHeading = GetEntityHeading(previewObject)
+    SetCarrying(carryConfig.default ~= false)
     SetCursorMode(true)
     SetUIFocus(true, true)
     PushDecoratingState()

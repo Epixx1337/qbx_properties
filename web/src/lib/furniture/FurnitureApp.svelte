@@ -233,17 +233,30 @@
         <div class="hint">Pick another item from the catalog to swap it out.</div>
 
         <div class="keys">
-          <div><kbd>T</kbd> Move</div>
-          <div><kbd>R</kbd> Rotate</div>
-          <div><kbd>L</kbd> Camera / world / local</div>
-          <div><kbd>G</kbd> Snap to ground</div>
-          <div><kbd>H</kbd> Snap to wall</div>
+          {#if furniture.carrying}
+            <div><kbd>Scroll</kbd> Turn</div>
+            <div><kbd>Ctrl</kbd> + <kbd>Scroll</kbd> Turn faster</div>
+            <div><kbd>Shift</kbd> + <kbd>Scroll</kbd> Hold nearer / further</div>
+            <div><kbd>Click</kbd> Put it down</div>
+            <div><kbd>C</kbd> Switch to handles</div>
+          {:else}
+            <div><kbd>T</kbd> Move</div>
+            <div><kbd>R</kbd> Rotate</div>
+            <div><kbd>L</kbd> Camera / world / local</div>
+            <div><kbd>G</kbd> Snap to ground</div>
+            <div><kbd>H</kbd> Snap to wall</div>
+            {#if furniture.carrySupported}
+              <div><kbd>C</kbd> Pick it back up</div>
+            {/if}
+          {/if}
           <div><kbd>X</kbd> Snap to grid</div>
           <div><kbd>F</kbd> Freecam</div>
         </div>
 
-        <div class="grid-state" class:on={furniture.gridSnap}>
-          {#if furniture.gridSnap}
+        <div class="grid-state" class:on={furniture.carrying}>
+          {#if furniture.carrying}
+            Carrying, it follows where you look
+          {:else if furniture.gridSnap}
             Grid snapping on, {furniture.gridSize}m steps
           {:else}
             Grid snapping off, free placement
@@ -372,8 +385,14 @@
         <span><kbd>T</kbd> Move</span>
         <span><kbd>R</kbd> Rotate</span>
         <span><kbd>L</kbd> Axis space</span>
-        <span><kbd>G</kbd> Snap to ground</span>
-        <span><kbd>H</kbd> Snap to wall</span>
+        {#if furniture.carrying}
+          <span><kbd>Scroll</kbd> Turn</span>
+          <span><kbd>Click</kbd> Put down</span>
+        {:else}
+          <span><kbd>G</kbd> Snap to ground</span>
+          <span><kbd>H</kbd> Snap to wall</span>
+        {/if}
+        <span class:active={furniture.carrying}><kbd>C</kbd> Carry</span>
         <span class:active={furniture.gridSnap}><kbd>X</kbd> Grid</span>
         <span><kbd>Enter</kbd> Confirm</span>
         <span><kbd>F</kbd> Freecam</span>
