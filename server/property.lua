@@ -898,15 +898,87 @@ lib.callback.register('qbx_properties:callback:requestRingers', function(source)
     return listRingers(propertyId)
 end)
 
+-- a placed prop carries its own position and heading, so the view is taken from the lens rather
+-- than from an offset someone has to tune per property
+---@param model string
+---@param coords table
+---@param heading number
+---@param label string?
+---@param id integer?
+---@return table
+local function lensCam(model, coords, heading, label, id)
+    local lens = sharedConfig.security and sharedConfig.security.lens[model]
+    local offset = lens and lens.offset or vec3(0.0, 0.0, 0.0)
+
+    local rad = math.rad(heading)
+    local cos, sin = math.cos(rad), math.sin(rad)
+
+    return {
+        x = coords.x + offset.x * cos - offset.y * sin,
+        y = coords.y + offset.x * sin + offset.y * cos,
+        z = coords.z + offset.z,
+        w = (heading + (lens and lens.facing or 0.0)) % 360.0,
+        p = lens and lens.pitch or -12.0,
+        custom = true,
+        model = model,
+        label = label,
+        id = id,
+    }
+end
+
+---@param property table
+---@return table[]
+local function placedCameras(property)
+    local models, placeholders = ModelsOfType('camera')
+    if #models == 0 then return {} end
+
+    local anchor = GetFurnitureAnchor(property)
+    local params = { property.building and property.owner or property.id }
+    for i = 1, #models do params[#params + 1] = models[i] end
+
+    local rows
+    if property.building then
+        params[#params + 1] = GetBuildingLayout(property.building)
+        rows = MySQL.query.await(('SELECT id, model, coords, rotation, camera_pan FROM properties_apartment_decorations WHERE citizenid = ? AND model IN (%s) AND layout = ?'):format(placeholders), params)
+    else
+        rows = MySQL.query.await(('SELECT id, model, coords, rotation, camera_pan FROM properties_decorations WHERE property_id = ? AND model IN (%s) AND IFNULL(`garden`, 0) = 0'):format(placeholders), params)
+    end
+
+    local cams = {}
+    for i = 1, #(rows or {}) do
+        local okC, coords = pcall(json.decode, rows[i].coords)
+        local okR, rotation = pcall(json.decode, rows[i].rotation)
+
+        if okC and okR and type(coords) == 'table' and type(rotation) == 'table' then
+            local world = anchor and RotateOffset(anchor, vec3(coords.x, coords.y, coords.z))
+                or vec3(coords.x, coords.y, coords.z)
+            local heading = anchor and ((rotation.z or 0.0) + anchor.w) % 360.0 or (rotation.z or 0.0)
+
+            local cam = lensCam(rows[i].model, world, heading, ('Camera %d'):format(i), rows[i].id)
+            cam.pan = tonumber(rows[i].camera_pan) or 0.0
+            cams[#cams + 1] = cam
+        end
+    end
+    return cams
+end
+
 local function doorcamPoints(property)
     local cams = {}
 
     if property.doorcam then
         local ok, custom = pcall(json.decode, property.doorcam)
         if ok and type(custom) == 'table' and custom.x then
-            cams[#cams + 1] = { x = custom.x, y = custom.y, z = custom.z, w = (tonumber(custom.w) or 0.0) % 360.0, p = tonumber(custom.p), custom = true }
+            if custom.model then
+                cams[#cams + 1] = lensCam(custom.model, custom, tonumber(custom.w) or 0.0, 'Doorbell')
+            else
+                cams[#cams + 1] = { x = custom.x, y = custom.y, z = custom.z, w = (tonumber(custom.w) or 0.0) % 360.0, p = tonumber(custom.p), custom = true, label = 'Doorbell' }
+            end
         end
     end
+
+    local placed = placedCameras(property)
+    for i = 1, #placed do cams[#cams + 1] = placed[i] end
+    if #cams > 0 then return cams end
 
     if property.building then
         local building = Buildings and Buildings[property.building]
@@ -1487,6 +1559,14 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
         return
     end
 
+    if not objectId and GetFurnitureTypes()[hash] == 'camera' then
+        local limit = GetCameraLimit(property)
+        if CountPropertyFurniture(property, 'camera') >= limit then
+            exports.qbx_core:Notify(playerSource, ('This property supports %d camera%s, upgrade security for more.'):format(limit, limit == 1 and '' or 's'), 'error')
+            return
+        end
+    end
+
     if GetRaid and GetRaid(propertyId) then
         exports.qbx_core:Notify(playerSource, 'You cannot rearrange furniture right now.', 'error')
         return
@@ -1663,6 +1743,47 @@ lib.callback.register('qbx_properties:callback:payFurniture', function(source, m
 
     return true
 end)
+
+---@param kind string
+---@return string[] models, string placeholders
+function ModelsOfType(kind)
+    local models = {}
+    for model, t in pairs(GetFurnitureTypes()) do
+        if t == kind then models[#models + 1] = model end
+    end
+    return models, string.rep('?', #models, ',')
+end
+
+---@param property table
+---@return integer
+function GetCameraLimit(property)
+    local security = sharedConfig.security
+    if not security then return 0 end
+
+    local base = property.building and security.cameras.apartment
+        or security.cameras[property.size or sharedConfig.defaultPropertySize]
+        or 1
+    local tier = GetSecurityTier and GetSecurityTier(property.id) or 0
+    return base + tier * (security.camerasPerTier or 0)
+end
+
+---@param property table
+---@param kind string
+---@return integer
+function CountPropertyFurniture(property, kind)
+    local models, placeholders = ModelsOfType(kind)
+    if #models == 0 then return 0 end
+
+    local params = { property.building and property.owner or property.id }
+    for i = 1, #models do params[#params + 1] = models[i] end
+
+    if property.building then
+        params[#params + 1] = GetBuildingLayout(property.building)
+        return MySQL.scalar.await(('SELECT COUNT(*) FROM properties_apartment_decorations WHERE citizenid = ? AND model IN (%s) AND layout = ?'):format(placeholders), params) or 0
+    end
+
+    return MySQL.scalar.await(('SELECT COUNT(*) FROM properties_decorations WHERE property_id = ? AND model IN (%s) AND IFNULL(`garden`, 0) = 0'):format(placeholders), params) or 0
+end
 
 ---@param property table
 ---@return boolean

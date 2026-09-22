@@ -1,5 +1,6 @@
 <script>
   import { fetchNui } from '../nui.js'
+  import { tablet } from '../store.svelte.js'
 
   let now = $state(new Date())
 
@@ -32,8 +33,17 @@
     <span class="rec-label">REC</span>
   </div>
 
-  <div class="cam-label">DOORBELL CAM — LIVE</div>
+  <div class="cam-label">{(tablet.doorcamName ?? 'DOORBELL CAM').toUpperCase()} — LIVE</div>
   <div class="stamp">{stamp}</div>
+
+  {#if tablet.doorcamPan}
+    <div class="pan">
+      <div class="pan-track">
+        <div class="pan-needle" style="left: {50 + (tablet.doorcamPan.pan / tablet.doorcamPan.limit) * 50}%"></div>
+      </div>
+      <div class="pan-label"><kbd>&larr;</kbd><kbd>&rarr;</kbd> PAN {tablet.doorcamPan.pan}&deg;</div>
+    </div>
+  {/if}
 
   <div class="scanlines"></div>
   <div class="vignette"></div>
@@ -117,6 +127,41 @@
     font-size: 12px;
     letter-spacing: 0.22em;
     z-index: 3;
+  }
+
+  .pan {
+    position: absolute;
+    left: 50%;
+    bottom: 34px;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 3;
+  }
+
+  .pan-track {
+    position: relative;
+    width: 180px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  .pan-needle {
+    position: absolute;
+    top: -4px;
+    width: 3px;
+    height: 11px;
+    background: #fff;
+    transform: translateX(-50%);
+    transition: left 0.05s linear;
+  }
+
+  .pan-label {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    opacity: 0.85;
   }
 
   .stamp {

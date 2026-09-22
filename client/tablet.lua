@@ -1,3 +1,5 @@
+local sharedConfig = require 'config.shared'
+
 local function pushAccess()
     if not CurrentPropertyId then return end
     SendUI('tablet:access', lib.callback.await('qbx_properties:callback:getAccessList', false, CurrentPropertyId))
@@ -73,8 +75,6 @@ function OpenTablet()
         return
     end
 
-    local sharedConfig = require 'config.shared'
-
     OpenUI('tablet')
     SendUI('tablet:init', {
         propertyName = CurrentPropertyName or '',
@@ -129,6 +129,7 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
 
     if point.custom then
         pitch = point.p or -12.0
+        heading = (heading + (tonumber(point.pan) or 0.0)) % 360.0
     else
         if point.model then
             SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
@@ -152,6 +153,8 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
     end
 
     SendUI('doorcam:view', true)
+    SendUI('doorcam:name', { label = point.label })
+    SendUI('doorcam:pan', point.id and { pan = math.floor((tonumber(point.pan) or 0.0) + 0.5), limit = (sharedConfig.security and sharedConfig.security.pan.limit) or 80.0 } or nil)
     doorcamClosing = false
     SetNuiFocus(true, false)
     SetNuiFocusKeepInput(false)
@@ -162,11 +165,35 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
     RenderScriptCams(true, true, 400, true, true)
     SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
 
+    local pan = tonumber(point.pan) or 0.0
+    local mounted = heading - pan
+    local limit = (sharedConfig.security and sharedConfig.security.pan.limit) or 80.0
+    local step = (sharedConfig.security and sharedConfig.security.pan.step) or 6.0
+    local head = point.id and FindCameraEntity(position)
+
     local deadline = GetGameTimer() + 60000
     while GetGameTimer() < deadline and not doorcamClosing do
         Wait(0)
         DisableAllControlActions(0)
         HideHudAndRadarThisFrame()
+
+        if point.id then
+            local turn = 0.0
+            if IsDisabledControlPressed(0, 174) then turn = -step end
+            if IsDisabledControlPressed(0, 175) then turn = step end
+
+            if turn ~= 0.0 then
+                pan = math.max(-limit, math.min(limit, pan + turn * GetFrameTime() * 12.0))
+                heading = (mounted + pan) % 360.0
+                SetCamRot(cam, pitch, 0.0, heading, 2)
+                if head and DoesEntityExist(head) then SetEntityHeading(head, heading) end
+                SendUI('doorcam:pan', { pan = math.floor(pan + 0.5), limit = limit })
+            end
+        end
+    end
+
+    if point.id and math.abs(pan - (tonumber(point.pan) or 0.0)) > 0.5 then
+        lib.callback.await('qbx_properties:callback:setCameraPan', false, point.id, pan)
     end
 
     SendUI('doorcam:view', false)

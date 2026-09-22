@@ -1,0 +1,177 @@
+local sharedConfig = require 'config.shared'
+local security = sharedConfig.security
+
+if not security then return end
+
+local DOOR_COLUMNS <const> = 'id, property_name, owner, keyholders, building, floor, room, type, group_name, tenant, interior, coords, door_data, doorcam'
+
+---@param property table
+---@return vector3[]
+local function doorPoints(property)
+    local points = {}
+
+    if property.building then
+        local anchor = GetRoomCoords(property.building, property.floor, property.room)
+        if anchor then points[#points + 1] = anchor.xyz end
+        return points
+    end
+
+    if property.door_data then
+        local ok, doors = pcall(json.decode, property.door_data)
+        if ok and type(doors) == 'table' then
+            for i = 1, #doors do
+                local leaf = doors[i].leaves and doors[i].leaves[1]
+                if leaf and leaf.coords then
+                    points[#points + 1] = vec3(leaf.coords.x, leaf.coords.y, leaf.coords.z)
+                end
+            end
+        end
+    end
+
+    if property.coords then
+        local ok, coords = pcall(json.decode, property.coords)
+        if ok and coords and coords.x then
+            points[#points + 1] = vec3(coords.x, coords.y, coords.z)
+        end
+    end
+
+    return points
+end
+
+---@param property table
+---@param coords vector3
+---@return boolean
+local function nearADoor(property, coords)
+    local points = doorPoints(property)
+    local range = security.doorbellRange or 2.0
+
+    for i = 1, #points do
+        if #(points[i] - coords) <= range + 1.5 then return true end
+    end
+    return false
+end
+
+---@param source number
+---@return table?
+local function findDoorbellProperty(source)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player then return end
+
+    local citizenId = player.PlayerData.citizenid
+    local coords = GetEntityCoords(GetPlayerPed(source))
+
+    -- only rows whose stored point is already in the neighbourhood, plus the caller's own units,
+    -- so standing anywhere does not walk every owned property on the server
+    local rows = MySQL.query.await(([[
+        SELECT %s FROM properties
+        WHERE owner IS NOT NULL AND building IS NULL
+          AND ABS(JSON_EXTRACT(coords, '$.x') - ?) < 60
+          AND ABS(JSON_EXTRACT(coords, '$.y') - ?) < 60
+    ]]):format(DOOR_COLUMNS), {coords.x, coords.y}) or {}
+
+    local units = MySQL.query.await(([[
+        SELECT %s FROM properties WHERE building IS NOT NULL AND (owner = ? OR tenant = ?)
+    ]]):format(DOOR_COLUMNS), {citizenId, citizenId}) or {}
+
+    for i = 1, #units do rows[#rows + 1] = units[i] end
+
+    for i = 1, #rows do
+        local property = rows[i]
+        if nearADoor(property, coords) and HasPropertyAccess(citizenId, property, 'furniture') then
+            return property
+        end
+    end
+end
+
+lib.callback.register('qbx_properties:callback:canPlaceDoorbell', function(source)
+    local property = findDoorbellProperty(source)
+    if not property then return end
+
+    return {
+        propertyId = property.id,
+        name = property.property_name,
+        model = security.doorbellModel,
+        replacing = property.doorcam ~= nil,
+    }
+end)
+
+lib.callback.register('qbx_properties:callback:placeDoorbell', function(source, propertyId, coords, heading)
+    local player = exports.qbx_core:GetPlayer(source)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId or not IsFiniteVector(coords) then return false end
+
+    local property = MySQL.single.await(('SELECT %s FROM properties WHERE id = ?'):format(DOOR_COLUMNS), {propertyId})
+    if not property or not HasPropertyAccess(player.PlayerData.citizenid, property, 'furniture') then return false end
+
+    local ped = GetEntityCoords(GetPlayerPed(source))
+    if #(ped - coords) > sharedConfig.placementReach then return false end
+    if not nearADoor(property, coords) then
+        exports.qbx_core:Notify(source, 'The doorbell has to go by one of your doors.', 'error')
+        return false
+    end
+
+    local payload = {
+        x = coords.x, y = coords.y, z = coords.z,
+        w = (tonumber(heading) or 0.0) % 360.0,
+        model = security.doorbellModel,
+    }
+
+    MySQL.update.await('UPDATE properties SET doorcam = ? WHERE id = ?', {json.encode(payload), propertyId})
+    TriggerClientEvent('qbx_properties:client:doorbellPlaced', -1, propertyId, payload)
+
+    LogAction(source, 'qbx_properties:server:placeDoorbell', string.format('%s fitted a doorbell at %s', player.PlayerData.citizenid, property.property_name))
+    return true
+end)
+
+lib.callback.register('qbx_properties:callback:removeDoorbell', function(source, propertyId)
+    local player = exports.qbx_core:GetPlayer(source)
+    propertyId = ToId(propertyId)
+    if not player or not propertyId then return false end
+
+    local property = MySQL.single.await(('SELECT %s FROM properties WHERE id = ?'):format(DOOR_COLUMNS), {propertyId})
+    if not property or not HasPropertyAccess(player.PlayerData.citizenid, property, 'furniture') then return false end
+
+    MySQL.update.await('UPDATE properties SET doorcam = NULL WHERE id = ?', {propertyId})
+    TriggerClientEvent('qbx_properties:client:doorbellPlaced', -1, propertyId, nil)
+
+    LogAction(source, 'qbx_properties:server:removeDoorbell', string.format('%s removed the doorbell at %s', player.PlayerData.citizenid, property.property_name))
+    return true
+end)
+
+lib.callback.register('qbx_properties:callback:getDoorbells', function()
+    local rows = MySQL.query.await('SELECT id, doorcam FROM properties WHERE doorcam IS NOT NULL') or {}
+    local result = {}
+
+    for i = 1, #rows do
+        local ok, point = pcall(json.decode, rows[i].doorcam)
+        if ok and type(point) == 'table' and point.model and point.x then
+            result[#result + 1] = {
+                propertyId = rows[i].id,
+                model = point.model,
+                coords = vec3(point.x, point.y, point.z),
+                heading = tonumber(point.w) or 0.0,
+            }
+        end
+    end
+
+    return result
+end)
+
+lib.callback.register('qbx_properties:callback:setCameraPan', function(source, decorationId, pan)
+    local player = exports.qbx_core:GetPlayer(source)
+    decorationId = ToId(decorationId)
+    pan = tonumber(pan)
+    if not player or not decorationId or not pan then return false end
+
+    local limit = (security.pan and security.pan.limit) or 80.0
+    pan = math.max(-limit, math.min(limit, pan))
+
+    local row = MySQL.single.await('SELECT property_id FROM properties_decorations WHERE id = ?', {decorationId})
+    if not row then return false end
+
+    local property = MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant FROM properties WHERE id = ?', {row.property_id})
+    if not property or not HasPropertyAccess(player.PlayerData.citizenid, property, 'door') then return false end
+
+    MySQL.update.await('UPDATE properties_decorations SET camera_pan = ? WHERE id = ?', {pan, decorationId})
+    return true
+end)

@@ -226,6 +226,14 @@
     tablet.doorcam = data ?? null
   })
 
+  onMessage('doorcam:pan', (data) => {
+    tablet.doorcamPan = data ?? null
+  })
+
+  onMessage('doorcam:name', (data) => {
+    tablet.doorcamName = data?.label ?? null
+  })
+
   onMessage('doorcam:view', (data) => {
     tablet.doorcamView = data === true
   })

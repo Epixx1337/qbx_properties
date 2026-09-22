@@ -114,6 +114,8 @@ export const tablet = $state({
   rent: null,
   doorcam: null,
   doorcamView: false,
+  doorcamPan: null,
+  doorcamName: null,
   maintenance: null,
   layouts: null,
   saleAuth: null,

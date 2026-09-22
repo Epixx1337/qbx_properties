@@ -71,6 +71,28 @@ return {
         liftStep = 0.05, -- metres per scroll notch when raising a piece off the surface
         maxLift = 4.0,
     },
+    security = {
+        doorbellModel = 'qbx_doorbell',
+        cameraModel = 'qbx_cctv_head',
+        mountModel = 'qbx_cctv_mount',
+        -- where the lens sits inside each prop and which way it looks, so the view always lines up
+        -- with the model instead of needing a hand tuned offset per property
+        lens = {
+            qbx_doorbell = { offset = vec3(0.0, -0.011, 0.100), facing = 180.0, pitch = -12.0 },
+            qbx_cctv_head = { offset = vec3(0.0, -0.064, 0.084), facing = 180.0, pitch = -18.0 },
+        },
+        doorbellRange = 2.0, -- how close to a door you must stand to fit the doorbell
+        cameras = { -- security cameras a property holds before upgrades, the doorbell is separate
+            apartment = 1,
+            tiny = 1,
+            small = 1,
+            medium = 2,
+            large = 3,
+            mansion = 4,
+        },
+        camerasPerTier = 1, -- extra cameras granted by each security upgrade tier
+        pan = { limit = 80.0, step = 6.0 }, -- how far a camera turns from its mounted heading
+    },
     placementReach = 15.0, -- how far from the player a piece may be put down, enforced server side
     interiorRadius = 30.0, -- how far from a shell or room anchor a piece may sit, keeps furniture in its own unit
     furnitureGrid = { -- reference grid drawn under the piece you are moving

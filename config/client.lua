@@ -74,6 +74,7 @@ return {
             {
                 object = 'qbx_cctv_head',
                 label = 'Security Camera',
+                type = 'camera',
                 price = 2000,
                 power = 60,
             },
