@@ -755,9 +755,9 @@ local function carryTarget()
 
     local probe = StartExpensiveSynchronousShapeTestLosProbe(
         camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, 1 | 16 | 256, previewObject, 4)
-    local _, hit, endCoords = GetShapeTestResult(probe)
+    local status, hit, endCoords = GetShapeTestResult(probe)
 
-    if hit == 1 then return endCoords end
+    if status == 2 and (hit == true or hit == 1) then return endCoords end
     return dest
 end
 
