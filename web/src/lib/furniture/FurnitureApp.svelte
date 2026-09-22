@@ -351,7 +351,6 @@
           <div><kbd>W A S D</kbd> Fly</div>
           <div><kbd>Space</kbd> / <kbd>Ctrl</kbd> Up / down</div>
           <div><kbd>Scroll</kbd> Speed</div>
-          <div><kbd>Alt</kbd> Select placed object</div>
           <div><kbd>Tab</kbd> Back to catalog</div>
           <div><kbd>Backspace</kbd> Exit</div>
         </div>
@@ -406,7 +405,6 @@
         <span><kbd>Enter</kbd> Confirm</span>
         <span><kbd>F</kbd> Freecam</span>
       {:else}
-        <span><kbd>Alt</kbd> Select an object</span>
         <span><kbd>F</kbd> Freecam</span>
         <span><kbd>Tab</kbd> Catalog</span>
       {/if}

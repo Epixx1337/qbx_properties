@@ -134,6 +134,7 @@ local freePlacing = false
 local placeDistance = placeConfig.distance or 4.0
 local placeHeading = 0.0
 local placeLift = 0.0
+local placeStartedAt = 0
 local groundFollow = placeConfig.ground ~= false
 
 ---@param value boolean
@@ -877,6 +878,42 @@ local function toggleExtraSelection(id, entity)
     captureSelectionOffsets()
 end
 
+---@param entity integer
+---@return integer?
+local function cartIndexFor(entity)
+    for i = 1, #cart do
+        if cart[i].entity == entity then return i end
+    end
+end
+
+---@param index integer
+---@param free boolean
+---@return boolean
+local function pickUpCartEntry(index, free)
+    local entry = cart[index]
+    if not entry or not DoesEntityExist(entry.entity) then return false end
+
+    table.remove(cart, index)
+    previewObject = entry.entity
+    pendingObject = entry.entity
+    currentlySelected = { object = entry.model, label = entry.label }
+    currentTint = entry.tint or 0
+    lastMatrix = nil
+    SetEntityDrawOutline(previewObject, true)
+
+    if free then
+        placeHeading = GetEntityHeading(previewObject)
+        SetFreePlacing(true)
+    else
+        SetCursorMode(true)
+        SetUIFocus(true, true)
+    end
+
+    PushDecoratingState()
+    pushCart()
+    return true
+end
+
 ---@return integer? id, integer? entity
 local function raycastDecoration()
     local camPos, camRot = GetDecoratingCam()
@@ -890,8 +927,7 @@ local function raycastDecoration()
     local status, hit, _, _, entity = GetShapeTestResult(probe)
     if status ~= 2 or not (hit == true or hit == 1) or not entity or entity == 0 then return end
 
-    local id = decorationIdFor(entity)
-    if id then return id, entity end
+    if decorationIdFor(entity) or cartIndexFor(entity) then return entity end
 end
 
 ---@return integer[]
@@ -921,11 +957,11 @@ local function updateCrosshair()
     if GetGameTimer() - lastAimProbe < 80 then return end
     lastAimProbe = GetGameTimer()
 
-    local id = freePlacing and nil or raycastDecoration()
-    if id == aimedDecoration then return end
+    local entity = freePlacing and nil or raycastDecoration()
+    if entity == aimedDecoration then return end
 
-    aimedDecoration = id
-    SendUI('furniture:aim', { target = id ~= nil })
+    aimedDecoration = entity
+    SendUI('furniture:aim', { target = entity ~= nil })
 end
 
 local catalogOrder, catalogIndex
@@ -1006,6 +1042,7 @@ function SetFreePlacing(active)
     SetPlacementMobility(freePlacing and not freecamMoving)
 
     if not freePlacing then return end
+    placeStartedAt = GetGameTimer()
     SendUI('gizmo:sync', nil)
 
     if previewObject and DoesEntityExist(previewObject) then
@@ -1147,8 +1184,13 @@ function ToggleDecorating()
         updateCrosshair()
 
         if not freePlacing and not pendingObject and IsDisabledControlJustReleased(0, 24) then
-            local id, entity = raycastDecoration()
-            if id and entity then
+            local entity = raycastDecoration()
+            local id = entity and decorationIdFor(entity)
+            local cartIndex = entity and not id and cartIndexFor(entity)
+
+            if cartIndex then
+                pickUpCartEntry(cartIndex, true)
+            elseif id and entity then
                 if IsDisabledControlPressed(0, 36) then
                     if not previewObject then SelectPlacedDecoration(id) end
                     toggleExtraSelection(id, entity)
@@ -1157,7 +1199,7 @@ function ToggleDecorating()
                     ClearExtraSelection()
                     local camPos = GetDecoratingCam()
                     placeDistance = math.min(math.max(#(GetEntityCoords(entity) - camPos),
-                        placeConfig.minDistance or 1.0), placeConfig.maxDistance or 12.0)
+                        placeConfig.minDistance or 1.0), placeConfig.reach or 15.0)
                     SelectPlacedDecoration(id)
                     SetFreePlacing(true)
                 end
@@ -1261,7 +1303,7 @@ function ToggleDecorating()
 
                 updateFreePlace()
 
-                if IsDisabledControlJustReleased(0, 24) then
+                if IsDisabledControlJustReleased(0, 24) and GetGameTimer() - placeStartedAt > 250 then
                     ConfirmDecoration()
                 end
             elseif sharedConfig.nuiGizmo then
@@ -1511,20 +1553,7 @@ RegisterNUICallback('cart:edit', function(data, cb)
     cb(1)
     if previewObject then return end
     local index = tonumber(type(data) == 'table' and data.index or nil)
-    local entry = index and cart[index]
-    if not entry or not DoesEntityExist(entry.entity) then return end
-
-    table.remove(cart, index)
-    previewObject = entry.entity
-    pendingObject = entry.entity
-    currentlySelected = { object = entry.model, label = entry.label }
-    currentTint = entry.tint or 0
-    lastMatrix = nil
-    SetEntityDrawOutline(previewObject, true)
-    SetCursorMode(true)
-    SetUIFocus(true, true)
-    PushDecoratingState()
-    pushCart()
+    if index then pickUpCartEntry(index, true) end
 end)
 
 RegisterNUICallback('cart:checkout', function(_, cb)
