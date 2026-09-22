@@ -22,6 +22,12 @@ function GetPropertyOccupants(propertyId)
     return insideProperty[propertyId] or {}
 end
 
+---@param playerSource integer
+---@return integer?
+function GetEnteredProperty(playerSource)
+    return enteredProperty[playerSource]
+end
+
 ---@param citizenId string
 ---@param amount integer
 ---@param reason string

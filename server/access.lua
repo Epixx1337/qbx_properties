@@ -300,7 +300,10 @@ lib.callback.register('qbx_properties:callback:setAccess', function(source, data
 
     LogAction(source, 'qbx_properties:server:setAccess', string.format('%s updated access for %s on %s', player.PlayerData.citizenid, data.citizenid, property.property_name))
 
-    TriggerClientEvent('qbx_properties:client:invalidateUnitAccess', -1)
+    local target = exports.qbx_core:GetPlayerByCitizenId(data.citizenid)
+    if target then
+        TriggerClientEvent('qbx_properties:client:invalidateUnitAccess', target.PlayerData.source)
+    end
     return true
 end)
 
