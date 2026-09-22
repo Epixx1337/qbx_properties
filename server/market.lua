@@ -39,6 +39,14 @@ local function getActiveListing(listingId)
     return MySQL.single.await("SELECT * FROM properties_listings WHERE id = ? AND status = 'active'", {listingId})
 end
 
+---@param listing table
+---@param citizenId string
+---@return boolean
+function IsListingSeller(listing, citizenId)
+    if listing.listed_by == citizenId then return true end
+    return MySQL.scalar.await('SELECT owner FROM properties WHERE id = ?', {listing.property_id}) == citizenId
+end
+
 ---@param listingId integer
 ---@return table?
 local function getTopBid(listingId)
@@ -550,7 +558,7 @@ lib.callback.register('qbx_properties:callback:placeOffer', function(source, lis
 
     local listing = getActiveListing(listingId)
     if not listing or listing.listing_type ~= 'offer' then return false, 'Listing not found.' end
-    if listing.listed_by == citizenId then return false, 'You cannot make an offer on your own listing.' end
+    if IsListingSeller(listing, citizenId) then return false, 'You cannot make an offer on your own listing.' end
     if amount < listing.price then return false, string.format('Offers start at $%d.', listing.price) end
     if amount > market.maxPrice then return false, 'That offer is too high.' end
 
@@ -651,15 +659,20 @@ local function executeBid(playerSource, citizenId, listingId, amount)
     if bidLocks[listingId] then return false, 'Another bid is being processed, try again.' end
     bidLocks[listingId] = true
 
-    local ok, err = executeBidLocked(playerSource, citizenId, listingId, amount)
+    local finished, ok, err = pcall(executeBidLocked, playerSource, citizenId, listingId, amount)
     bidLocks[listingId] = nil
+
+    if not finished then
+        lib.print.error(('bid on listing %d failed: %s'):format(listingId, ok))
+        return false, 'That bid could not be processed.'
+    end
     return ok, err
 end
 
 executeBidLocked = function(playerSource, citizenId, listingId, amount)
     local listing = getActiveListing(listingId)
     if not listing or listing.listing_type ~= 'auction' then return false, 'Auction not found.' end
-    if listing.listed_by == citizenId then return false, 'You cannot bid on your own listing.' end
+    if IsListingSeller(listing, citizenId) then return false, 'You cannot bid on your own listing.' end
 
     local endTime = MySQL.scalar.await('SELECT UNIX_TIMESTAMP(auction_end) FROM properties_listings WHERE id = ?', {listingId})
     if not endTime or os.time() >= endTime then return false, 'This auction has ended.' end

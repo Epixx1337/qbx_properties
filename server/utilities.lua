@@ -33,16 +33,23 @@ function RefreshUtilities(propertyId)
     local powered = property.building ~= nil and power <= limit
         or property.building == nil and wasPowered and power <= limit
 
-    MySQL.update.await([[
-        UPDATE properties_utilities SET power_used = ?, humidity = ?, powered = ? WHERE property_id = ?
-    ]], {power, humidity, powered and 1 or 0, propertyId})
+    local changed = power ~= state.power_used or humidity ~= state.humidity or powered ~= wasPowered
 
-    TriggerClientEvent('qbx_properties:client:utilityState', -1, propertyId, {
-        powered = powered,
-        power = power,
-        limit = limit,
-        humidity = humidity,
-    })
+    if changed then
+        MySQL.update.await([[
+            UPDATE properties_utilities SET power_used = ?, humidity = ?, powered = ? WHERE property_id = ?
+        ]], {power, humidity, powered and 1 or 0, propertyId})
+
+        local occupants = GetPropertyOccupants(propertyId)
+        if #occupants > 0 then
+            lib.triggerClientEvent('qbx_properties:client:utilityState', occupants, propertyId, {
+                powered = powered,
+                power = power,
+                limit = limit,
+                humidity = humidity,
+            })
+        end
+    end
 
     if not property.building and wasPowered and power > limit
         and sharedConfig.electricity and sharedConfig.electricity.tripping and BreakPoweredFurniture then
@@ -228,7 +235,7 @@ lib.addCommand('power', {
     end
 
     MySQL.update.await('UPDATE properties_utilities SET powered = ? WHERE property_id = ?', {powered and 1 or 0, propertyId})
-    TriggerClientEvent('qbx_properties:client:utilityState', -1, propertyId, { powered = powered })
+    lib.triggerClientEvent('qbx_properties:client:utilityState', GetPropertyOccupants(propertyId), propertyId, { powered = powered })
 
     local decorations = GetPropertyDecorations(property)
     local draw, offset = CalculateUtilityLoad(decorations)
@@ -262,7 +269,7 @@ local function processBilling()
             ON DUPLICATE KEY UPDATE powered = 0, unpaid_since = COALESCE(unpaid_since, NOW())
         ]], {property.id})
 
-        TriggerClientEvent('qbx_properties:client:utilityState', -1, property.id, { powered = false })
+        lib.triggerClientEvent('qbx_properties:client:utilityState', GetPropertyOccupants(property.id), property.id, { powered = false })
 
         local owner = exports.qbx_core:GetPlayerByCitizenId(property.owner)
         if owner then

@@ -72,10 +72,14 @@ lib.callback.register('qbx_properties:callback:getBuildings', function()
     return result
 end)
 
-lib.callback.register('qbx_properties:callback:getBuildingUnits', function(_, buildingKey, floor)
+lib.callback.register('qbx_properties:callback:getBuildingUnits', function(source, buildingKey, floor)
     local building = Buildings[buildingKey]
     floor = ToId(floor)
     if not building or not floor or floor < 1 or floor > building.floors.count then return {} end
+
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player then return {} end
+    local canSeeResidents = IsRealtor(player.PlayerData.job)
 
     local rows = MySQL.query.await([[
         SELECT p.id, p.room, p.owner, p.price, p.rent_interval, pl.charinfo
@@ -99,9 +103,9 @@ lib.callback.register('qbx_properties:callback:getBuildingUnits', function(_, bu
             label = GetUnitName(buildingKey, floor, room),
             id = existing and existing.id or nil,
             owned = existing ~= nil and existing.owner ~= nil,
-            owner = existing and existing.owner or nil,
-            ownerName = charinfo and string.format('%s %s', charinfo.firstname, charinfo.lastname) or nil,
-            online = existing and existing.owner and exports.qbx_core:GetPlayerByCitizenId(existing.owner) ~= nil or false,
+            owner = canSeeResidents and existing and existing.owner or nil,
+            ownerName = canSeeResidents and charinfo and string.format('%s %s', charinfo.firstname, charinfo.lastname) or nil,
+            online = canSeeResidents and existing and existing.owner and exports.qbx_core:GetPlayerByCitizenId(existing.owner) ~= nil or false,
             price = existing and existing.price or nil,
             rentInterval = existing and existing.rent_interval or nil,
         }

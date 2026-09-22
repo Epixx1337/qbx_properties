@@ -8,6 +8,7 @@ local ring = {}
 local rentThreads = {}
 local enteredInPlace = {}
 local spawning = {}
+local spawnArmed = {}
 
 ---@param playerSource integer
 ---@return integer?
@@ -621,6 +622,9 @@ end)
 
 RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
     local playerSource = source --[[@as number]]
+    if spawnArmed[playerSource] then return end
+
+    spawnArmed[playerSource] = true
     spawning[playerSource] = true
     SetTimeout(60000, function() spawning[playerSource] = nil end)
 end)
@@ -1096,6 +1100,15 @@ AddEventHandler('playerDropped', function ()
     citizenid[playerSource] = nil
     enteredInPlace[playerSource] = nil
     spawning[playerSource] = nil
+    spawnArmed[playerSource] = nil
+    for _, ringers in pairs(ring) do
+        for i = 1, #ringers do
+            if ringers[i] == playerSource then
+                table.remove(ringers, i)
+                break
+            end
+        end
+    end
     if ClearApartmentLock then ClearApartmentLock(playerSource) end
     if ClearApartmentClaim then ClearApartmentClaim(playerSource) end
 
