@@ -59,6 +59,16 @@ return {
     },
     freecamRange = 10.0, -- how far the decorating freecam may drift from the player
     nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
+    furnitureGrid = { -- reference grid drawn under the piece you are moving
+        enabled = true,
+        size = 0.25, -- cell size in metres, also the step grid snapping rounds to
+        major = 4, -- every nth line is drawn brighter, 0 for an even grid
+        radius = 24, -- cells drawn out from the piece before the grid fades out
+        alpha = 90, -- brightness at the centre, the edge fades to nothing
+        color = { 255, 255, 255 },
+        snap = false, -- start with grid snapping already on
+        rotation = 15.0, -- degrees each rotation step rounds to while snapping, 0 leaves rotation free
+    },
     furnitureShop = true, -- false ignores furniture prices, everything places instantly for free
     furnitureImageSource = 'local', -- 'cdn' lazy-loads catalog thumbnails from the uploaded copies, run /screenshotfurniture upload first
 

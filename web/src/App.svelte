@@ -89,6 +89,8 @@
     furniture.tint = data.tint ?? 0
     furniture.tintSupported = data.tintSupported ?? false
     furniture.pickup = data.pickup ?? false
+    furniture.gridSnap = data.gridSnap ?? false
+    furniture.gridSize = data.gridSize ?? 0.25
   })
 
   onMessage('furniture:cart', (data) => {

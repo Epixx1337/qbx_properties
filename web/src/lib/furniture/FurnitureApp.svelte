@@ -238,7 +238,16 @@
           <div><kbd>L</kbd> Camera / world / local</div>
           <div><kbd>G</kbd> Snap to ground</div>
           <div><kbd>H</kbd> Snap to wall</div>
+          <div><kbd>X</kbd> Snap to grid</div>
           <div><kbd>F</kbd> Freecam</div>
+        </div>
+
+        <div class="grid-state" class:on={furniture.gridSnap}>
+          {#if furniture.gridSnap}
+            Grid snapping on, {furniture.gridSize}m steps
+          {:else}
+            Grid snapping off, free placement
+          {/if}
         </div>
 
         <div class="actions">
@@ -365,6 +374,7 @@
         <span><kbd>L</kbd> Axis space</span>
         <span><kbd>G</kbd> Snap to ground</span>
         <span><kbd>H</kbd> Snap to wall</span>
+        <span class:active={furniture.gridSnap}><kbd>X</kbd> Grid</span>
         <span><kbd>Enter</kbd> Confirm</span>
         <span><kbd>F</kbd> Freecam</span>
       {:else}
@@ -559,6 +569,11 @@
 
   .hud kbd + kbd {
     margin-left: -2px;
+  }
+
+  .hud span.active {
+    color: #fff;
+    font-weight: 600;
   }
 
   .panel {
@@ -906,6 +921,21 @@
     gap: 7px;
     font-size: 12px;
     color: var(--dark-2);
+  }
+
+  .grid-state {
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--dark-2);
+    background: var(--dark-6);
+    border-left: 2px solid var(--dark-4);
+    border-radius: var(--radius-sm);
+  }
+
+  .grid-state.on {
+    color: #fff;
+    border-left-color: var(--accent);
+    background: var(--accent-20);
   }
 
   .actions {

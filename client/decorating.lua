@@ -123,6 +123,11 @@ local lastMatrix
 local furnitureLabels
 local currentTint = 0
 local lastTransformPush = 0
+local lastPushed
+local gizmoBuffer = DataView.ArrayBuffer(64)
+local gridConfig = sharedConfig.furnitureGrid or {}
+local gridSnap = gridConfig.snap == true
+local gridHeading = 0.0
 
 ---@param value boolean
 function SetCursorMode(value)
@@ -603,6 +608,8 @@ function PushDecoratingState()
         worldInput = not IsUIFocused(),
         freecam = freecamMoving,
         mode = 'move',
+        gridSnap = gridSnap,
+        gridSize = gridConfig.size,
         selected = placing and {
             label = currentlySelected and currentlySelected.label or 'Placed object',
             objectId = objectId,
@@ -615,14 +622,19 @@ function PushDecoratingState()
     })
 end
 
-function MakeGizmoMatrix(entity)
+local function writeGizmoMatrix(entity, view)
     local f, r, u, a = GetEntityMatrix(entity)
-    local view = DataView.ArrayBuffer(64)
     view:SetFloat32(0, r[1]):SetFloat32(4, r[2]):SetFloat32(8, r[3]):SetFloat32(12, 0)
         :SetFloat32(16, f[1]):SetFloat32(20, f[2]):SetFloat32(24, f[3]):SetFloat32(28, 0)
         :SetFloat32(32, u[1]):SetFloat32(36, u[2]):SetFloat32(40, u[3]):SetFloat32(44, 0)
         :SetFloat32(48, a[1]):SetFloat32(52, a[2]):SetFloat32(56, a[3]):SetFloat32(60, 1)
     return view
+end
+
+-- callers that keep the matrix around (undo snapshots) need their own buffer, the per-frame gizmo
+-- reuses one so dragging an object does not allocate 64 bytes every frame
+function MakeGizmoMatrix(entity)
+    return writeGizmoMatrix(entity, DataView.ArrayBuffer(64))
 end
 
 local function normalizeAxis(x, y, z)
@@ -642,6 +654,88 @@ function ApplyGizmoMatrix(entity, view)
         ux, uy, uz,
         view:GetFloat32(48), view:GetFloat32(52), view:GetFloat32(56)
     )
+end
+
+-- rooms and placed shells sit at an angle, so the grid turns with them and furniture snapped in one
+-- unit lines up with the walls rather than with world north
+function SetGridHeading(heading)
+    gridHeading = tonumber(heading) or 0.0
+end
+
+local function rotateGrid(x, y, degrees)
+    local rad = math.rad(degrees)
+    local cos, sin = math.cos(rad), math.sin(rad)
+    return x * cos - y * sin, x * sin + y * cos
+end
+
+local function quantise(value, step)
+    return math.floor(value / step + 0.5) * step
+end
+
+-- snapping rounds in grid space against a fixed world origin, so two pieces snapped in different
+-- sessions still share the same lines
+local function applyGridSnap(entity)
+    local step = gridConfig.size or 0.25
+    if step < 0.01 then return end
+
+    local coords = GetEntityCoords(entity)
+    local gx, gy = rotateGrid(coords.x, coords.y, -gridHeading)
+    local wx, wy = rotateGrid(quantise(gx, step), quantise(gy, step), gridHeading)
+    SetEntityCoordsNoOffset(entity, wx, wy, coords.z, false, false, false)
+
+    local turn = gridConfig.rotation or 0.0
+    if turn > 0 then
+        local rot = GetEntityRotation(entity, 2)
+        SetEntityRotation(entity, quantise(rot.x, turn), quantise(rot.y, turn), quantise(rot.z, turn), 2, false)
+    end
+end
+
+local function drawFurnitureGrid(origin)
+    local step = gridConfig.size or 0.25
+    local radius = gridConfig.radius or 24
+    if step < 0.01 or radius < 1 then return end
+
+    local color = gridConfig.color or { 255, 255, 255 }
+    local red, green, blue = color[1] or 255, color[2] or 255, color[3] or 255
+    local peak = gridConfig.alpha or 90
+    local major = gridConfig.major or 0
+    local span = step * radius
+    local z = origin.z + 0.01
+
+    -- centre the drawn lines on the nearest snap intersection so they mark where a piece would land
+    local gx, gy = rotateGrid(origin.x, origin.y, -gridHeading)
+    local cx, cy = quantise(gx, step), quantise(gy, step)
+
+    for i = -radius, radius do
+        local falloff = i / radius
+        local alpha = math.floor(peak * (1.0 - falloff * falloff))
+        if major > 0 and i % major == 0 then alpha = math.floor(alpha * 1.8) end
+
+        if alpha > 2 then
+            if alpha > 255 then alpha = 255 end
+            local offset = i * step
+            local half = math.sqrt(math.max(span * span - offset * offset, 0.0))
+
+            local ax, ay = rotateGrid(cx + offset, cy - half, gridHeading)
+            local bx, by = rotateGrid(cx + offset, cy + half, gridHeading)
+            DrawLine(ax, ay, z, bx, by, z, red, green, blue, alpha)
+
+            ax, ay = rotateGrid(cx - half, cy + offset, gridHeading)
+            bx, by = rotateGrid(cx + half, cy + offset, gridHeading)
+            DrawLine(ax, ay, z, bx, by, z, red, green, blue, alpha)
+        end
+    end
+
+    -- snapping lands on intersections, so mark the one the piece is sitting on rather than a cell
+    if not gridSnap then return end
+    local arm = step * 0.45
+    local ax, ay = rotateGrid(cx - arm, cy, gridHeading)
+    local bx, by = rotateGrid(cx + arm, cy, gridHeading)
+    DrawLine(ax, ay, z, bx, by, z, red, green, blue, 255)
+
+    ax, ay = rotateGrid(cx, cy - arm, gridHeading)
+    bx, by = rotateGrid(cx, cy + arm, gridHeading)
+    DrawLine(ax, ay, z, bx, by, z, red, green, blue, 255)
 end
 
 -- the clipboard is our own object attached to the hand rather than a scenario prop, so leaving the
@@ -757,27 +851,45 @@ function ToggleDecorating()
         if IsDisabledControlJustReleased(0, 47) and previewObject and DoesEntityExist(previewObject) then
             PlaceObjectOnGroundProperly(previewObject)
         end
+        if IsDisabledControlJustReleased(0, 73) then
+            gridSnap = not gridSnap
+            if gridSnap and previewObject and DoesEntityExist(previewObject) then
+                applyGridSnap(previewObject)
+            end
+            PushDecoratingState()
+        end
         if IsDisabledControlJustReleased(0, 191) then
             ConfirmDecoration()
         end
         if previewObject and DoesEntityExist(previewObject) then
+            -- a parked object still counted as movement, which kept a transform going out to every
+            -- nearby player twice a second for as long as it stayed selected
             if GetGameTimer() - lastTransformPush > 150 then
-                lastTransformPush = GetGameTimer()
                 local pos = GetEntityCoords(previewObject)
                 local rot = GetEntityRotation(previewObject, 2)
-                SendUI('furniture:transform', { x = pos.x, y = pos.y, z = pos.z, rx = rot.x, ry = rot.y, rz = rot.z })
+                local settled = lastPushed and lastPushed.entity == previewObject
+                    and #(pos - lastPushed.pos) < 0.001 and #(rot - lastPushed.rot) < 0.01
 
-                local objectId = currentObjectId()
-                if objectId then
-                    TriggerServerEvent('qbx_properties:server:decorationMoving', objectId, pos, rot)
+                if not settled then
+                    lastTransformPush = GetGameTimer()
+                    lastPushed = { entity = previewObject, pos = pos, rot = rot }
+                    SendUI('furniture:transform', { x = pos.x, y = pos.y, z = pos.z, rx = rot.x, ry = rot.y, rz = rot.z })
+
+                    local objectId = currentObjectId()
+                    if objectId then
+                        TriggerServerEvent('qbx_properties:server:decorationMoving', objectId, pos, rot)
+                    end
                 end
             end
+
+            if gridConfig.enabled then drawFurnitureGrid(GetEntityCoords(previewObject)) end
 
             DisableControlAction(0, 24, true)
             DisableControlAction(0, 25, true)
             DisableControlAction(0, 140, true)
             DisableControlAction(0, 141, true)
             DisableControlAction(0, 142, true)
+            DisableControlAction(0, 73, true) -- X toggles grid snapping
             DisableControlAction(0, 74, true) -- H stays with the NUI wall snap
             DisablePlayerFiring(cache.playerId, true)
 
@@ -792,10 +904,11 @@ function ToggleDecorating()
                     obj = { x = pos.x, y = pos.y, z = pos.z, rx = rot.x, ry = rot.y, rz = rot.z },
                 })
             else
-                local matrixBuffer = MakeGizmoMatrix(previewObject)
+                local matrixBuffer = writeGizmoMatrix(previewObject, gizmoBuffer)
                 local changed = Citizen.InvokeNative(0xEB2EDCA2, matrixBuffer:Buffer(), 'Editor1', Citizen.ReturnResultAnyway())
                 if changed then
                     ApplyGizmoMatrix(previewObject, matrixBuffer)
+                    if gridSnap then applyGridSnap(previewObject) end
                 end
             end
         end
@@ -809,6 +922,7 @@ RegisterKeyMapping("+gizmoLocal", locale('keyMappings.gizmo_local'), "keyboard",
 
 function StartDecorating()
     if IsDecorating then return end
+    SetGridHeading(GetCurrentShellHeading and GetCurrentShellHeading() or 0.0)
 
     if ResolveCurrentUnit then
         local buildingKey, floor, room = ResolveCurrentUnit()
@@ -819,6 +933,8 @@ function StartDecorating()
             end
 
             CurrentPropertyName = GetUnitName(buildingKey, floor, room) or ''
+            local anchor = GetRoomCoords(buildingKey, floor, room)
+            SetGridHeading(anchor and anchor.w or 0.0)
             ToggleDecorating()
             return
         end

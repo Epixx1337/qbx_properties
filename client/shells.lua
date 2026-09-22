@@ -128,3 +128,11 @@ AddEventHandler('onResourceStop', function(resource)
         removeShell(propertyId)
     end
 end)
+
+-- furniture snapping lines up with the walls of a rotated shell rather than with world north
+---@return number
+function GetCurrentShellHeading()
+    local shell = CurrentPropertyId and streamedShells[CurrentPropertyId]
+    if not shell or not DoesEntityExist(shell) then return 0.0 end
+    return GetEntityHeading(shell)
+end

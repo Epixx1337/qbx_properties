@@ -40,6 +40,8 @@ export const furniture = $state({
   gizmo: null,
   gizmoMode: 'translate',
   gizmoSpace: 'camera',
+  gridSnap: false,
+  gridSize: 0.25,
   cart: [],
   cartTotal: 0,
   pickup: false,
