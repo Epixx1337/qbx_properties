@@ -40,6 +40,7 @@ export const furniture = $state({
   gizmo: null,
   gizmoMode: 'translate',
   gizmoSpace: 'camera',
+  highlight: null,
   gridSnap: false,
   gridSize: 0.25,
   carrying: false,

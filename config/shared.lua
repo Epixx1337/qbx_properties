@@ -72,10 +72,10 @@ return {
     },
     furnitureGrid = { -- reference grid drawn under the piece you are moving
         enabled = true,
-        size = 0.25, -- cell size in metres, also the step grid snapping rounds to
-        major = 4, -- every nth line is drawn brighter, 0 for an even grid
-        radius = 24, -- cells drawn out from the piece before the grid fades out
-        alpha = 90, -- brightness at the centre, the edge fades to nothing
+        size = 0.5, -- cell size in metres, also the step grid snapping rounds to
+        cells = 10, -- width of the square drawn around the piece, in cells
+        major = 5, -- every nth line is drawn brighter, 0 for an even grid
+        alpha = 110,
         color = { 255, 255, 255 },
         snap = true, -- start with grid snapping on, X toggles it in the editor
         rotation = 15.0, -- degrees each rotation step rounds to while snapping, 0 leaves rotation free

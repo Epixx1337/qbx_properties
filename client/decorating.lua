@@ -691,38 +691,34 @@ local function applyGridSnap(entity)
 end
 
 local function drawFurnitureGrid(origin)
-    local step = gridConfig.size or 0.25
-    local radius = gridConfig.radius or 24
-    if step < 0.01 or radius < 1 then return end
+    local step = gridConfig.size or 0.5
+    local cells = gridConfig.cells or 10
+    if step < 0.01 or cells < 2 then return end
 
     local color = gridConfig.color or { 255, 255, 255 }
     local red, green, blue = color[1] or 255, color[2] or 255, color[3] or 255
-    local peak = gridConfig.alpha or 90
+    local alpha = gridConfig.alpha or 110
     local major = gridConfig.major or 0
-    local span = step * radius
+
+    local half = math.floor(cells / 2)
+    local extent = half * step
     local z = origin.z + 0.01
 
     local gx, gy = rotateGrid(origin.x, origin.y, -gridHeading)
     local cx, cy = quantise(gx, step), quantise(gy, step)
 
-    for i = -radius, radius do
-        local falloff = i / radius
-        local alpha = math.floor(peak * (1.0 - falloff * falloff))
-        if major > 0 and i % major == 0 then alpha = math.floor(alpha * 1.8) end
+    for i = -half, half do
+        local offset = i * step
+        local line = alpha
+        if major > 0 and i % major == 0 then line = math.min(math.floor(alpha * 1.7), 255) end
 
-        if alpha > 2 then
-            if alpha > 255 then alpha = 255 end
-            local offset = i * step
-            local half = math.sqrt(math.max(span * span - offset * offset, 0.0))
+        local ax, ay = rotateGrid(cx + offset, cy - extent, gridHeading)
+        local bx, by = rotateGrid(cx + offset, cy + extent, gridHeading)
+        DrawLine(ax, ay, z, bx, by, z, red, green, blue, line)
 
-            local ax, ay = rotateGrid(cx + offset, cy - half, gridHeading)
-            local bx, by = rotateGrid(cx + offset, cy + half, gridHeading)
-            DrawLine(ax, ay, z, bx, by, z, red, green, blue, alpha)
-
-            ax, ay = rotateGrid(cx - half, cy + offset, gridHeading)
-            bx, by = rotateGrid(cx + half, cy + offset, gridHeading)
-            DrawLine(ax, ay, z, bx, by, z, red, green, blue, alpha)
-        end
+        ax, ay = rotateGrid(cx - extent, cy + offset, gridHeading)
+        bx, by = rotateGrid(cx + extent, cy + offset, gridHeading)
+        DrawLine(ax, ay, z, bx, by, z, red, green, blue, line)
     end
 
     if not gridSnap then return end
@@ -760,9 +756,78 @@ local function updateCarry()
     if gridSnap then applyGridSnap(previewObject) end
 end
 
+local catalogOrder, catalogIndex
+
+local function buildCatalog()
+    if catalogOrder then return end
+
+    catalogOrder = {}
+    catalogIndex = {}
+    local meta = config.furnitureCategories or {}
+
+    for name, entries in pairs(config.furniture) do
+        if #entries > 0 then catalogOrder[#catalogOrder + 1] = name end
+    end
+
+    table.sort(catalogOrder, function(a, b)
+        local orderA = (meta[a] or {}).order or 0
+        local orderB = (meta[b] or {}).order or 0
+        if orderA ~= orderB then return orderA < orderB end
+        return a < b
+    end)
+
+    for i = 1, #catalogOrder do
+        local entries = config.furniture[catalogOrder[i]]
+        for j = 1, #entries do
+            catalogIndex[entries[j].object] = { category = i, item = j }
+        end
+    end
+end
+
+---@param categoryIndex integer
+---@param itemIndex integer
+local function selectCatalogEntry(categoryIndex, itemIndex)
+    buildCatalog()
+    if #catalogOrder == 0 then return end
+
+    local category = catalogOrder[((categoryIndex - 1) % #catalogOrder) + 1]
+    local entries = config.furniture[category]
+    local entry = entries[((itemIndex - 1) % #entries) + 1]
+    if not entry or not SpawnPreview(entry.object, entry.label) then return end
+
+    carryHeading = GetEntityHeading(previewObject)
+    SetCarrying(true)
+    SendUI('furniture:highlight', { category = category, object = entry.object })
+    PushDecoratingState()
+end
+
+---@param delta integer
+local function cycleFurniture(delta)
+    buildCatalog()
+    local at = currentlySelected and catalogIndex[currentlySelected.object]
+    if not at then return selectCatalogEntry(1, 1) end
+    selectCatalogEntry(at.category, at.item + delta)
+end
+
+---@param delta integer
+local function cycleCategory(delta)
+    buildCatalog()
+    local at = currentlySelected and catalogIndex[currentlySelected.object]
+    selectCatalogEntry((at and at.category or 1) + delta, 1)
+end
+
 function SetCarrying(active)
-    if carryConfig.enabled ~= true then return end
+    if carryConfig.enabled ~= true then
+        SetCursorMode(true)
+        SetUIFocus(true, true)
+        return
+    end
+
     carrying = active == true
+
+    -- carrying aims down the camera, so the mouse has to steer the camera rather than the NUI cursor
+    SetCursorMode(not carrying)
+    SetUIFocus(not carrying, true)
 
     if not carrying then return end
     SendUI('gizmo:sync', nil)
@@ -873,9 +938,16 @@ function ToggleDecorating()
             end
             RequestStopDecorating()
         end
-        if IsDisabledControlJustReleased(0, 38) then
+        if IsDisabledControlJustReleased(0, 38) and not carrying then
             SetUIFocus(true)
             PushDecoratingState()
+        end
+
+        if carrying then
+            if IsDisabledControlJustPressed(0, 174) then cycleFurniture(-1) end
+            if IsDisabledControlJustPressed(0, 175) then cycleFurniture(1) end
+            if IsDisabledControlJustPressed(0, 44) then cycleCategory(-1) end
+            if IsDisabledControlJustPressed(0, 38) then cycleCategory(1) end
         end
 
         if IsDisabledControlJustReleased(0, 23) then
@@ -929,6 +1001,11 @@ function ToggleDecorating()
             DisableControlAction(0, 142, true)
             DisableControlAction(0, 26, true) -- C picks the piece up and puts it down
             DisableControlAction(0, 73, true) -- X toggles grid snapping
+            DisableControlAction(0, 44, true) -- Q and E walk the catalog while carrying
+            DisableControlAction(0, 172, true)
+            DisableControlAction(0, 173, true)
+            DisableControlAction(0, 174, true)
+            DisableControlAction(0, 175, true)
             DisableControlAction(0, 74, true) -- H stays with the NUI wall snap
             DisablePlayerFiring(cache.playerId, true)
 
@@ -1025,39 +1102,58 @@ end
 
 RegisterNetEvent('qbx_properties:client:startDecorating', StartDecorating)
 
-RegisterNUICallback('furniture:place', function(data, cb)
-    cb(1)
-    if not IsDecorating or type(data) ~= 'table' or type(data.object) ~= 'string' then return end
-
-    currentlySelected = { object = data.object, label = data.label }
-
-    if previewObject and DoesEntityExist(previewObject) and not currentObjectId() then
-        DeleteEntity(previewObject)
-    end
-
-    local modelHash = GetHashKey(data.object)
+---@param object string
+---@param label string?
+---@return boolean
+function SpawnPreview(object, label)
+    local modelHash = GetHashKey(object)
     if not IsModelValid(modelHash) or not lib.requestModel(modelHash, 60000) then
-        currentlySelected = nil
-        lib.notify({ type = 'error', description = ('%s is not a valid model.'):format(data.label or data.object) })
-        return
+        lib.notify({ type = 'error', description = ('%s is not a valid model.'):format(label or object) })
+        return false
     end
 
-    local camCoords, camRotation = GetDecoratingCam()
-    local forwardCoords = camCoords + vector3(-math.sin(math.rad(camRotation.z)), math.cos(math.rad(camRotation.z)), math.sin(math.rad(camRotation.x)) * 1.2) * 2
+    -- swapping the piece keeps where the old one was standing, so cycling the catalog does not
+    -- throw the placement away
+    local keepCoords, keepHeading
+    if previewObject and DoesEntityExist(previewObject) then
+        if previewObject == pendingObject then
+            keepCoords = GetEntityCoords(previewObject)
+            keepHeading = GetEntityHeading(previewObject)
+        end
+        if not currentObjectId() then DeleteEntity(previewObject) end
+    end
 
-    previewObject = CreateObjectNoOffset(modelHash, forwardCoords.x, forwardCoords.y, forwardCoords.z, false, false, false)
+    currentlySelected = { object = object, label = label }
+
+    local coords = keepCoords
+    if not coords then
+        local camCoords, camRotation = GetDecoratingCam()
+        coords = camCoords + vector3(-math.sin(math.rad(camRotation.z)), math.cos(math.rad(camRotation.z)), math.sin(math.rad(camRotation.x)) * 1.2) * 2
+    end
+
+    previewObject = CreateObjectNoOffset(modelHash, coords.x, coords.y, coords.z, false, false, false)
     SetModelAsNoLongerNeeded(modelHash)
     FreezeEntityPosition(previewObject, true)
     SetEntityCollision(previewObject, false, false)
     SetEntityDrawOutline(previewObject, true)
+    if keepHeading then SetEntityHeading(previewObject, keepHeading) end
 
     pendingObject = previewObject
     lastMatrix = nil
+    return true
+end
+
+RegisterNUICallback('furniture:place', function(data, cb)
+    cb(1)
+    if not IsDecorating or type(data) ~= 'table' or type(data.object) ~= 'string' then return end
+    if not SpawnPreview(data.object, data.label) then
+        currentlySelected = nil
+        return
+    end
+
     carryDistance = carryConfig.distance or 4.0
     carryHeading = GetEntityHeading(previewObject)
     SetCarrying(carryConfig.default ~= false)
-    SetCursorMode(true)
-    SetUIFocus(true, true)
     PushDecoratingState()
 end)
 

@@ -95,6 +95,11 @@
     furniture.carrySupported = data.carrySupported ?? false
   })
 
+  onMessage('furniture:highlight', (data) => {
+    furniture.category = data?.category ?? furniture.category
+    furniture.highlight = data?.object ?? null
+  })
+
   onMessage('furniture:cart', (data) => {
     furniture.cart = data?.items ?? []
     furniture.cartTotal = data?.total ?? 0

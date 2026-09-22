@@ -182,7 +182,7 @@
 
       <div class="grid scroll">
         {#each items as item (item.object)}
-          <button class="card" onclick={() => place(item)}>
+          <button class="card" class:active={furniture.highlight === item.object} onclick={() => place(item)}>
             <div class="thumb">
               <img src={imgSrc(item.object)} alt={item.label} loading="lazy" onerror={onImgError} />
               {#if item.price && furniture.shopEnabled}
@@ -237,6 +237,8 @@
             <div><kbd>Scroll</kbd> Turn</div>
             <div><kbd>Ctrl</kbd> + <kbd>Scroll</kbd> Turn faster</div>
             <div><kbd>Shift</kbd> + <kbd>Scroll</kbd> Hold nearer / further</div>
+            <div><kbd>←</kbd> <kbd>→</kbd> Previous / next piece</div>
+            <div><kbd>Q</kbd> <kbd>E</kbd> Previous / next category</div>
             <div><kbd>Click</kbd> Put it down</div>
             <div><kbd>C</kbd> Switch to handles</div>
           {:else}
@@ -798,6 +800,12 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: border-color 0.12s ease;
+  }
+
+  .card.active {
+    border-color: var(--accent);
+    background: var(--accent-20);
+    color: #fff;
   }
 
   .card:hover {
