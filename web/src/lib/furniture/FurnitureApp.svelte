@@ -240,7 +240,8 @@
             <div><kbd>Shift</kbd> + <kbd>Scroll</kbd> {furniture.groundFollow ? 'Raise off the surface' : 'Hold nearer / further'}</div>
             <div><kbd>←</kbd> <kbd>→</kbd> Previous / next piece</div>
             <div><kbd>Q</kbd> <kbd>E</kbd> Previous / next category</div>
-            <div><kbd>Click</kbd> Put it down</div>
+            <div><kbd>Click</kbd> Place it</div>
+            <div><kbd>Tab</kbd> Cursor</div>
             <div><kbd>C</kbd> Switch to handles</div>
             <div><kbd>G</kbd> {furniture.groundFollow ? 'Let it float' : 'Rest on surfaces'}</div>
           {:else}
@@ -345,13 +346,13 @@
     {:else}
       <div class="body">
         <div class="hint">Pick furniture from the catalog to start placing, or return to the world to fly around and select something you already placed.</div>
-        <button class="btn subtle wide" onclick={backToWorld}>Back to world <kbd>E</kbd></button>
+        <button class="btn subtle wide" onclick={backToWorld}>Back to world <kbd>Tab</kbd></button>
         <div class="keys">
           <div><kbd>W A S D</kbd> Fly</div>
           <div><kbd>Space</kbd> / <kbd>Ctrl</kbd> Up / down</div>
           <div><kbd>Scroll</kbd> Speed</div>
           <div><kbd>Alt</kbd> Select placed object</div>
-          <div><kbd>E</kbd> Back to catalog</div>
+          <div><kbd>Tab</kbd> Back to catalog</div>
           <div><kbd>Backspace</kbd> Exit</div>
         </div>
       </div>
@@ -393,7 +394,7 @@
         <span><kbd>L</kbd> Axis space</span>
         {#if furniture.freePlacing}
           <span><kbd>Scroll</kbd> Turn</span>
-          <span><kbd>Click</kbd> Put down</span>
+          <span><kbd>Click</kbd> Place</span>
         {:else}
           <span><kbd>G</kbd> Snap to ground</span>
           <span><kbd>H</kbd> Snap to wall</span>
@@ -407,7 +408,7 @@
       {:else}
         <span><kbd>Alt</kbd> Select an object</span>
         <span><kbd>F</kbd> Freecam</span>
-        <span><kbd>E</kbd> Catalog</span>
+        <span><kbd>Tab</kbd> Catalog</span>
       {/if}
       <span><kbd>Backspace</kbd> Exit</span>
     </footer>

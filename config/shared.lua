@@ -59,8 +59,6 @@ return {
     },
     freecamRange = 10.0, -- how far the decorating freecam may drift from the player
     nuiGizmo = false, -- camera-projected gizmo drawn by the UI, false uses the engine gizmo
-    -- free placing puts the piece wherever you are looking and lets you walk it into position,
-    -- which is far quicker than dragging gizmo handles. The handles are still a key away
     freePlacement = {
         enabled = true,
         default = true, -- picking something from the catalog starts you free placing it

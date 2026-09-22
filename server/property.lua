@@ -568,8 +568,6 @@ end
 ---@param citizenId string
 ---@param propertyType string?
 ---@return boolean
--- folded into the acquiring UPDATE so the count and the write happen in one statement; a plain
--- CanOwnAnotherProperty check yields before the write and lets concurrent buys share one count
 ---@param citizenId string
 ---@param propertyType string?
 ---@return string clause, table params
@@ -1516,15 +1514,12 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
             return
         end
     end
-    -- this used to be skipped for anything already paid for, which let a credit be spent anywhere
     if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > sharedConfig.placementReach then return end
 
     local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
     local furnitureAnchor = GetFurnitureAnchor(property)
     local storedCoords = furnitureAnchor and UnrotateOffset(furnitureAnchor, coords) or coords
 
-    -- the offset is measured from the unit's own anchor, so this keeps a piece inside the interior
-    -- it belongs to rather than through a wall in a neighbour's
     if furnitureAnchor and #(storedCoords) > sharedConfig.interiorRadius then
         exports.qbx_core:Notify(playerSource, 'That is outside the property.', 'error')
         return

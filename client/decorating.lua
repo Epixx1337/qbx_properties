@@ -116,7 +116,6 @@ function ToggleFreecam()
         SetCursorMode(previewObject ~= nil)
         SetUIFocus(true, previewObject ~= nil)
     end
-    -- the ped stays put while the camera is off flying
     SetPlacementMobility(IsFreePlacing() and not freecamMoving)
     PushDecoratingState()
 end
@@ -428,8 +427,16 @@ function SnapToWall()
     SetEntityCoords(previewObject, best.endCoords.x - best.dir.x * best.offset, best.endCoords.y - best.dir.y * best.offset, coords.z, false, false, false, false)
 end
 
+local function releaseToWorld()
+    freePlacing = false
+    SetCursorMode(false)
+    SetUIFocus(false)
+    SetPlacementMobility(not freecamMoving)
+end
+
 function ConfirmDecoration()
     if not previewObject or not DoesEntityExist(previewObject) then return end
+    local stayInWorld = freePlacing
 
     local objectId = currentObjectId()
     local model = objectId and GetEntityArchetypeName(previewObject) or currentlySelected and currentlySelected.object
@@ -451,8 +458,7 @@ function ConfirmDecoration()
             previewObject = nil
             currentlySelected = nil
             lastMatrix = nil
-            SetCursorMode(false)
-            SetUIFocus(true)
+            if stayInWorld then releaseToWorld() else SetCursorMode(false) SetUIFocus(true) end
             PushDecoratingState()
             pushCart()
             lib.notify({ type = 'info', description = 'Added to the cart. Pay in the furniture menu to keep it.' })
@@ -473,8 +479,7 @@ function ConfirmDecoration()
     previewObject = nil
     currentlySelected = nil
     lastMatrix = nil
-    SetCursorMode(false)
-    SetUIFocus(true)
+    if stayInWorld then releaseToWorld() else SetCursorMode(false) SetUIFocus(true) end
     PushDecoratingState()
 end
 
@@ -687,20 +692,29 @@ local function quantise(value, step)
     return math.floor(value / step + 0.5) * step
 end
 
-local function applyGridSnap(entity)
-    local step = gridConfig.size or 0.25
-    if step < 0.01 then return end
+---@return number
+function ActiveGridHeading()
+    if freePlacing and previewObject and DoesEntityExist(previewObject) then
+        return GetEntityHeading(previewObject)
+    end
+    return gridHeading
+end
 
-    local coords = GetEntityCoords(entity)
-    local gx, gy = rotateGrid(coords.x, coords.y, -gridHeading)
-    local wx, wy = rotateGrid(quantise(gx, step), quantise(gy, step), gridHeading)
-    SetEntityCoordsNoOffset(entity, wx, wy, coords.z, false, false, false)
+local function applyGridSnap(entity)
+    local step = gridConfig.size or 0.5
+    if step < 0.01 then return end
 
     local turn = gridConfig.rotation or 0.0
     if turn > 0 then
         local rot = GetEntityRotation(entity, 2)
         SetEntityRotation(entity, quantise(rot.x, turn), quantise(rot.y, turn), quantise(rot.z, turn), 2, false)
     end
+
+    local heading = ActiveGridHeading()
+    local coords = GetEntityCoords(entity)
+    local gx, gy = rotateGrid(coords.x, coords.y, -heading)
+    local wx, wy = rotateGrid(quantise(gx, step), quantise(gy, step), heading)
+    SetEntityCoordsNoOffset(entity, wx, wy, coords.z, false, false, false)
 end
 
 local function drawFurnitureGrid(origin)
@@ -716,8 +730,9 @@ local function drawFurnitureGrid(origin)
     local half = math.floor(cells / 2)
     local extent = half * step
     local z = origin.z + 0.01
+    local heading = ActiveGridHeading()
 
-    local gx, gy = rotateGrid(origin.x, origin.y, -gridHeading)
+    local gx, gy = rotateGrid(origin.x, origin.y, -heading)
     local cx, cy = quantise(gx, step), quantise(gy, step)
 
     for i = -half, half do
@@ -725,28 +740,26 @@ local function drawFurnitureGrid(origin)
         local line = alpha
         if major > 0 and i % major == 0 then line = math.min(math.floor(alpha * 1.7), 255) end
 
-        local ax, ay = rotateGrid(cx + offset, cy - extent, gridHeading)
-        local bx, by = rotateGrid(cx + offset, cy + extent, gridHeading)
+        local ax, ay = rotateGrid(cx + offset, cy - extent, heading)
+        local bx, by = rotateGrid(cx + offset, cy + extent, heading)
         DrawLine(ax, ay, z, bx, by, z, red, green, blue, line)
 
-        ax, ay = rotateGrid(cx - extent, cy + offset, gridHeading)
-        bx, by = rotateGrid(cx + extent, cy + offset, gridHeading)
+        ax, ay = rotateGrid(cx - extent, cy + offset, heading)
+        bx, by = rotateGrid(cx + extent, cy + offset, heading)
         DrawLine(ax, ay, z, bx, by, z, red, green, blue, line)
     end
 
     if not gridSnap then return end
     local arm = step * 0.45
-    local ax, ay = rotateGrid(cx - arm, cy, gridHeading)
-    local bx, by = rotateGrid(cx + arm, cy, gridHeading)
+    local ax, ay = rotateGrid(cx - arm, cy, heading)
+    local bx, by = rotateGrid(cx + arm, cy, heading)
     DrawLine(ax, ay, z, bx, by, z, red, green, blue, 255)
 
-    ax, ay = rotateGrid(cx, cy - arm, gridHeading)
-    bx, by = rotateGrid(cx, cy + arm, gridHeading)
+    ax, ay = rotateGrid(cx, cy - arm, heading)
+    bx, by = rotateGrid(cx, cy + arm, heading)
     DrawLine(ax, ay, z, bx, by, z, red, green, blue, 255)
 end
 
--- the probe runs the whole reach rather than the float distance, otherwise looking across the room
--- still drops the piece an arm's length away
 ---@return vector3 coords, boolean onSurface
 local function placeTarget()
     local camPos, camRot = GetDecoratingCam()
@@ -754,7 +767,6 @@ local function placeTarget()
     local cp = math.cos(pitch)
     local dir = vec3(-math.sin(yaw) * cp, math.cos(yaw) * cp, math.sin(pitch))
 
-    -- never propose further than the server will accept, otherwise a piece looks placed and is not
     local reach = math.min(placeConfig.reach or 15.0, sharedConfig.placementReach)
     local dest = camPos + dir * reach
 
@@ -765,8 +777,6 @@ local function placeTarget()
     local landed = status == 2 and (hit == true or hit == 1)
     local point = landed and endCoords or camPos + dir * math.min(placeDistance, reach)
 
-    -- the server measures from the ped while this casts from the camera, and the freecam can drift
-    -- well away from it, so the result is pulled back inside what the server will take
     local pedCoords = GetEntityCoords(cache.ped)
     local offset = point - pedCoords
     local limit = sharedConfig.placementReach - 0.5
@@ -778,7 +788,6 @@ local function placeTarget()
     return point, landed
 end
 
--- props whose origin is not at their base would sink into the floor without this
 ---@param entity integer
 ---@return number
 local function baseOffset(entity)
@@ -818,7 +827,6 @@ local function decorationIdFor(entity)
     end
 end
 
--- offsets are kept in the primary piece's own frame so the group turns with it instead of sliding
 local function captureSelectionOffsets()
     if not previewObject or not DoesEntityExist(previewObject) then return end
 
@@ -993,7 +1001,6 @@ function SetFreePlacing(active)
 
     freePlacing = active == true
 
-    -- freePlacing aims down the camera, so the mouse has to steer the camera rather than the NUI cursor
     SetCursorMode(not freePlacing)
     SetUIFocus(not freePlacing, true)
     SetPlacementMobility(freePlacing and not freecamMoving)
@@ -1033,8 +1040,6 @@ local function attachClipboard()
     AttachEntityToEntity(clipboardProp, cache.ped, GetPedBoneIndex(cache.ped, 36029), 0.16, 0.08, 0.1, -130.0, -50.0, 0.0, true, true, false, true, 1, true)
 end
 
--- removing player control takes the camera with it unless SPC_LEAVE_CAMERA_CONTROL_ON is set, which
--- is what left the mouse doing nothing while freePlacing
 local SPC_LEAVE_CAMERA_CONTROL_ON <const> = 256
 
 ---@param mobile boolean walking around while freePlacing, rather than posed with the clipboard
@@ -1116,6 +1121,7 @@ function ToggleDecorating()
         Wait(0)
         while IsUIFocused() and IsDecorating do Wait(0) end
         if not IsDecorating then break end
+        DisableControlAction(0, 37, true)
         if IsDisabledControlJustReleased(0, 202) then
             if previewObject and previewObject ~= pendingObject and DoesEntityExist(previewObject) and lastMatrix then
                 ApplyGizmoMatrix(previewObject, lastMatrix)
@@ -1126,12 +1132,12 @@ function ToggleDecorating()
             end
             RequestStopDecorating()
         end
-        if IsDisabledControlJustReleased(0, 38) and not freePlacing then
+        if IsDisabledControlJustReleased(0, 37) then
             SetUIFocus(true)
             PushDecoratingState()
         end
 
-        if freePlacing then
+        if freePlacing or not previewObject then
             if IsDisabledControlJustPressed(0, 174) then cycleFurniture(-1) end
             if IsDisabledControlJustPressed(0, 175) then cycleFurniture(1) end
             if IsDisabledControlJustPressed(0, 44) then cycleCategory(-1) end
@@ -1140,7 +1146,6 @@ function ToggleDecorating()
 
         updateCrosshair()
 
-        -- look at a placed piece and click to take hold of it, ctrl adds it to the group instead
         if not freePlacing and not pendingObject and IsDisabledControlJustReleased(0, 24) then
             local id, entity = raycastDecoration()
             if id and entity then
@@ -1257,8 +1262,7 @@ function ToggleDecorating()
                 updateFreePlace()
 
                 if IsDisabledControlJustReleased(0, 24) then
-                    SetFreePlacing(false)
-                    PushDecoratingState()
+                    ConfirmDecoration()
                 end
             elseif sharedConfig.nuiGizmo then
                 local pos = GetEntityCoords(previewObject)
@@ -1337,8 +1341,6 @@ function SpawnPreview(object, label)
         return false
     end
 
-    -- swapping the piece keeps where the old one was standing, so cycling the catalog does not
-    -- throw the placement away
     local keepCoords, keepHeading
     if previewObject and DoesEntityExist(previewObject) then
         if previewObject == pendingObject then
@@ -1361,7 +1363,7 @@ function SpawnPreview(object, label)
     FreezeEntityPosition(previewObject, true)
     SetEntityCollision(previewObject, false, false)
     SetEntityDrawOutline(previewObject, true)
-    if keepHeading then SetEntityHeading(previewObject, keepHeading) end
+    SetEntityHeading(previewObject, keepHeading or gridHeading)
 
     pendingObject = previewObject
     lastMatrix = nil
