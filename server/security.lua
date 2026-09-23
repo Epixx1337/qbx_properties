@@ -86,10 +86,33 @@ lib.callback.register('qbx_properties:callback:getDoorbellSpots', function(sourc
     if not player then return {} end
 
     local citizenId = player.PlayerData.citizenid
+    local gang = player.PlayerData.gang
+    local job = player.PlayerData.job
+
     local rows = MySQL.query.await(([[
-        SELECT %s FROM properties
-        WHERE owner = ? OR tenant = ? OR JSON_SEARCH(keyholders, 'one', ?) IS NOT NULL
-    ]]):format(DOOR_COLUMNS), {citizenId, citizenId, citizenId}) or {}
+        SELECT p.%s FROM properties p
+        WHERE p.owner IS NOT NULL AND (
+            p.owner = ?
+            OR p.tenant = ?
+            OR JSON_SEARCH(p.keyholders, 'one', ?) IS NOT NULL
+            OR (p.group_name IS NOT NULL AND p.group_name = ?)
+            OR EXISTS (
+                SELECT 1 FROM properties_access a
+                WHERE a.citizenid = ? AND a.furniture = 1
+                  AND (a.property_id = p.id OR (p.building IS NOT NULL AND a.tenant = p.owner))
+            )
+            OR EXISTS (
+                SELECT 1 FROM properties_job_access j
+                WHERE j.property_id = p.id AND j.furniture = 1
+                  AND j.job_name = ? AND j.min_grade <= ?
+            )
+        )
+    ]]):format((DOOR_COLUMNS:gsub(', ', ', p.'))), {
+        citizenId, citizenId, citizenId,
+        gang and gang.name or '',
+        citizenId,
+        job and job.name or '', job and job.grade.level or 0,
+    }) or {}
 
     local spots = {}
     for i = 1, #rows do
