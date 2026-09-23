@@ -191,7 +191,10 @@ AddEventHandler('qbx_properties:client:decorationSpawned', function(decorationId
     removeHead(decorationId)
 
     local hash = lib.requestModel(security.cameraHeadModel, 10000)
-    if not hash then return end
+    if not hash then
+        lib.print.warn(('the camera dome %s did not load, the camera will not turn'):format(security.cameraHeadModel))
+        return
+    end
 
     local coords = GetEntityCoords(entity)
     local head = CreateObjectNoOffset(hash, coords.x, coords.y, coords.z, false, false, false)

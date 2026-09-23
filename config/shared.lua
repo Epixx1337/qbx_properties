@@ -68,6 +68,8 @@ return {
         minDistance = 1.0,
         rotationStep = 5.0, -- degrees per scroll notch
         coarseStep = 45.0, -- degrees per scroll notch while holding ctrl
+        fineStep = 1.0, -- degrees per scroll notch while holding alt
+        fineLift = 0.01, -- metres per scroll notch while holding alt
         liftStep = 0.05, -- metres per scroll notch when raising a piece off the surface
         maxLift = 4.0,
     },
@@ -77,7 +79,7 @@ return {
         cameraHeadModel = 'qbx_cctv_head',
         lens = {
             qbx_doorbell = { offset = vec3(0.0, -0.011, 0.100), facing = 180.0, pitch = -12.0 },
-            qbx_cctv = { offset = vec3(0.0, -0.011, 0.118), facing = 180.0, pitch = -18.0 },
+            qbx_cctv = { offset = vec3(0.0, -0.100, 0.118), facing = 180.0, pitch = -18.0 },
         },
         doorbellRange = 2.0, -- how close to a door you must stand to fit the doorbell
         cameras = { -- security cameras a property holds before upgrades, the doorbell is separate

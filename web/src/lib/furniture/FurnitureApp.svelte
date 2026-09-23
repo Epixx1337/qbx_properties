@@ -31,6 +31,23 @@
 
   let mode = $state('catalog')
   let placedSearch = $state('')
+  let renaming = $state(null)
+
+  function startRename(item) {
+    renaming = { id: item.id, value: item.name ?? '' }
+  }
+
+  function commitRename() {
+    if (!renaming) return
+    fetchNui('furniture:rename', { id: renaming.id, name: renaming.value.trim() })
+    renaming = null
+  }
+
+  function renameKey(event) {
+    event.stopPropagation()
+    if (event.key === 'Enter') commitRename()
+    else if (event.key === 'Escape') renaming = null
+  }
 
   const catMeta = (name) => {
     const meta = furniture.categoryMeta?.[name] ?? {}
@@ -92,7 +109,9 @@
 
   const placedItems = $derived(
     furniture.placed.filter(
-      (item) => !placedSearch.trim() || item.label.toLowerCase().includes(placedSearch.trim().toLowerCase())
+      (item) =>
+        !placedSearch.trim() ||
+        `${item.label} ${item.name ?? ''}`.toLowerCase().includes(placedSearch.trim().toLowerCase())
     )
   )
 
@@ -208,8 +227,13 @@
         {#each placedItems as item (item.id)}
           <div class="placed-row" class:active={furniture.selected?.objectId === item.id}>
             <img src={item.image ?? imgSrc(item.model)} alt={item.label} loading="lazy" onerror={onImgError} />
-            <span class="placed-label">{item.label}</span>
+            <span class="placed-label" title={item.name ? `${item.label} (${item.name})` : item.label}>
+              {item.label}{#if item.name}<span class="placed-name"> ({item.name})</span>{/if}
+            </span>
             <button class="mini" title="Edit this piece" onclick={() => fetchNui('furniture:select', { id: item.id })}>Edit</button>
+            <button class="mini icon" title="Name this piece" onclick={() => startRename(item)} aria-label="Name this piece">
+              <i class="fa-solid fa-pen"></i>
+            </button>
             <button class="mini accent" title="Duplicate in place" onclick={() => fetchNui('furniture:clone', { id: item.id })}>Clone</button>
           </div>
         {:else}
@@ -218,6 +242,26 @@
       </div>
     {/if}
   </aside>
+
+{#if renaming}
+  <div class="rename-veil">
+    <div class="rename">
+      <div class="rename-title">Name this piece</div>
+      <input
+        class="input"
+        maxlength="32"
+        placeholder="Gun Storage"
+        bind:value={renaming.value}
+        onkeydown={renameKey}
+        autofocus
+      />
+      <div class="rename-actions">
+        <button class="btn subtle" onclick={() => (renaming = null)}>Cancel</button>
+        <button class="btn" onclick={commitRename}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
   <section class="panel controls">
     <div class="panel-header">
@@ -677,7 +721,7 @@
 
   .placed-row {
     display: grid;
-    grid-template-columns: 34px 1fr auto auto;
+    grid-template-columns: 34px minmax(0, 1fr) auto auto auto;
     align-items: center;
     gap: 8px;
     padding: 6px 8px;
@@ -699,11 +743,52 @@
   }
 
   .placed-label {
+    min-width: 0;
     font-size: 12px;
     color: var(--dark-0);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .placed-name {
+    color: var(--dark-2);
+  }
+
+  .mini.icon {
+    padding: 4px 8px;
+  }
+
+  .rename-veil {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 40;
+  }
+
+  .rename {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 300px;
+    padding: 18px;
+    background: var(--dark-7);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-md);
+  }
+
+  .rename-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--dark-0);
+  }
+
+  .rename-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   .mini {

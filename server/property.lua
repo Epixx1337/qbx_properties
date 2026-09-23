@@ -100,7 +100,7 @@ function GetBuildingLayout(buildingKey)
     return building and building.layout or buildingKey
 end
 
-local DECORATION_COLUMNS <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, `camera_pan`, (`lock_pin` IS NOT NULL) AS locked'
+local DECORATION_COLUMNS <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, `camera_pan`, `label`, (`lock_pin` IS NOT NULL) AS locked'
 local DECORATION_COLUMNS_LEGACY <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`'
 
 ---@param query string with %s for the column list
@@ -155,6 +155,47 @@ function GetPropertyDecorations(property)
     end
     return queryDecorations('SELECT %s FROM `properties_decorations` WHERE `property_id` = ? AND IFNULL(`garden`, 0) = 0 ORDER BY `id`', {property.id}) or {}
 end
+
+---@param source number
+---@param decorationId integer
+---@param label string?
+---@return boolean
+local function writeDecorationLabel(source, decorationId, label)
+    local player = exports.qbx_core:GetPlayer(source)
+    decorationId = ToId(decorationId)
+    if not player or not decorationId then return false end
+
+    if label ~= nil then
+        label = tostring(label):gsub('%s+', ' ')
+        label = label:match('^%s*(.-)%s*$')
+        if label == '' then
+            label = nil
+        elseif #label > 32 then
+            label = label:sub(1, 32)
+        end
+    end
+
+    local citizenId = player.PlayerData.citizenid
+    local row = MySQL.single.await('SELECT property_id FROM properties_decorations WHERE id = ?', {decorationId})
+
+    if row then
+        local property = MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant FROM properties WHERE id = ?', {row.property_id})
+        if not property or not HasPropertyAccess(citizenId, property, 'furniture') then return false end
+
+        MySQL.update.await('UPDATE properties_decorations SET label = ? WHERE id = ?', {label, decorationId})
+        return true
+    end
+
+    local owned = MySQL.scalar.await('SELECT citizenid FROM properties_apartment_decorations WHERE id = ?', {decorationId})
+    if owned ~= citizenId then return false end
+
+    MySQL.update.await('UPDATE properties_apartment_decorations SET label = ? WHERE id = ?', {label, decorationId})
+    return true
+end
+
+lib.callback.register('qbx_properties:callback:setDecorationLabel', function(source, decorationId, label)
+    return writeDecorationLabel(source, decorationId, label)
+end)
 
 ---@param property table needs id, property_name, owner, building, type, stash_options
 ---@return table decorations shaped for the client
@@ -937,9 +978,9 @@ local function placedCameras(property)
     local rows
     if property.building then
         params[#params + 1] = GetBuildingLayout(property.building)
-        rows = MySQL.query.await(('SELECT id, model, coords, rotation, camera_pan FROM properties_apartment_decorations WHERE citizenid = ? AND model IN (%s) AND layout = ?'):format(placeholders), params)
+        rows = MySQL.query.await(('SELECT id, model, coords, rotation, camera_pan, label FROM properties_apartment_decorations WHERE citizenid = ? AND model IN (%s) AND layout = ?'):format(placeholders), params)
     else
-        rows = MySQL.query.await(('SELECT id, model, coords, rotation, camera_pan FROM properties_decorations WHERE property_id = ? AND model IN (%s) AND IFNULL(`garden`, 0) = 0'):format(placeholders), params)
+        rows = MySQL.query.await(('SELECT id, model, coords, rotation, camera_pan, label FROM properties_decorations WHERE property_id = ? AND model IN (%s) AND IFNULL(`garden`, 0) = 0'):format(placeholders), params)
     end
 
     local cams = {}
@@ -953,7 +994,10 @@ local function placedCameras(property)
             local heading = anchor and ((rotation.z or 0.0) + anchor.w) % 360.0 or (rotation.z or 0.0)
 
             local pan = tonumber(rows[i].camera_pan) or 0.0
-            local cam = lensCam(rows[i].model, world, (heading + pan) % 360.0, ('Camera %d'):format(i), rows[i].id)
+            local name = rows[i].label
+            if not name or name == '' then name = ('Camera %d'):format(i) end
+
+            local cam = lensCam(rows[i].model, world, (heading + pan) % 360.0, name, rows[i].id)
             cam.pan = pan
             cams[#cams + 1] = cam
         end

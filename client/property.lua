@@ -14,6 +14,7 @@ RegisterNetEvent('qbx_properties:client:accessFlags', function(flags)
 end)
 
 DecorationObjects = {}
+DecorationLabels = {}
 local properties = {}
 local insideProperty = false
 local isPropertyRental = false

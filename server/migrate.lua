@@ -13,6 +13,7 @@ local statements = {
 local columns = {
     properties_decorations = {
         stash_slot = 'INT DEFAULT NULL',
+        label = 'VARCHAR(32) DEFAULT NULL',
         camera_pan = 'FLOAT NOT NULL DEFAULT 0',
         tint = 'INT DEFAULT NULL',
         garden = 'TINYINT(1) NOT NULL DEFAULT 0',
@@ -24,6 +25,7 @@ local columns = {
     },
     properties_apartment_decorations = {
         stash_slot = 'INT DEFAULT NULL',
+        label = 'VARCHAR(32) DEFAULT NULL',
         camera_pan = 'FLOAT NOT NULL DEFAULT 0',
         tint = 'INT DEFAULT NULL',
         item = 'VARCHAR(100) DEFAULT NULL',

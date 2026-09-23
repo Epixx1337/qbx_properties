@@ -138,6 +138,45 @@ local placeStartedAt = 0
 local groundFollow = placeConfig.ground ~= false
 local placeSurface
 local wallSnap = false
+local placePitch = 0.0
+local placeRoll = 0.0
+local placeAxis = 'z'
+
+local AXIS_ORDER <const> = { z = 'x', x = 'y', y = 'z' }
+
+---@return boolean
+local function fineTuning()
+    return IsDisabledControlPressed(0, 19)
+end
+
+---@return number
+local function rotationStep()
+    if IsDisabledControlPressed(0, 36) then return placeConfig.coarseStep or 45.0 end
+    if fineTuning() then return placeConfig.fineStep or 1.0 end
+    if gridSnap and (gridConfig.rotation or 0.0) > 0.0 then return gridConfig.rotation end
+    return placeConfig.rotationStep or 5.0
+end
+
+---@return number, number
+local function liftSteps()
+    if fineTuning() then
+        local fine = placeConfig.fineLift or 0.01
+        return fine, fine * 5
+    end
+    return placeConfig.liftStep or 0.05, 0.25
+end
+
+---@param direction number
+local function turnPlacement(direction)
+    local step = direction * rotationStep()
+    if placeAxis == 'x' then
+        placePitch = (placePitch + step) % 360.0
+    elseif placeAxis == 'y' then
+        placeRoll = (placeRoll + step) % 360.0
+    else
+        placeHeading = placeHeading + step
+    end
+end
 
 ---@param value boolean
 function SetCursorMode(value)
@@ -306,9 +345,18 @@ function PushPlacedDecorations()
         local item = DecorationItems[id]
         local image = (GetFurnitureSpecs()[model] or {}).image
             or (item and ('nui://ox_inventory/web/images/%s.png'):format(item))
-        placed[#placed + 1] = { id = id, model = model, label = labelFor(model), image = image }
+        placed[#placed + 1] = {
+            id = id,
+            model = model,
+            label = labelFor(model),
+            name = DecorationLabels[id],
+            image = image,
+        }
     end
-    table.sort(placed, function(a, b) return a.label < b.label end)
+    table.sort(placed, function(a, b)
+        if a.label == b.label then return (a.name or '') < (b.name or '') end
+        return a.label < b.label
+    end)
     SendUI('furniture:placed', placed)
 end
 
@@ -319,7 +367,6 @@ local function currentObjectId()
     end
 end
 
----@param id integer
 ---@param id integer
 ---@param gizmo boolean? keep the cursor on it instead of picking it up
 function SelectPlacedDecoration(id, gizmo)
@@ -642,6 +689,7 @@ function PushDecoratingState()
         mode = 'move',
         gridSnap = gridSnap,
         gridSize = gridConfig.size,
+        axis = placeAxis,
         freePlacing = freePlacing,
         freePlaceSupported = placeConfig.enabled == true,
         groundFollow = groundFollow,
@@ -819,7 +867,7 @@ local function updateFreePlace()
 
         placeHeading = math.deg(math.atan(normal.x, -normal.y)) % 360.0
         SetEntityCoordsNoOffset(previewObject, point.x, point.y, point.z + placeLift, false, false, false)
-        SetEntityRotation(previewObject, 0.0, 0.0, placeHeading, 2, false)
+        SetEntityRotation(previewObject, placePitch, placeRoll, placeHeading, 2, false)
         ApplySelectionOffsets()
         return
     end
@@ -828,7 +876,7 @@ local function updateFreePlace()
     if onSurface and groundFollow then lift = lift + baseOffset(previewObject) end
 
     SetEntityCoordsNoOffset(previewObject, target.x, target.y, target.z + lift, false, false, false)
-    SetEntityRotation(previewObject, 0.0, 0.0, placeHeading % 360.0, 2, false)
+    SetEntityRotation(previewObject, placePitch, placeRoll, placeHeading % 360.0, 2, false)
     if gridSnap then applyGridSnap(previewObject) end
     ApplySelectionOffsets()
 end
@@ -1131,6 +1179,9 @@ function FreePlaceModel(model, prompt)
     groundFollow = placeConfig.ground ~= false
     placeSurface = nil
     wallSnap = false
+    placePitch = 0.0
+    placeRoll = 0.0
+    placeAxis = 'z'
 
     SetCursorMode(false)
     SetUIFocus(false)
@@ -1148,6 +1199,8 @@ function FreePlaceModel(model, prompt)
         DisableControlAction(0, 47, true)
         DisableControlAction(0, 73, true)
         DisableControlAction(0, 74, true)
+        DisableControlAction(0, 45, true)
+        DisableControlAction(0, 19, true)
         DisablePlayerFiring(cache.playerId, true)
 
         if not freecamMoving then
@@ -1157,14 +1210,14 @@ function FreePlaceModel(model, prompt)
             if up or down then
                 local direction = up and 1.0 or -1.0
                 if IsDisabledControlPressed(0, 21) then
+                    local lift, reach = liftSteps()
                     if groundFollow then
-                        placeLift = math.min(math.max(placeLift + direction * (placeConfig.liftStep or 0.05), 0.0), placeConfig.maxLift or 4.0)
+                        placeLift = math.min(math.max(placeLift + direction * lift, 0.0), placeConfig.maxLift or 4.0)
                     else
-                        placeDistance = math.min(math.max(placeDistance + direction * 0.25, placeConfig.minDistance or 1.0), placeConfig.reach or 15.0)
+                        placeDistance = math.min(math.max(placeDistance + direction * reach, placeConfig.minDistance or 1.0), placeConfig.reach or 15.0)
                     end
                 else
-                    local step = IsDisabledControlPressed(0, 36) and (placeConfig.coarseStep or 45.0) or (placeConfig.rotationStep or 5.0)
-                    placeHeading = placeHeading + direction * step
+                    turnPlacement(direction)
                 end
             end
         end
@@ -1177,6 +1230,10 @@ function FreePlaceModel(model, prompt)
         if IsDisabledControlJustReleased(0, 74) then
             wallSnap = not wallSnap
             placeLift = 0.0
+        end
+        if IsDisabledControlJustReleased(0, 45) then
+            placeAxis = AXIS_ORDER[placeAxis] or 'z'
+            SendUI('placement:axis', { axis = placeAxis })
         end
 
         updateFreePlace()
@@ -1356,6 +1413,10 @@ function ToggleDecorating()
             end
             PushDecoratingState()
         end
+        if IsDisabledControlJustReleased(0, 45) and freePlacing then
+            placeAxis = AXIS_ORDER[placeAxis] or 'z'
+            PushDecoratingState()
+        end
         if IsDisabledControlJustReleased(0, 26) and previewObject and DoesEntityExist(previewObject) then
             SetFreePlacing(not freePlacing)
             PushDecoratingState()
@@ -1399,6 +1460,8 @@ function ToggleDecorating()
             DisableControlAction(0, 174, true)
             DisableControlAction(0, 175, true)
             DisableControlAction(0, 74, true) -- H stays with the NUI wall snap
+            DisableControlAction(0, 45, true) -- R walks the rotation axis
+            DisableControlAction(0, 19, true) -- alt is the fine pass
             DisablePlayerFiring(cache.playerId, true)
 
 
@@ -1410,17 +1473,16 @@ function ToggleDecorating()
                     if up or down then
                         local direction = up and 1.0 or -1.0
                         if IsDisabledControlPressed(0, 21) then
+                            local lift, reach = liftSteps()
                             if groundFollow then
-                                placeLift = math.min(math.max(placeLift + direction * (placeConfig.liftStep or 0.05), 0.0),
+                                placeLift = math.min(math.max(placeLift + direction * lift, 0.0),
                                     placeConfig.maxLift or 4.0)
                             else
-                                placeDistance = math.min(math.max(placeDistance + direction * 0.25,
+                                placeDistance = math.min(math.max(placeDistance + direction * reach,
                                     placeConfig.minDistance or 1.0), placeConfig.reach or 15.0)
                             end
                         else
-                            local step = IsDisabledControlPressed(0, 36) and (placeConfig.coarseStep or 45.0)
-                                or (placeConfig.rotationStep or 5.0)
-                            placeHeading = placeHeading + direction * step
+                            turnPlacement(direction)
                         end
                     end
                 end
@@ -1445,7 +1507,6 @@ function ToggleDecorating()
                 local changed = Citizen.InvokeNative(0xEB2EDCA2, matrixBuffer:Buffer(), 'Editor1', Citizen.ReturnResultAnyway())
                 if changed then
                     ApplyGizmoMatrix(previewObject, matrixBuffer)
-                    if gridSnap then applyGridSnap(previewObject) end
                 end
             end
         end
@@ -1569,6 +1630,23 @@ end)
 RegisterNUICallback('furniture:cancel', function(_, cb)
     cb(1)
     CancelDecoration()
+end)
+
+RegisterNUICallback('furniture:rename', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' then return end
+
+    local id = tonumber(data.id)
+    if not id or not DecorationObjects[id] then return end
+
+    local name = type(data.name) == 'string' and data.name or nil
+    if not lib.callback.await('qbx_properties:callback:setDecorationLabel', false, id, name) then
+        lib.notify({ type = 'error', description = 'That name did not stick.' })
+        return
+    end
+
+    DecorationLabels[id] = (name and name ~= '') and name or nil
+    PushPlacedDecorations()
 end)
 
 RegisterNUICallback('furniture:remove', function(_, cb)
