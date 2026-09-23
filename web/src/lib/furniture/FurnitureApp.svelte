@@ -40,6 +40,7 @@
   let dropTarget = $state(null)
   let renamingGroup = $state(null)
   let movingPiece = $state(null)
+  let removing = $state(null)
 
   // only this viewer's folding and their still empty groups live here, never membership
   const storeKey = $derived(`qbxprops:groups:${furniture.propertyName ?? ''}`)
@@ -349,59 +350,87 @@
       <div class="placed scroll">
         {#each groups as group (group.name)}
           <div
-            class="group"
+            class="group-zone"
             class:over={dropTarget === group.name}
-            ondragover={(e) => { e.preventDefault(); dropTarget = group.name }}
-            ondragleave={() => { if (dropTarget === group.name) dropTarget = null }}
+            ondragover={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dropTarget = group.name }}
+            ondragleave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) dropTarget = null }}
             ondrop={(e) => { e.preventDefault(); onDrop(group.name) }}
             role="group"
           >
-            <button class="group-head" onclick={() => toggleGroup(group.name)}>
-              <i class="fa-solid {isOpen(group.name) ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
-              <span class="group-name">{group.label}</span>
-              <span class="group-count">{group.items.length}</span>
-            </button>
-
-            {#if group.name !== UNSORTED}
-              <button class="mini icon" title="Rename this group"
-                onclick={() => (renamingGroup = { from: group.name, value: group.name })} aria-label="Rename group">
-                <i class="fa-solid fa-pen"></i>
+            <div class="group">
+              <button class="group-head" onclick={() => toggleGroup(group.name)}>
+                <i class="fa-solid {isOpen(group.name) ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
+                <span class="group-name">{group.label}</span>
+                <span class="group-count">{group.items.length}</span>
               </button>
-              <button class="mini icon" title="Remove the group, keeping its furniture"
-                onclick={() => dissolveGroup(group)} aria-label="Remove group">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
-            {/if}
-          </div>
 
-          {#if isOpen(group.name)}
-            {#each group.items as item (item.id)}
-              <div
-                class="placed-row"
-                class:active={furniture.selected?.objectId === item.id}
-                class:lifted={dragging === item.id}
-                draggable="true"
-                ondragstart={() => (dragging = item.id)}
-                ondragend={() => { dragging = null; dropTarget = null }}
-                role="listitem"
-              >
-                <img src={item.image ?? imgSrc(item.model)} alt={item.label} loading="lazy" onerror={onImgError} />
-                <span class="placed-label" title={item.name ? `${item.label} (${item.name})` : item.label}>
-                  {item.label}{#if item.name}<span class="placed-name"> ({item.name})</span>{/if}
-                </span>
-                <button class="mini" title="Edit this piece" onclick={() => fetchNui('furniture:select', { id: item.id })}>Edit</button>
-                <button class="mini icon" title="Name this piece" onclick={() => startRename(item)} aria-label="Name this piece">
+              {#if group.name !== UNSORTED}
+                <button class="mini icon" data-tip="Rename this group"
+                  onclick={() => (renamingGroup = { from: group.name, value: group.name })} aria-label="Rename group">
                   <i class="fa-solid fa-pen"></i>
                 </button>
-                <button class="mini icon" title="Move to a group" onclick={() => (movingPiece = item)} aria-label="Move to a group">
-                  <i class="fa-solid fa-folder"></i>
+                <button class="mini icon" data-tip="Remove group, keep its furniture"
+                  onclick={() => dissolveGroup(group)} aria-label="Remove group">
+                  <i class="fa-solid fa-xmark"></i>
                 </button>
-                <button class="mini accent" title="Duplicate in place" onclick={() => fetchNui('furniture:clone', { id: item.id })}>Clone</button>
-              </div>
-            {:else}
-              <div class="group-empty">Drag furniture here</div>
-            {/each}
-          {/if}
+              {/if}
+            </div>
+
+            {#if isOpen(group.name)}
+              {#each group.items as item (item.id)}
+                <div
+                  class="placed-row"
+                  class:active={furniture.selected?.objectId === item.id}
+                  class:lifted={dragging === item.id}
+                  draggable="true"
+                  ondragstart={(e) => {
+                    dragging = item.id
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/plain', String(item.id))
+                  }}
+                  ondragend={() => { dragging = null; dropTarget = null }}
+                  role="listitem"
+                >
+                  <img src={item.image ?? imgSrc(item.model)} alt={item.label} loading="lazy" onerror={onImgError} draggable="false" />
+                  <span class="placed-label" title={item.name ? `${item.label} (${item.name})` : item.label}>
+                    {item.label}{#if item.name}<span class="placed-name"> ({item.name})</span>{/if}
+                  </span>
+
+                  <button class="mini icon" data-tip="Move this piece"
+                    onclick={() => fetchNui('furniture:select', { id: item.id })} aria-label="Move this piece">
+                    <i class="fa-solid fa-up-down-left-right"></i>
+                  </button>
+                  <button class="mini icon" data-tip="Name this piece"
+                    onclick={() => startRename(item)} aria-label="Name this piece">
+                    <i class="fa-solid fa-pen"></i>
+                  </button>
+                  <button class="mini icon" data-tip="Move to a group"
+                    onclick={() => (movingPiece = item)} aria-label="Move to a group">
+                    <i class="fa-solid fa-folder"></i>
+                  </button>
+                  {#if !item.item}
+                    <button class="mini icon accent" data-tip="Duplicate in place"
+                      onclick={() => fetchNui('furniture:clone', { id: item.id })} aria-label="Duplicate in place">
+                      <i class="fa-solid fa-clone"></i>
+                    </button>
+                  {/if}
+                  {#if item.item}
+                    <button class="mini icon" data-tip="Back to inventory"
+                      onclick={() => fetchNui('furniture:pickup', { id: item.id })} aria-label="Back to inventory">
+                      <i class="fa-solid fa-box-open"></i>
+                    </button>
+                  {:else}
+                    <button class="mini icon danger" data-tip="Remove this piece"
+                      onclick={() => (removing = item)} aria-label="Remove this piece">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  {/if}
+                </div>
+              {:else}
+                <div class="group-empty">Drag furniture here</div>
+              {/each}
+            {/if}
+          </div>
         {/each}
 
         {#if !furniture.placed.length}
@@ -424,6 +453,19 @@
       <div class="rename-actions">
         <button class="btn subtle" onclick={() => (renamingGroup = null)}>Cancel</button>
         <button class="btn" onclick={commitGroup}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if removing}
+  <div class="rename-veil">
+    <div class="rename">
+      <div class="rename-title">Remove {removing.name ? `${removing.label} (${removing.name})` : removing.label}?</div>
+      <div class="rename-note">This piece is gone for good.</div>
+      <div class="rename-actions">
+        <button class="btn subtle" onclick={() => (removing = null)}>Cancel</button>
+        <button class="btn danger" onclick={() => { fetchNui('furniture:remove', { id: removing.id }); removing = null }}>Remove</button>
       </div>
     </div>
   </div>
@@ -928,7 +970,7 @@
 
   .placed-row {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) auto auto auto;
+    grid-template-columns: 34px minmax(0, 1fr) repeat(4, auto);
     align-items: center;
     gap: 8px;
     padding: 6px 8px;
@@ -962,6 +1004,20 @@
     color: var(--dark-2);
   }
 
+  .group-zone {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  .group-zone.over {
+    outline: 1px dashed var(--blue);
+    outline-offset: -1px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
   .group {
     display: grid;
     grid-template-columns: 1fr auto auto;
@@ -969,11 +1025,6 @@
     gap: 4px;
     margin-top: 6px;
     border-radius: var(--radius-sm);
-  }
-
-  .group.over {
-    outline: 1px dashed var(--blue);
-    outline-offset: 2px;
   }
 
   .group-head {
@@ -1067,7 +1118,40 @@
   }
 
   .mini.icon {
+    position: relative;
+    padding: 5px 7px;
+  }
+
+  .mini.danger:hover {
+    color: #fff;
+    background: var(--red, #c92a2a);
+  }
+
+  .btn.danger {
+    background: var(--red, #c92a2a);
+  }
+
+  .rename-note {
+    font-size: 11px;
+    color: var(--dark-2);
+  }
+
+  /* the row is a tight strip of icons now, so each one says what it is on hover */
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
     padding: 4px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+    color: #fff;
+    background: var(--dark-8, #111);
+    border: 1px solid var(--dark-4);
+    border-radius: var(--radius-sm);
+    pointer-events: none;
+    z-index: 30;
   }
 
   .rename-veil {

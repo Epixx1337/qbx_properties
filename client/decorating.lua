@@ -380,6 +380,7 @@ function PushPlacedDecorations()
             label = labelFor(model),
             name = DecorationLabels[id],
             room = DecorationRooms[id],
+            item = item ~= nil,
             image = image,
         }
     end
@@ -571,25 +572,33 @@ function ConfirmDecoration()
     PushDecoratingState()
 end
 
-function RemoveSelectedDecoration()
-    local objectId = currentObjectId()
-    if not objectId then return end
+---@param id integer? defaults to whatever is selected
+function RemoveSelectedDecoration(id)
+    local objectId = id or currentObjectId()
+    if not objectId or not DecorationObjects[objectId] then return end
 
     clearOutline()
 
     local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:removeGardenDecoration' or 'qbx_properties:server:removeDecoration'
 
-    local extras = GetExtraSelectionIds()
-    for i = 1, #extras do
-        TriggerServerEvent(event, extras[i])
+    -- a row acts on itself, only a selection takes the rest of the group with it
+    if not id then
+        local extras = GetExtraSelectionIds()
+        for i = 1, #extras do
+            TriggerServerEvent(event, extras[i])
+        end
+        ClearExtraSelection()
     end
-    ClearExtraSelection()
 
     TriggerServerEvent(event, objectId)
-    discardPending()
-    previewObject = nil
-    currentlySelected = nil
-    lastMatrix = nil
+
+    if not id or objectId == currentObjectId() then
+        discardPending()
+        previewObject = nil
+        currentlySelected = nil
+        lastMatrix = nil
+    end
+
     PushDecoratingState()
 end
 
@@ -1784,9 +1793,9 @@ RegisterNUICallback('furniture:rename', function(data, cb)
     PushPlacedDecorations()
 end)
 
-RegisterNUICallback('furniture:remove', function(_, cb)
+RegisterNUICallback('furniture:remove', function(data, cb)
     cb(1)
-    RemoveSelectedDecoration()
+    RemoveSelectedDecoration(type(data) == 'table' and tonumber(data.id) or nil)
 end)
 
 AddEventHandler('onResourceStop', function(resource)
@@ -1918,19 +1927,23 @@ RegisterNUICallback('cart:checkout', function(_, cb)
     pushCart()
 end)
 
-RegisterNUICallback('furniture:pickup', function(_, cb)
+RegisterNUICallback('furniture:pickup', function(data, cb)
     cb(1)
-    local objectId = currentObjectId()
+    local objectId = type(data) == 'table' and tonumber(data.id) or currentObjectId()
     if not objectId or not DecorationItems[objectId] then return end
 
     clearOutline()
     TriggerServerEvent('qbx_properties:server:pickupDecoration', objectId)
-    discardPending()
-    previewObject = nil
-    currentlySelected = nil
-    lastMatrix = nil
-    SetCursorMode(false)
-    SetUIFocus(true)
+
+    if objectId == currentObjectId() then
+        discardPending()
+        previewObject = nil
+        currentlySelected = nil
+        lastMatrix = nil
+        SetCursorMode(false)
+        SetUIFocus(true)
+    end
+
     PushDecoratingState()
 end)
 
