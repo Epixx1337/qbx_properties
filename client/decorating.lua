@@ -178,7 +178,6 @@ local function pushPlacementMode()
     })
 end
 
--- the doorbell only fixes to a leaf the raycast actually lands on, so the HUD says when it will
 local function updateDoorAim()
     if not placeDoors then return end
 
@@ -581,7 +580,6 @@ function RemoveSelectedDecoration(id)
 
     local event = CurrentGardenId and not CurrentPropertyId and 'qbx_properties:server:removeGardenDecoration' or 'qbx_properties:server:removeDecoration'
 
-    -- a row acts on itself, only a selection takes the rest of the group with it
     if not id then
         local extras = GetExtraSelectionIds()
         for i = 1, #extras do
@@ -865,7 +863,7 @@ local function placeTarget()
     local cp = math.cos(pitch)
     local dir = vec3(-math.sin(yaw) * cp, math.cos(yaw) * cp, math.sin(pitch))
 
-    local reach = math.min(placeConfig.reach or 15.0, sharedConfig.placementReach)
+    local reach = math.min(placeConfig.reach or 15.0, sharedConfig.placementReach or 15.0)
     local dest = camPos + dir * reach
 
     local probe = StartExpensiveSynchronousShapeTestLosProbe(
@@ -877,7 +875,7 @@ local function placeTarget()
 
     local pedCoords = GetEntityCoords(cache.ped)
     local offset = point - pedCoords
-    local limit = sharedConfig.placementReach - 0.5
+    local limit = (sharedConfig.placementReach or 15.0) - 0.5
 
     if #(offset) > limit then
         return pedCoords + offset / #(offset) * limit, false
@@ -899,7 +897,6 @@ local function updateFreePlace()
     local target, onSurface, surface, normal = placeTarget()
     placeSurface = surface
 
-    -- against a wall the piece lies flat on the surface it is aimed at, lens pointing back out of it
     if wallSnap and onSurface and normal and math.abs(normal.z) < 0.7 then
         local _, max = GetModelDimensions(GetEntityModel(previewObject))
         local point = target + normal * max.y
@@ -1028,9 +1025,7 @@ end
 ---@return integer? id, integer? entity
 local AIM_REACH <const> = 25.0
 
--- a shape test only finds a piece the engine agrees is solid, which left our own props
--- unselectable even though their bounds match the base game ones byte for byte. The editor only
--- ever wants the piece being looked at, so the ray is tested against each piece's own box
+-- a shape test skips our own props even with base game bounds, so aim at each piece's own box
 ---@param origin vector3
 ---@param dir vector3 normalised
 ---@param entity integer
@@ -1370,7 +1365,6 @@ function FreePlaceModel(model, prompt, doors)
     return vec4(coords.x, coords.y, coords.z, heading), placeSurface
 end
 
--- walking belongs to world mode, not just to carrying a piece, otherwise tab leaves you rooted
 function RefreshDecoratingMobility()
     if not IsDecorating then return end
     SetPlacementMobility(not cursorMode and not freecamMoving)

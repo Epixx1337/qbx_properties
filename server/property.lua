@@ -208,7 +208,6 @@ lib.callback.register('qbx_properties:callback:setDecorationLabel', function(sou
     return writeDecorationText(source, decorationId, 'label', label)
 end)
 
--- filing several pieces into a room at once, so a drag of a whole group is one round trip
 lib.callback.register('qbx_properties:callback:setDecorationRoom', function(source, ids, room)
     if type(ids) ~= 'table' then ids = { ids } end
 
@@ -969,7 +968,7 @@ end)
 ---@param id integer?
 ---@return table
 local function lensCam(model, coords, heading, label, id)
-    local lens = sharedConfig.security and sharedConfig.security.lens[model]
+    local lens = sharedConfig.security and (sharedConfig.security.lens or {})[model]
     local offset = lens and lens.offset or vec3(0.0, 0.0, 0.0)
 
     local rad = math.rad(heading)
@@ -1355,7 +1354,6 @@ local function registerGarage(propertyId, name, garage)
     exports.qbx_garages:RegisterGarage(garageName, {
         label = name,
         vehicleType = 'car',
-        -- the garage belongs to the house, so everyone holding keys shares what is parked in it
         shared = true,
         accessPoints = accessPoints,
         canAccess = canAccess,
@@ -1662,13 +1660,13 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
             return
         end
     end
-    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > sharedConfig.placementReach then return end
+    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > (sharedConfig.placementReach or 15.0) then return end
 
     local anchor = property.building and GetRoomCoords(property.building, property.floor, property.room)
     local furnitureAnchor = GetFurnitureAnchor(property)
     local storedCoords = furnitureAnchor and UnrotateOffset(furnitureAnchor, coords) or coords
 
-    if furnitureAnchor and #(storedCoords) > sharedConfig.interiorRadius then
+    if furnitureAnchor and #(storedCoords) > (sharedConfig.interiorRadius or 30.0) then
         exports.qbx_core:Notify(playerSource, 'That is outside the property.', 'error')
         return
     end
@@ -1828,8 +1826,9 @@ function GetCameraLimit(property)
     local security = sharedConfig.security
     if not security then return 0 end
 
-    local base = property.building and security.cameras.apartment
-        or security.cameras[property.size or sharedConfig.defaultPropertySize]
+    local cameras = security.cameras or {}
+    local base = property.building and cameras.apartment
+        or cameras[property.size or sharedConfig.defaultPropertySize]
         or 1
     local tier = GetSecurityTier and GetSecurityTier(property.id) or 0
     return base + tier * (security.camerasPerTier or 0)

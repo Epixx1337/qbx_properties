@@ -16,8 +16,7 @@ local function sameModel(a, b)
     return a % 4294967296 == b % 4294967296
 end
 
--- a dynamic interior swaps the door for a fresh entity as it loads, so the bell is re-hung
--- against whatever door is there now rather than once
+-- a dynamic interior swaps the door for a fresh entity, so re-hang against whatever is there now
 ---@param entry table
 ---@param object integer
 ---@return boolean
@@ -131,8 +130,6 @@ CreateThread(function()
             end
         end
 
-        -- a door being swapped in should not leave a gap you can see, so watch it closely
-        -- only while one is actually in range
         Wait(near and 500 or 2000)
     end
 end)
@@ -177,8 +174,7 @@ function GetCameraHeadOwner(entity)
     return headOwner[entity]
 end
 
--- a camera on a wall lies on its side, so its own up axis points out along the lens and turning
--- about it would roll the picture. A pan is always about the world vertical
+-- a wall mounted camera lies on its side, so its own up axis is the lens: pan about the world vertical
 ---@param decorationId integer
 local function applyHead(decorationId)
     local head = heads[decorationId]
@@ -192,7 +188,6 @@ local function applyHead(decorationId)
     local pivot = (security.pan and security.pan.pivot) or 0.0
     local position = coords
 
-    -- the dome turns about its own centre, otherwise it swings off the bracket like a door
     if pan ~= 0.0 and pivot ~= 0.0 then
         local centre = GetOffsetFromEntityInWorldCoords(base, 0.0, 0.0, pivot)
         local arm = coords - centre
@@ -205,8 +200,6 @@ local function applyHead(decorationId)
     SetEntityRotation(head, rot.x, rot.y, (rot.z + pan) % 360.0, 2, false)
 end
 
--- the dome and the mount are separate props sharing an origin, so panning turns the dome
--- while the bracket stays on the wall
 ---@param decorationId integer
 ---@param pan number
 function SetCameraPan(decorationId, pan)
@@ -250,7 +243,6 @@ AddEventHandler('qbx_properties:client:decorationSpawned', function(decorationId
     SetCameraPan(decorationId, pan)
 end)
 
--- the dome is not attached, so it follows its mount from here instead
 CreateThread(function()
     while true do
         local any = false

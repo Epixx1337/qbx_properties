@@ -1136,7 +1136,6 @@
     color: var(--dark-2);
   }
 
-  /* the row is a tight strip of icons now, so each one says what it is on hover */
   [data-tip]:hover::after {
     content: attr(data-tip);
     position: absolute;

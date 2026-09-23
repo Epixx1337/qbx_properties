@@ -187,7 +187,6 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
         DisableAllControlActions(0)
         HideHudAndRadarThisFrame()
 
-        -- the NUI holds keyboard focus here, so the arrows arrive through doorcam:turn
         if point.id and doorcamTurn ~= 0 then
             local turned = math.max(-limit, math.min(limit, pan + doorcamTurn * step * GetFrameTime() * 12.0))
 

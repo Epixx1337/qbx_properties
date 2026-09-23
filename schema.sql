@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS `properties_decorations` (
     `coords` JSON NOT NULL,
     `rotation` JSON NOT NULL,
     `stash_slot` INT DEFAULT NULL,
+    `label` VARCHAR(32) DEFAULT NULL,
+    `room` VARCHAR(32) DEFAULT NULL,
     `camera_pan` FLOAT NOT NULL DEFAULT 0,
     `tint` INT DEFAULT NULL,
     `garden` TINYINT(1) NOT NULL DEFAULT 0,
@@ -94,6 +96,8 @@ CREATE TABLE IF NOT EXISTS `properties_apartment_decorations` (
     `coords` JSON NOT NULL, /* stored relative to the room anchor so it can be restored into any room */
     `rotation` JSON NOT NULL, /* heading is relative to the room anchor heading */
     `stash_slot` INT DEFAULT NULL,
+    `label` VARCHAR(32) DEFAULT NULL,
+    `room` VARCHAR(32) DEFAULT NULL,
     `camera_pan` FLOAT NOT NULL DEFAULT 0,
     `tint` INT DEFAULT NULL,
     `item` VARCHAR(100) DEFAULT NULL,

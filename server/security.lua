@@ -208,7 +208,7 @@ lib.callback.register('qbx_properties:callback:placeDoorbell', function(source, 
     if not property or not HasPropertyAccess(player.PlayerData.citizenid, property, 'furniture') then return false end
 
     local ped = GetEntityCoords(GetPlayerPed(source))
-    if #(ped - coords) > sharedConfig.placementReach then return false end
+    if #(ped - coords) > (sharedConfig.placementReach or 15.0) then return false end
     if not nearADoor(property, coords) then
         exports.qbx_core:Notify(source, 'The doorbell has to go by one of your doors.', 'error')
         return false

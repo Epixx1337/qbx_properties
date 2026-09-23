@@ -182,7 +182,7 @@ RegisterNetEvent('qbx_properties:server:addGardenDecoration', function(hash, coo
             return
         end
     end
-    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > sharedConfig.placementReach then return end
+    if #(GetEntityCoords(GetPlayerPed(playerSource)) - coords) > (sharedConfig.placementReach or 15.0) then return end
 
     tint = ToId(tint)
     if tint and (tint < 1 or tint > 31 or not (GetFurnitureSpecs()[hash] or {}).tint) then tint = nil end

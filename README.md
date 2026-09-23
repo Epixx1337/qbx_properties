@@ -318,6 +318,45 @@ How keys move around:
 
 Enabling this on a live server: every current owner and tenant receives their first key on next login, and anyone who only had access-list rights needs a key handed to them before the door opens for them again.
 
+## Security cameras and doorbells
+
+Both are physical props you place yourself, and both are watched from the **Cameras** tab of the
+housing tablet.
+
+**The doorbell** is fitted to a door rather than configured as a coordinate. Stand by one of your
+own doors and pick *Place doorbell* from the property radial, aim it where you want it and click.
+Aiming at the door leaf itself fixes it to that leaf, so it swings with the door; the placement
+HUD says *Fixes to this door* or *Not on a door* as you aim, so put it on the frame instead if you
+would rather it stayed still. Once fitted it carries its own target to move or remove it, offered
+to anyone the property lets edit furniture. Visitors get a *Ring doorbell* option, and the ring
+shows up in the tablet with the caller's feed.
+
+**Cameras** are ordinary furniture from the Security category, so they are placed, moved, named and
+grouped like anything else. How many a property may hold comes from its size and its security
+upgrade tier. In the feed, `←` and `→` pan the camera: the dome turns on its mount while the
+bracket stays on the wall, and where you leave it is saved, so the camera keeps looking that way
+afterwards. `G` closes the feed.
+
+Give a camera a name with the pen button in the furniture list and the tablet shows that name
+instead of *Camera 2*, which is worth doing once you have more than one.
+
+Everything lives under `security` in `config/shared.lua`:
+
+| Option | What it does |
+| --- | --- |
+| `doorbellModel` / `cameraModel` | props used for the doorbell and the camera |
+| `cameraHeadModel` | the camera's dome, spawned onto the mount and turned by the pan. Setting it to `nil` leaves the camera a single fixed prop |
+| `lens` | per model: `offset` of the viewpoint from the prop origin, `facing` degrees the lens looks relative to the prop's heading, and `pitch`. Move `offset` further out if a prop films its own casing |
+| `doorbellRange` | how close to a door you must stand to fit a doorbell |
+| `cameras` | cameras a property holds before upgrades, keyed by property size, plus `apartment` |
+| `camerasPerTier` | extra cameras each security upgrade tier grants |
+| `pan.limit` | how far a camera turns either way from its mounted heading |
+| `pan.step` | how fast it turns while an arrow is held |
+| `pan.pivot` | how far up the piece the dome sits, so it spins on itself instead of swinging out of its bracket. Only change this alongside a different `cameraHeadModel` |
+
+Replacing either prop means replacing its `lens` entry too, since the viewpoint is measured from
+the prop's own origin.
+
 ## Property photos
 
 Every property carries a photo gallery shown on market cards, listings and the realtor panel. Photos come from two flows:
@@ -408,7 +447,13 @@ A shell positioned with the gizmo is the interior itself: entering puts the owne
 
 ## Editor controls
 
-While decorating: `E` toggles between the catalog and the world, **hold `F` to fly the freecam**, `Alt` selects a placed object. With an object held: `T`/`R` switch the gizmo between move and rotate, `L` switches world/local axes, `G` snaps to the ground, `H` snaps to the nearest wall, `N` snaps modular pieces together, `Enter` confirms. `Backspace` exits.
+While decorating: `Tab` hands control between the catalog and the world, **hold `F` to fly the freecam**. In the world the crosshair lights up on whatever piece you are looking at; click it to pick that piece up.
+
+Carrying a piece, it follows where you look: `Scroll` turns it, `R` walks the axis the scroll turns (yaw, pitch, roll), `Ctrl` + `Scroll` turns in coarse steps and `Alt` + `Scroll` in fine ones, `Shift` + `Scroll` raises it or pushes it further away, `G` follows the surface under it, `X` snaps to the grid, `H` lays it flat against whatever you are aiming at, `N` snaps modular pieces together, `Click` puts it down, `Backspace` exits.
+
+Hand a piece to the cursor with `Tab` for the gizmo instead: `T`/`R` switch between move and rotate, `L` switches world/local axes. The grid does not quantise the gizmo, so that is where fine adjustment lives.
+
+In the placed list each piece has a row of buttons: move it, name it, file it into a group, duplicate it, and remove it. A piece that came out of an inventory item offers putting it back instead. Groups are made with **New group**, fold away, and take furniture by dragging a row onto them or through the folder button.
 
 ## Regenerating catalog images
 
