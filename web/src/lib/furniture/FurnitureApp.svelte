@@ -32,6 +32,11 @@
   let mode = $state('catalog')
   let placedSearch = $state('')
   let renaming = $state(null)
+  let renameInput = $state(null)
+
+  $effect(() => {
+    if (renaming && renameInput) renameInput.focus()
+  })
 
   function startRename(item) {
     renaming = { id: item.id, value: item.name ?? '' }
@@ -253,7 +258,7 @@
         placeholder="Gun Storage"
         bind:value={renaming.value}
         onkeydown={renameKey}
-        autofocus
+        bind:this={renameInput}
       />
       <div class="rename-actions">
         <button class="btn subtle" onclick={() => (renaming = null)}>Cancel</button>
@@ -762,6 +767,7 @@
   .rename-veil {
     position: fixed;
     inset: 0;
+    pointer-events: auto;
     display: grid;
     place-items: center;
     background: rgba(0, 0, 0, 0.55);

@@ -136,6 +136,8 @@ export const placement = $state({
   capture: false,
   flying: false,
   tour: false,
+  freePlace: false,
+  mode: null,
 })
 
 export const preview = $state({

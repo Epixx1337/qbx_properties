@@ -1,5 +1,8 @@
 <script>
   import { placement } from './store.svelte.js'
+
+  const AXES = { z: 'Yaw', x: 'Pitch', y: 'Roll' }
+  const axisName = $derived(AXES[placement.mode?.axis] ?? 'Yaw')
 </script>
 
 {#if placement.photo}
@@ -47,11 +50,35 @@
       <span><kbd>E</kbd> Take photo</span>
     {:else if placement.capture}
       <span><kbd>E</kbd> Capture</span>
+    {:else if placement.freePlace}
+      <span><kbd>LMB</kbd> Place</span>
+      <span><kbd>Scroll</kbd> Turn {axisName}</span>
+      <span><kbd>R</kbd> Axis</span>
+      <span><kbd>Ctrl</kbd>+<kbd>Scroll</kbd> Coarse</span>
+      <span><kbd>Alt</kbd>+<kbd>Scroll</kbd> Fine</span>
+      <span><kbd>Shift</kbd>+<kbd>Scroll</kbd> Raise / distance</span>
+      <span><kbd>G</kbd> Follow surface</span>
+      <span><kbd>X</kbd> Grid</span>
+      <span><kbd>H</kbd> Flat to wall</span>
     {:else}
       <span><kbd>LMB</kbd> Select</span>
     {/if}
     <span><kbd>Esc</kbd> Cancel</span>
   </div>
+
+  {#if placement.freePlace && placement.mode}
+    <div class="modes">
+      <span class="chip" class:on={placement.mode.grid}>Grid {placement.mode.grid ? 'on' : 'off'}</span>
+      <span class="chip" class:on={placement.mode.wall}>Wall {placement.mode.wall ? 'on' : 'off'}</span>
+      <span class="chip" class:on={placement.mode.ground}>Surface {placement.mode.ground ? 'on' : 'off'}</span>
+      <span class="chip on">{axisName}</span>
+      {#if placement.mode.door !== undefined && placement.mode.door !== null}
+        <span class="chip" class:on={placement.mode.door}>
+          {placement.mode.door ? 'Fixes to this door' : 'Not on a door'}
+        </span>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -115,5 +142,25 @@
   .count {
     color: var(--blue-light);
     font-weight: 500;
+  }
+
+  .modes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .chip {
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--dark-2);
+    background: var(--dark-6);
+    border-radius: var(--radius-sm);
+  }
+
+  .chip.on {
+    color: #fff;
+    background: var(--blue);
   }
 </style>

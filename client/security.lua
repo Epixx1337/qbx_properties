@@ -167,6 +167,8 @@ function SetCameraPan(decorationId, pan)
     if not head or not base or not DoesEntityExist(base) then return end
 
     headPan[decorationId] = pan
+    -- re-attaching an already attached entity keeps the old offset, so it has to come off first
+    if IsEntityAttached(head) then DetachEntity(head, false, false) end
     AttachEntityToEntity(head, base, 0, 0.0, 0.0, 0.0, 0.0, 0.0, pan, false, false, false, false, 2, true)
 end
 
@@ -233,7 +235,12 @@ function PlaceDoorbell(propertyId)
 
     local prompt = target.replacing and ('Move the doorbell of %s'):format(target.name)
         or ('Fit a doorbell at %s'):format(target.name)
-    local result, surface = FreePlaceModel(target.model, prompt)
+    local leaves = {}
+    for i = 1, #(target.doors or {}) do
+        leaves[target.doors[i].model % 4294967296] = true
+    end
+
+    local result, surface = FreePlaceModel(target.model, prompt, leaves)
 
     placing = false
 

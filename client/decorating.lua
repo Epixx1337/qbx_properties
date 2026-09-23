@@ -141,6 +141,8 @@ local wallSnap = false
 local placePitch = 0.0
 local placeRoll = 0.0
 local placeAxis = 'z'
+local placeDoors
+local onDoor = false
 
 local AXIS_ORDER <const> = { z = 'x', x = 'y', y = 'z' }
 
@@ -164,6 +166,31 @@ local function liftSteps()
         return fine, fine * 5
     end
     return placeConfig.liftStep or 0.05, 0.25
+end
+
+local function pushPlacementMode()
+    SendUI('placement:mode', {
+        grid = gridSnap,
+        wall = wallSnap,
+        ground = groundFollow,
+        axis = placeAxis,
+        door = placeDoors ~= nil and onDoor or nil,
+    })
+end
+
+-- the doorbell only fixes to a leaf the raycast actually lands on, so the HUD says when it will
+local function updateDoorAim()
+    if not placeDoors then return end
+
+    local hit = false
+    if placeSurface and placeSurface ~= 0 and DoesEntityExist(placeSurface) then
+        hit = placeDoors[GetEntityModel(placeSurface) % 4294967296] == true
+    end
+
+    if hit ~= onDoor then
+        onDoor = hit
+        pushPlacementMode()
+    end
 end
 
 ---@param direction number
@@ -1155,7 +1182,11 @@ local SPC_LEAVE_CAMERA_CONTROL_ON <const> = 256
 ---@param model string
 ---@param prompt string
 ---@return vector4?
-function FreePlaceModel(model, prompt)
+---@param model string
+---@param prompt string
+---@param doors table? model hashes the piece may fix itself to
+---@return vector4?, integer?
+function FreePlaceModel(model, prompt, doors)
     if IsDecorating or previewObject then return end
 
     local hash = GetHashKey(model)
@@ -1182,10 +1213,16 @@ function FreePlaceModel(model, prompt)
     placePitch = 0.0
     placeRoll = 0.0
     placeAxis = 'z'
+    placeDoors = doors
+    onDoor = false
 
     SetCursorMode(false)
     SetUIFocus(false)
-    SendUI('placement:show', { prompt = prompt, freePlace = true })
+    SendUI('placement:show', {
+        prompt = prompt,
+        freePlace = true,
+        mode = { grid = gridSnap, wall = wallSnap, ground = groundFollow, axis = placeAxis },
+    })
 
     local confirmed, cancelled = false, false
     local started = GetGameTimer()
@@ -1225,18 +1262,24 @@ function FreePlaceModel(model, prompt)
         if IsDisabledControlJustReleased(0, 47) then
             groundFollow = not groundFollow
             placeLift = 0.0
+            pushPlacementMode()
         end
-        if IsDisabledControlJustReleased(0, 73) then gridSnap = not gridSnap end
+        if IsDisabledControlJustReleased(0, 73) then
+            gridSnap = not gridSnap
+            pushPlacementMode()
+        end
         if IsDisabledControlJustReleased(0, 74) then
             wallSnap = not wallSnap
             placeLift = 0.0
+            pushPlacementMode()
         end
         if IsDisabledControlJustReleased(0, 45) then
             placeAxis = AXIS_ORDER[placeAxis] or 'z'
-            SendUI('placement:axis', { axis = placeAxis })
+            pushPlacementMode()
         end
 
         updateFreePlace()
+        updateDoorAim()
         if gridConfig.enabled then drawFurnitureGrid(GetEntityCoords(previewObject)) end
 
         if IsDisabledControlJustReleased(0, 24) and GetGameTimer() - started > 250 then confirmed = true end
@@ -1254,6 +1297,7 @@ function FreePlaceModel(model, prompt)
     SetCursorMode(false)
     SetUIFocus(false)
 
+    placeDoors = nil
     if cancelled then return end
     return vec4(coords.x, coords.y, coords.z, heading), placeSurface
 end

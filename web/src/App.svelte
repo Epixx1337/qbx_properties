@@ -262,6 +262,12 @@
     placement.capture = data?.capture ?? false
     placement.flying = data?.flying ?? false
     placement.tour = data?.tour ?? false
+    placement.freePlace = data?.freePlace ?? false
+    placement.mode = data?.mode ?? null
+  })
+
+  onMessage('placement:mode', (data) => {
+    placement.mode = data ?? null
   })
 
   onMessage('placement:hide', () => { placement.active = false })
