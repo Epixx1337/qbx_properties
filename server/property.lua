@@ -100,7 +100,7 @@ function GetBuildingLayout(buildingKey)
     return building and building.layout or buildingKey
 end
 
-local DECORATION_COLUMNS <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, `camera_pan`, `label`, (`lock_pin` IS NOT NULL) AS locked'
+local DECORATION_COLUMNS <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, `camera_pan`, `label`, `room`, (`lock_pin` IS NOT NULL) AS locked'
 local DECORATION_COLUMNS_LEGACY <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`'
 
 ---@param query string with %s for the column list
@@ -160,20 +160,31 @@ end
 ---@param decorationId integer
 ---@param label string?
 ---@return boolean
-local function writeDecorationLabel(source, decorationId, label)
+local DECORATION_TEXT_COLUMNS <const> = { label = true, room = true }
+
+---@param value any
+---@return string?
+local function tidyText(value)
+    if value == nil then return end
+
+    value = tostring(value):gsub('%s+', ' ')
+    value = value:match('^%s*(.-)%s*$')
+    if value == '' then return end
+
+    return #value > 32 and value:sub(1, 32) or value
+end
+
+---@param source number
+---@param decorationId integer
+---@param column 'label'|'room'
+---@param value string?
+---@return boolean
+local function writeDecorationText(source, decorationId, column, value)
     local player = exports.qbx_core:GetPlayer(source)
     decorationId = ToId(decorationId)
-    if not player or not decorationId then return false end
+    if not player or not decorationId or not DECORATION_TEXT_COLUMNS[column] then return false end
 
-    if label ~= nil then
-        label = tostring(label):gsub('%s+', ' ')
-        label = label:match('^%s*(.-)%s*$')
-        if label == '' then
-            label = nil
-        elseif #label > 32 then
-            label = label:sub(1, 32)
-        end
-    end
+    value = tidyText(value)
 
     local citizenId = player.PlayerData.citizenid
     local row = MySQL.single.await('SELECT property_id FROM properties_decorations WHERE id = ?', {decorationId})
@@ -182,19 +193,31 @@ local function writeDecorationLabel(source, decorationId, label)
         local property = MySQL.single.await('SELECT id, owner, keyholders, building, type, group_name, tenant FROM properties WHERE id = ?', {row.property_id})
         if not property or not HasPropertyAccess(citizenId, property, 'furniture') then return false end
 
-        MySQL.update.await('UPDATE properties_decorations SET label = ? WHERE id = ?', {label, decorationId})
+        MySQL.update.await(('UPDATE properties_decorations SET `%s` = ? WHERE id = ?'):format(column), {value, decorationId})
         return true
     end
 
     local owned = MySQL.scalar.await('SELECT citizenid FROM properties_apartment_decorations WHERE id = ?', {decorationId})
     if owned ~= citizenId then return false end
 
-    MySQL.update.await('UPDATE properties_apartment_decorations SET label = ? WHERE id = ?', {label, decorationId})
+    MySQL.update.await(('UPDATE properties_apartment_decorations SET `%s` = ? WHERE id = ?'):format(column), {value, decorationId})
     return true
 end
 
 lib.callback.register('qbx_properties:callback:setDecorationLabel', function(source, decorationId, label)
-    return writeDecorationLabel(source, decorationId, label)
+    return writeDecorationText(source, decorationId, 'label', label)
+end)
+
+-- filing several pieces into a room at once, so a drag of a whole group is one round trip
+lib.callback.register('qbx_properties:callback:setDecorationRoom', function(source, ids, room)
+    if type(ids) ~= 'table' then ids = { ids } end
+
+    local moved = 0
+    for i = 1, #ids do
+        if writeDecorationText(source, ids[i], 'room', room) then moved = moved + 1 end
+    end
+
+    return moved
 end)
 
 ---@param property table needs id, property_name, owner, building, type, stash_options

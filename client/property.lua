@@ -15,6 +15,7 @@ end)
 
 DecorationObjects = {}
 DecorationLabels = {}
+DecorationRooms = {}
 local properties = {}
 local insideProperty = false
 local isPropertyRental = false

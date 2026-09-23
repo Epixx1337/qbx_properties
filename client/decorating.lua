@@ -379,6 +379,7 @@ function PushPlacedDecorations()
             model = model,
             label = labelFor(model),
             name = DecorationLabels[id],
+            room = DecorationRooms[id],
             image = image,
         }
     end
@@ -1742,6 +1743,28 @@ end)
 RegisterNUICallback('furniture:cancel', function(_, cb)
     cb(1)
     CancelDecoration()
+end)
+
+RegisterNUICallback('furniture:setRoom', function(data, cb)
+    cb(1)
+    if type(data) ~= 'table' or type(data.ids) ~= 'table' then return end
+
+    local ids = {}
+    for i = 1, #data.ids do
+        local id = tonumber(data.ids[i])
+        if id and DecorationObjects[id] then ids[#ids + 1] = id end
+    end
+
+    if #ids == 0 then return end
+
+    local room = type(data.room) == 'string' and data.room ~= '' and data.room or nil
+    if lib.callback.await('qbx_properties:callback:setDecorationRoom', false, ids, room) == 0 then
+        lib.notify({ type = 'error', description = 'Those pieces did not move.' })
+        return
+    end
+
+    for i = 1, #ids do DecorationRooms[ids[i]] = room end
+    PushPlacedDecorations()
 end)
 
 RegisterNUICallback('furniture:rename', function(data, cb)

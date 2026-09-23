@@ -32,6 +32,122 @@
   let mode = $state('catalog')
   let placedSearch = $state('')
   const AXES = { z: 'Yaw', x: 'Pitch', y: 'Roll' }
+  const UNSORTED = '\u0000unsorted'
+
+  let collapsed = $state(new Set())
+  let extraGroups = $state([])
+  let dragging = $state(null)
+  let dropTarget = $state(null)
+  let renamingGroup = $state(null)
+  let movingPiece = $state(null)
+
+  // only this viewer's folding and their still empty groups live here, never membership
+  const storeKey = $derived(`qbxprops:groups:${furniture.propertyName ?? ''}`)
+
+  function loadGroupState() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(storeKey) ?? '{}')
+      collapsed = new Set(Array.isArray(raw.collapsed) ? raw.collapsed : [])
+      extraGroups = Array.isArray(raw.empty) ? raw.empty : []
+    } catch {
+      collapsed = new Set()
+      extraGroups = []
+    }
+  }
+
+  function saveGroupState() {
+    try {
+      localStorage.setItem(storeKey, JSON.stringify({ collapsed: [...collapsed], empty: extraGroups }))
+    } catch {}
+  }
+
+  $effect(() => {
+    storeKey
+    loadGroupState()
+  })
+
+  const searching = $derived(placedSearch.trim().length > 0)
+
+  const groups = $derived.by(() => {
+    const byName = new Map()
+    const add = (name) => {
+      if (!byName.has(name)) byName.set(name, [])
+      return byName.get(name)
+    }
+
+    for (const name of extraGroups) add(name)
+    for (const item of placedItems) add(item.room || UNSORTED).push(item)
+
+    const named = [...byName.entries()]
+      .filter(([name]) => name !== UNSORTED)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+    const loose = byName.get(UNSORTED) ?? []
+
+    const out = named.map(([name, items]) => ({ name, label: name, items }))
+    if (loose.length || !out.length) out.push({ name: UNSORTED, label: 'Unsorted', items: loose })
+    return out
+  })
+
+  function isOpen(name) {
+    return searching || !collapsed.has(name)
+  }
+
+  function toggleGroup(name) {
+    if (searching) return
+    const next = new Set(collapsed)
+    next.has(name) ? next.delete(name) : next.add(name)
+    collapsed = next
+    saveGroupState()
+  }
+
+  function fileInto(ids, name) {
+    if (!ids.length) return
+    fetchNui('furniture:setRoom', { ids, room: name === UNSORTED ? '' : name })
+    if (name !== UNSORTED) extraGroups = extraGroups.filter((g) => g !== name)
+    saveGroupState()
+  }
+
+  function createGroup() {
+    renamingGroup = { from: null, value: '' }
+  }
+
+  function commitGroup() {
+    if (!renamingGroup) return
+    const name = renamingGroup.value.trim().slice(0, 32)
+    const from = renamingGroup.from
+    renamingGroup = null
+    if (!name || name === from) return
+
+    if (from) {
+      const moving = (groups.find((g) => g.name === from)?.items ?? []).map((i) => i.id)
+      extraGroups = extraGroups.filter((g) => g !== from)
+      if (moving.length) fileInto(moving, name)
+      else if (!extraGroups.includes(name)) extraGroups = [...extraGroups, name]
+    } else if (!groups.some((g) => g.name === name) && !extraGroups.includes(name)) {
+      extraGroups = [...extraGroups, name]
+    }
+    saveGroupState()
+  }
+
+  function groupKey(event) {
+    event.stopPropagation()
+    if (event.key === 'Enter') commitGroup()
+    else if (event.key === 'Escape') renamingGroup = null
+  }
+
+  function dissolveGroup(group) {
+    const ids = group.items.map((i) => i.id)
+    extraGroups = extraGroups.filter((g) => g !== group.name)
+    if (ids.length) fileInto(ids, UNSORTED)
+    saveGroupState()
+  }
+
+  function onDrop(name) {
+    const id = dragging
+    dragging = null
+    dropTarget = null
+    if (id != null) fileInto([id], name)
+  }
 
   let renaming = $state(null)
   let renameInput = $state(null)
@@ -231,24 +347,106 @@
       </div>
 
       <div class="placed scroll">
-        {#each placedItems as item (item.id)}
-          <div class="placed-row" class:active={furniture.selected?.objectId === item.id}>
-            <img src={item.image ?? imgSrc(item.model)} alt={item.label} loading="lazy" onerror={onImgError} />
-            <span class="placed-label" title={item.name ? `${item.label} (${item.name})` : item.label}>
-              {item.label}{#if item.name}<span class="placed-name"> ({item.name})</span>{/if}
-            </span>
-            <button class="mini" title="Edit this piece" onclick={() => fetchNui('furniture:select', { id: item.id })}>Edit</button>
-            <button class="mini icon" title="Name this piece" onclick={() => startRename(item)} aria-label="Name this piece">
-              <i class="fa-solid fa-pen"></i>
+        {#each groups as group (group.name)}
+          <div
+            class="group"
+            class:over={dropTarget === group.name}
+            ondragover={(e) => { e.preventDefault(); dropTarget = group.name }}
+            ondragleave={() => { if (dropTarget === group.name) dropTarget = null }}
+            ondrop={(e) => { e.preventDefault(); onDrop(group.name) }}
+            role="group"
+          >
+            <button class="group-head" onclick={() => toggleGroup(group.name)}>
+              <i class="fa-solid {isOpen(group.name) ? 'fa-chevron-down' : 'fa-chevron-right'}"></i>
+              <span class="group-name">{group.label}</span>
+              <span class="group-count">{group.items.length}</span>
             </button>
-            <button class="mini accent" title="Duplicate in place" onclick={() => fetchNui('furniture:clone', { id: item.id })}>Clone</button>
+
+            {#if group.name !== UNSORTED}
+              <button class="mini icon" title="Rename this group"
+                onclick={() => (renamingGroup = { from: group.name, value: group.name })} aria-label="Rename group">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              <button class="mini icon" title="Remove the group, keeping its furniture"
+                onclick={() => dissolveGroup(group)} aria-label="Remove group">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            {/if}
           </div>
-        {:else}
-          <div class="empty">Nothing placed here yet</div>
+
+          {#if isOpen(group.name)}
+            {#each group.items as item (item.id)}
+              <div
+                class="placed-row"
+                class:active={furniture.selected?.objectId === item.id}
+                class:lifted={dragging === item.id}
+                draggable="true"
+                ondragstart={() => (dragging = item.id)}
+                ondragend={() => { dragging = null; dropTarget = null }}
+                role="listitem"
+              >
+                <img src={item.image ?? imgSrc(item.model)} alt={item.label} loading="lazy" onerror={onImgError} />
+                <span class="placed-label" title={item.name ? `${item.label} (${item.name})` : item.label}>
+                  {item.label}{#if item.name}<span class="placed-name"> ({item.name})</span>{/if}
+                </span>
+                <button class="mini" title="Edit this piece" onclick={() => fetchNui('furniture:select', { id: item.id })}>Edit</button>
+                <button class="mini icon" title="Name this piece" onclick={() => startRename(item)} aria-label="Name this piece">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="mini icon" title="Move to a group" onclick={() => (movingPiece = item)} aria-label="Move to a group">
+                  <i class="fa-solid fa-folder"></i>
+                </button>
+                <button class="mini accent" title="Duplicate in place" onclick={() => fetchNui('furniture:clone', { id: item.id })}>Clone</button>
+              </div>
+            {:else}
+              <div class="group-empty">Drag furniture here</div>
+            {/each}
+          {/if}
         {/each}
+
+        {#if !furniture.placed.length}
+          <div class="empty">Nothing placed here yet</div>
+        {/if}
+
+        <button class="new-group" onclick={createGroup}>
+          <i class="fa-solid fa-plus"></i> New group
+        </button>
       </div>
     {/if}
   </aside>
+
+{#if renamingGroup}
+  <div class="rename-veil">
+    <div class="rename">
+      <div class="rename-title">{renamingGroup.from ? 'Rename group' : 'New group'}</div>
+      <input class="input" maxlength="32" placeholder="Living Room"
+        bind:value={renamingGroup.value} onkeydown={groupKey} bind:this={renameInput} />
+      <div class="rename-actions">
+        <button class="btn subtle" onclick={() => (renamingGroup = null)}>Cancel</button>
+        <button class="btn" onclick={commitGroup}>Save</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if movingPiece}
+  <div class="rename-veil">
+    <div class="rename">
+      <div class="rename-title">Move to a group</div>
+      <div class="move-list">
+        {#each groups as group (group.name)}
+          <button class="move-option" class:on={(movingPiece.room || UNSORTED) === group.name}
+            onclick={() => { fileInto([movingPiece.id], group.name); movingPiece = null }}>
+            {group.label}
+          </button>
+        {/each}
+      </div>
+      <div class="rename-actions">
+        <button class="btn subtle" onclick={() => (movingPiece = null)}>Cancel</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if renaming}
   <div class="rename-veil">
@@ -762,6 +960,110 @@
 
   .placed-name {
     color: var(--dark-2);
+  }
+
+  .group {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    border-radius: var(--radius-sm);
+  }
+
+  .group.over {
+    outline: 1px dashed var(--blue);
+    outline-offset: 2px;
+  }
+
+  .group-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dark-0);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .group-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .group-count {
+    padding: 1px 6px;
+    font-size: 10px;
+    color: var(--dark-1);
+    background: var(--dark-5);
+    border-radius: 999px;
+  }
+
+  .group-empty {
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--dark-2);
+    border: 1px dashed var(--dark-4);
+    border-radius: var(--radius-sm);
+  }
+
+  .placed-row[draggable='true'] {
+    cursor: grab;
+  }
+
+  .placed-row.lifted {
+    opacity: 0.45;
+  }
+
+  .new-group {
+    margin-top: 8px;
+    padding: 7px;
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--dark-1);
+    background: none;
+    border: 1px dashed var(--dark-4);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .new-group:hover {
+    color: #fff;
+    border-color: var(--blue);
+  }
+
+  .move-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .move-option {
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--dark-0);
+    background: var(--dark-6);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .move-option.on {
+    border-color: var(--blue);
+  }
+
+  .move-option:hover {
+    background: var(--dark-5);
   }
 
   .mini.icon {

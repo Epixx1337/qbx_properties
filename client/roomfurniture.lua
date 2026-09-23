@@ -262,6 +262,7 @@ function SpawnDecoration(decoration)
         SetEntityDrawOutline(existing, false)
         DecorationTints[decoration.id] = decoration.tint
         DecorationLabels[decoration.id] = decoration.label
+        DecorationRooms[decoration.id] = decoration.room
         SetObjectTextureVariation(existing, 0)
         if decoration.tint and decoration.tint > 0 then
             SetObjectTextureVariation(existing, decoration.tint)
@@ -308,6 +309,7 @@ function SpawnDecoration(decoration)
 
     DecorationObjects[decoration.id] = entity
     DecorationLabels[decoration.id] = decoration.label
+    DecorationRooms[decoration.id] = decoration.room
     PlacedDecorations[decoration.id] = decoration.model
     DecorationItems[decoration.id] = decoration.item
     DecorationHealth[decoration.id] = tonumber(decoration.health) or 100
@@ -345,6 +347,7 @@ function DespawnDecoration(id)
     lightEntities[entity] = nil
     DecorationObjects[id] = nil
     DecorationLabels[id] = nil
+    DecorationRooms[id] = nil
     PlacedDecorations[id] = nil
     DecorationItems[id] = nil
     DecorationHealth[id] = nil
