@@ -39,6 +39,52 @@ local function doorPoints(property)
 end
 
 ---@param property table
+---@return table[] every leaf that can carry the doorbell
+local function doorLeaves(property)
+    local leaves = {}
+    if not property.door_data then return leaves end
+
+    local ok, doors = pcall(json.decode, property.door_data)
+    if not ok or type(doors) ~= 'table' then return leaves end
+
+    for i = 1, #doors do
+        for j = 1, #(doors[i].leaves or {}) do
+            local leaf = doors[i].leaves[j]
+            if leaf and leaf.model and leaf.coords then
+                leaves[#leaves + 1] = {
+                    model = leaf.model,
+                    x = leaf.coords.x, y = leaf.coords.y, z = leaf.coords.z,
+                }
+            end
+        end
+    end
+
+    return leaves
+end
+
+---@param attach table? the leaf the client landed on
+---@param coords vector3
+---@return table?
+local function sanitiseAttach(attach, coords)
+    if type(attach) ~= 'table' then return end
+
+    local model = tonumber(attach.model)
+    local anchor = vec3(tonumber(attach.x) or 0/0, tonumber(attach.y) or 0/0, tonumber(attach.z) or 0/0)
+    local offset = vec3(tonumber(attach.ox) or 0/0, tonumber(attach.oy) or 0/0, tonumber(attach.oz) or 0/0)
+    local heading = tonumber(attach.w)
+
+    if not model or not heading or not IsFiniteVector(anchor) or not IsFiniteVector(offset) then return end
+    if #(offset) > 4.0 or #(anchor - coords) > 5.0 then return end
+
+    return {
+        model = model,
+        x = anchor.x, y = anchor.y, z = anchor.z,
+        ox = offset.x, oy = offset.y, oz = offset.z,
+        w = heading % 360.0,
+    }
+end
+
+---@param property table
 ---@param coords vector3
 ---@return boolean
 local function nearADoor(property, coords)
@@ -149,10 +195,11 @@ lib.callback.register('qbx_properties:callback:canPlaceDoorbell', function(sourc
         name = property.property_name,
         model = security.doorbellModel,
         replacing = property.doorcam ~= nil,
+        doors = doorLeaves(property),
     }
 end)
 
-lib.callback.register('qbx_properties:callback:placeDoorbell', function(source, propertyId, coords, heading)
+lib.callback.register('qbx_properties:callback:placeDoorbell', function(source, propertyId, coords, heading, attach)
     local player = exports.qbx_core:GetPlayer(source)
     propertyId = ToId(propertyId)
     if not player or not propertyId or not IsFiniteVector(coords) then return false end
@@ -171,6 +218,7 @@ lib.callback.register('qbx_properties:callback:placeDoorbell', function(source, 
         x = coords.x, y = coords.y, z = coords.z,
         w = (tonumber(heading) or 0.0) % 360.0,
         model = security.doorbellModel,
+        door = sanitiseAttach(attach, coords),
     }
 
     MySQL.update.await('UPDATE properties SET doorcam = ? WHERE id = ?', {json.encode(payload), propertyId})
@@ -207,6 +255,7 @@ lib.callback.register('qbx_properties:callback:getDoorbells', function()
                 model = point.model,
                 coords = vec3(point.x, point.y, point.z),
                 heading = tonumber(point.w) or 0.0,
+                door = point.door,
             }
         end
     end

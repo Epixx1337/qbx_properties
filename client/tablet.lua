@@ -43,6 +43,12 @@ end
 local doorcamPoints = {}
 local activeDoorcam
 local doorcamClosing = false
+local doorcamTurn = 0
+
+RegisterNUICallback('doorcam:turn', function(data, cb)
+    cb(1)
+    doorcamTurn = type(data) == 'table' and tonumber(data.dir) or 0
+end)
 
 RegisterNUICallback('doorcam:close', function(_, cb)
     cb(1)
@@ -129,7 +135,6 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
 
     if point.custom then
         pitch = point.p or -12.0
-        heading = (heading + (tonumber(point.pan) or 0.0)) % 360.0
     else
         if point.model then
             SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
@@ -156,6 +161,7 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
     SendUI('doorcam:name', { label = point.label })
     SendUI('doorcam:pan', point.id and { pan = math.floor((tonumber(point.pan) or 0.0) + 0.5), limit = (sharedConfig.security and sharedConfig.security.pan.limit) or 80.0 } or nil)
     doorcamClosing = false
+    doorcamTurn = 0
     SetNuiFocus(true, false)
     SetNuiFocusKeepInput(false)
 
@@ -166,10 +172,15 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
     SetFocusPosAndVel(position.x, position.y, position.z, 0.0, 0.0, 0.0)
 
     local pan = tonumber(point.pan) or 0.0
+    local startPan = pan
     local mounted = heading - pan
     local limit = (sharedConfig.security and sharedConfig.security.pan.limit) or 80.0
     local step = (sharedConfig.security and sharedConfig.security.pan.step) or 6.0
+    local lens = point.model and sharedConfig.security and sharedConfig.security.lens[point.model]
+    local facing = lens and lens.facing or 0.0
     local head = point.id and FindCameraEntity(position)
+    local origin = head and DoesEntityExist(head) and GetEntityCoords(head) or nil
+    local arm = origin and (position - origin) or nil
 
     local deadline = GetGameTimer() + 60000
     while GetGameTimer() < deadline and not doorcamClosing do
@@ -177,20 +188,32 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
         DisableAllControlActions(0)
         HideHudAndRadarThisFrame()
 
-        if point.id then
-            local turn = 0.0
-            if IsDisabledControlPressed(0, 174) then turn = -step end
-            if IsDisabledControlPressed(0, 175) then turn = step end
+        -- the NUI holds keyboard focus here, so the arrows arrive through doorcam:turn
+        if point.id and doorcamTurn ~= 0 then
+            local turned = math.max(-limit, math.min(limit, pan + doorcamTurn * step * GetFrameTime() * 12.0))
 
-            if turn ~= 0.0 then
-                pan = math.max(-limit, math.min(limit, pan + turn * GetFrameTime() * 12.0))
+            if turned ~= pan then
+                pan = turned
                 heading = (mounted + pan) % 360.0
+
+                if head and DoesEntityExist(head) then
+                    SetEntityHeading(head, (heading - facing) % 360.0)
+
+                    if arm then
+                        local a = math.rad(pan - startPan)
+                        local cos, sin = math.cos(a), math.sin(a)
+                        position = origin + vec3(arm.x * cos - arm.y * sin, arm.x * sin + arm.y * cos, arm.z)
+                        SetCamCoord(cam, position.x, position.y, position.z)
+                    end
+                end
+
                 SetCamRot(cam, pitch, 0.0, heading, 2)
-                if head and DoesEntityExist(head) then SetEntityHeading(head, heading) end
                 SendUI('doorcam:pan', { pan = math.floor(pan + 0.5), limit = limit })
             end
         end
     end
+
+    doorcamTurn = 0
 
     if point.id and math.abs(pan - (tonumber(point.pan) or 0.0)) > 0.5 then
         lib.callback.await('qbx_properties:callback:setCameraPan', false, point.id, pan)

@@ -14,16 +14,40 @@
     `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}  ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
   )
 
+  let turn = 0
+
+  function setTurn(dir) {
+    if (turn === dir) return
+    turn = dir
+    fetchNui('doorcam:turn', { dir })
+  }
+
   function onKeydown(event) {
     const key = event.key.toLowerCase()
     if (key === 'g' || key === 'escape') {
       event.preventDefault()
+      setTurn(0)
       fetchNui('doorcam:close')
+      return
+    }
+
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      setTurn(event.key === 'ArrowLeft' ? -1 : 1)
     }
   }
+
+  function onKeyup(event) {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      setTurn(0)
+    }
+  }
+
+  $effect(() => () => setTurn(0))
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window on:keydown={onKeydown} on:keyup={onKeyup} on:blur={() => setTurn(0)} />
 
 <div class="doorcam">
   <div class="chip"><kbd>G</kbd> Close Camera Feed</div>

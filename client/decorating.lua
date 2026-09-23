@@ -136,6 +136,7 @@ local placeHeading = 0.0
 local placeLift = 0.0
 local placeStartedAt = 0
 local groundFollow = placeConfig.ground ~= false
+local placeSurface
 
 ---@param value boolean
 function SetCursorMode(value)
@@ -773,7 +774,7 @@ local function placeTarget()
 
     local probe = StartExpensiveSynchronousShapeTestLosProbe(
         camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, 1 | 16 | 256, previewObject, 4)
-    local status, hit, endCoords = GetShapeTestResult(probe)
+    local status, hit, endCoords, _, _, entityHit = GetShapeTestResultIncludingMaterial(probe)
 
     local landed = status == 2 and (hit == true or hit == 1)
     local point = landed and endCoords or camPos + dir * math.min(placeDistance, reach)
@@ -786,7 +787,7 @@ local function placeTarget()
         return pedCoords + offset / #(offset) * limit, false
     end
 
-    return point, landed
+    return point, landed, landed and entityHit or nil
 end
 
 ---@param entity integer
@@ -799,7 +800,8 @@ end
 local function updateFreePlace()
     if not previewObject or not DoesEntityExist(previewObject) then return end
 
-    local target, onSurface = placeTarget()
+    local target, onSurface, surface = placeTarget()
+    placeSurface = surface
     local lift = placeLift
     if onSurface and groundFollow then lift = lift + baseOffset(previewObject) end
 
@@ -1105,6 +1107,7 @@ function FreePlaceModel(model, prompt)
     placeHeading = GetEntityHeading(previewObject)
     freePlacing = true
     groundFollow = placeConfig.ground ~= false
+    placeSurface = nil
 
     SetCursorMode(false)
     SetUIFocus(false)
@@ -1167,7 +1170,7 @@ function FreePlaceModel(model, prompt)
     SetUIFocus(false)
 
     if cancelled then return end
-    return vec4(coords.x, coords.y, coords.z, heading)
+    return vec4(coords.x, coords.y, coords.z, heading), placeSurface
 end
 
 function SetPlacementMobility(mobile)
@@ -1208,6 +1211,9 @@ function ToggleDecorating()
     if GetResourceState('scully_emotemenu') == 'started' then
         exports.scully_emotemenu:setLimitation(IsDecorating)
     end
+
+    -- the inventory is bound the same way, and tab belongs to the furniture UI while decorating
+    LocalPlayer.state:set('invBusy', IsDecorating or nil, false)
 
     if IsDecorating then
         OpenUI('furniture')
@@ -1551,6 +1557,7 @@ AddEventHandler('onResourceStop', function(resource)
     discardCart(true)
     setDecoratingPose(false)
     destroyFreecam()
+    LocalPlayer.state:set('invBusy', nil, false)
     if GetResourceState('scully_emotemenu') == 'started' then
         exports.scully_emotemenu:setLimitation(false)
     end

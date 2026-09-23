@@ -5,8 +5,32 @@ if not security then return end
 
 local doorbells = {}
 local spawned = {}
+local attached = {}
 local editable = {}
 local placing = false
+
+---@param a number
+---@param b number
+---@return boolean
+local function sameModel(a, b)
+    return a % 4294967296 == b % 4294967296
+end
+
+-- the door streams in and out with a fresh handle each time, so the bell is re-hung every pass
+---@param entry table
+---@param object integer
+---@return boolean
+local function attachToDoor(entry, object)
+    local door = entry.door
+    if not door then return false end
+
+    local entity = GetClosestObjectOfType(door.x, door.y, door.z, 1.5, door.model, false, false, false)
+    if entity == 0 or not DoesEntityExist(entity) then return false end
+
+    FreezeEntityPosition(object, false)
+    AttachEntityToEntity(object, entity, 0, door.ox, door.oy, door.oz, 0.0, 0.0, door.w, false, false, false, false, 2, true)
+    return true
+end
 
 ---@param propertyId integer
 local function despawnDoorbell(propertyId)
@@ -16,6 +40,7 @@ local function despawnDoorbell(propertyId)
         DeleteEntity(entity)
     end
     spawned[propertyId] = nil
+    attached[propertyId] = nil
 end
 
 ---@param entry table
@@ -30,6 +55,7 @@ local function spawnDoorbell(entry)
     FreezeEntityPosition(object, true)
     SetModelAsNoLongerNeeded(hash)
     spawned[entry.propertyId] = object
+    attached[entry.propertyId] = attachToDoor(entry, object)
 
     if not editable[entry.propertyId] then return end
 
@@ -73,6 +99,11 @@ CreateThread(function()
             local entry = doorbells[i]
             if #(ped - entry.coords) < 60.0 then
                 spawnDoorbell(entry)
+
+                local object = spawned[entry.propertyId]
+                if entry.door and object and not attached[entry.propertyId] then
+                    attached[entry.propertyId] = attachToDoor(entry, object)
+                end
             else
                 despawnDoorbell(entry.propertyId)
             end
@@ -96,6 +127,7 @@ RegisterNetEvent('qbx_properties:client:doorbellPlaced', function(propertyId, po
         model = point.model,
         coords = vec3(point.x, point.y, point.z),
         heading = tonumber(point.w) or 0.0,
+        door = point.door,
     }
     doorbells[#doorbells + 1] = entry
 
@@ -126,7 +158,7 @@ function PlaceDoorbell(propertyId)
 
     local prompt = target.replacing and ('Move the doorbell of %s'):format(target.name)
         or ('Fit a doorbell at %s'):format(target.name)
-    local result = FreePlaceModel(target.model, prompt)
+    local result, surface = FreePlaceModel(target.model, prompt)
 
     placing = false
 
@@ -135,11 +167,32 @@ function PlaceDoorbell(propertyId)
         return
     end
 
+    local attach
+    if surface and surface ~= 0 and DoesEntityExist(surface) then
+        local model = GetEntityModel(surface)
+        for i = 1, #(target.doors or {}) do
+            if sameModel(model, target.doors[i].model) then
+                local anchor = GetEntityCoords(surface)
+                local offset = GetOffsetFromEntityGivenWorldCoords(surface, result.x, result.y, result.z)
+                attach = {
+                    model = target.doors[i].model,
+                    x = anchor.x, y = anchor.y, z = anchor.z,
+                    ox = offset.x, oy = offset.y, oz = offset.z,
+                    w = (result.w - GetEntityHeading(surface)) % 360.0,
+                }
+                break
+            end
+        end
+    end
+
     local ok = lib.callback.await('qbx_properties:callback:placeDoorbell', false, target.propertyId,
-        vec3(result.x, result.y, result.z), result.w)
+        vec3(result.x, result.y, result.z), result.w, attach)
 
     if ok then
-        lib.notify({ type = 'success', description = 'The doorbell is fitted.' })
+        lib.notify({
+            type = 'success',
+            description = attach and 'The doorbell is fitted to the door.' or 'The doorbell is fitted.',
+        })
     else
         lib.notify({ type = 'error', description = 'That spot does not work for the doorbell.' })
     end

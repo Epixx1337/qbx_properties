@@ -100,7 +100,7 @@ function GetBuildingLayout(buildingKey)
     return building and building.layout or buildingKey
 end
 
-local DECORATION_COLUMNS <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, (`lock_pin` IS NOT NULL) AS locked'
+local DECORATION_COLUMNS <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`, `health`, `lock_setter`, `camera_pan`, (`lock_pin` IS NOT NULL) AS locked'
 local DECORATION_COLUMNS_LEGACY <const> = '`id`, `model`, `coords`, `rotation`, `stash_slot`, `tint`, `item`, `item_metadata`'
 
 ---@param query string with %s for the column list
@@ -168,7 +168,8 @@ function BuildDecorationPayload(property)
         local temp = json.decode(decorations[i].coords)
         decorations[i].coords = anchor and RotateOffset(anchor, vec3(temp.x, temp.y, temp.z)) or vec3(temp.x, temp.y, temp.z)
         temp = json.decode(decorations[i].rotation)
-        decorations[i].rotation = anchor and vec3(temp.x, temp.y, (temp.z + anchor.w) % 360.0) or vec3(temp.x, temp.y, temp.z)
+        local pan = tonumber(decorations[i].camera_pan) or 0.0
+        decorations[i].rotation = anchor and vec3(temp.x, temp.y, (temp.z + anchor.w + pan) % 360.0) or vec3(temp.x, temp.y, (temp.z + pan) % 360.0)
         decorations[i].interaction = types[decorations[i].model]
         decorations[i].stashIndex = indexes[decorations[i].id]
     end
@@ -952,8 +953,9 @@ local function placedCameras(property)
                 or vec3(coords.x, coords.y, coords.z)
             local heading = anchor and ((rotation.z or 0.0) + anchor.w) % 360.0 or (rotation.z or 0.0)
 
-            local cam = lensCam(rows[i].model, world, heading, ('Camera %d'):format(i), rows[i].id)
-            cam.pan = tonumber(rows[i].camera_pan) or 0.0
+            local pan = tonumber(rows[i].camera_pan) or 0.0
+            local cam = lensCam(rows[i].model, world, (heading + pan) % 360.0, ('Camera %d'):format(i), rows[i].id)
+            cam.pan = pan
             cams[#cams + 1] = cam
         end
     end
@@ -1637,8 +1639,8 @@ RegisterNetEvent('qbx_properties:server:addDecoration', function(hash, coords, r
         if not objectId then return end
 
         local updated = anchor
-            and MySQL.update.await('UPDATE properties_apartment_decorations SET coords = ?, rotation = ?, tint = ? WHERE id = ? AND citizenid = ?', { json.encode(storedCoords), json.encode(storedRotation), tint, objectId, property.owner })
-            or MySQL.update.await('UPDATE properties_decorations SET coords = ?, rotation = ?, tint = ? WHERE id = ? AND property_id = ?', { json.encode(storedCoords), json.encode(storedRotation), tint, objectId, propertyId })
+            and MySQL.update.await('UPDATE properties_apartment_decorations SET coords = ?, rotation = ?, tint = ?, camera_pan = 0 WHERE id = ? AND citizenid = ?', { json.encode(storedCoords), json.encode(storedRotation), tint, objectId, property.owner })
+            or MySQL.update.await('UPDATE properties_decorations SET coords = ?, rotation = ?, tint = ?, camera_pan = 0 WHERE id = ? AND property_id = ?', { json.encode(storedCoords), json.encode(storedRotation), tint, objectId, propertyId })
         if updated ~= 1 then return end
 
         property.id = propertyId
