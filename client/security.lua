@@ -175,9 +175,21 @@ local function applyHead(decorationId)
 
     local coords = GetEntityCoords(base)
     local rot = GetEntityRotation(base, 2)
+    local pan = headPan[decorationId] or 0.0
+    local pivot = (security.pan and security.pan.pivot) or 0.0
+    local position = coords
 
-    SetEntityCoordsNoOffset(head, coords.x, coords.y, coords.z, false, false, false)
-    SetEntityRotation(head, rot.x, rot.y, (rot.z + (headPan[decorationId] or 0.0)) % 360.0, 2, false)
+    -- the dome turns about its own centre, otherwise it swings off the bracket like a door
+    if pan ~= 0.0 and pivot ~= 0.0 then
+        local centre = GetOffsetFromEntityInWorldCoords(base, 0.0, 0.0, pivot)
+        local arm = coords - centre
+        local angle = math.rad(pan)
+        local cos, sin = math.cos(angle), math.sin(angle)
+        position = centre + vec3(arm.x * cos - arm.y * sin, arm.x * sin + arm.y * cos, arm.z)
+    end
+
+    SetEntityCoordsNoOffset(head, position.x, position.y, position.z, false, false, false)
+    SetEntityRotation(head, rot.x, rot.y, (rot.z + pan) % 360.0, 2, false)
 end
 
 -- the dome and the mount are separate props sharing an origin, so panning turns the dome

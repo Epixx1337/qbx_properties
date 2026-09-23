@@ -33,7 +33,7 @@
 
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault()
-      setTurn(event.key === 'ArrowLeft' ? -1 : 1)
+      setTurn(event.key === 'ArrowLeft' ? 1 : -1)
     }
   }
 
@@ -63,7 +63,7 @@
   {#if tablet.doorcamPan}
     <div class="pan">
       <div class="pan-track">
-        <div class="pan-needle" style="left: {50 + (tablet.doorcamPan.pan / tablet.doorcamPan.limit) * 50}%"></div>
+        <div class="pan-needle" style="left: {50 - (tablet.doorcamPan.pan / tablet.doorcamPan.limit) * 50}%"></div>
       </div>
       <div class="pan-label"><kbd>&larr;</kbd><kbd>&rarr;</kbd> PAN {tablet.doorcamPan.pan}&deg;</div>
     </div>

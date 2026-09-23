@@ -91,7 +91,9 @@ return {
             mansion = 4,
         },
         camerasPerTier = 1, -- extra cameras granted by each security upgrade tier
-        pan = { limit = 80.0, step = 6.0 }, -- how far a camera turns from its mounted heading
+        -- pivot is how far up the piece the dome sits, so it spins on itself rather than
+        -- swinging out of its bracket
+        pan = { limit = 70.0, step = 6.0, pivot = 0.078 },
     },
     placementReach = 15.0, -- how far from the player a piece may be put down, enforced server side
     interiorRadius = 30.0, -- how far from a shell or room anchor a piece may sit, keeps furniture in its own unit

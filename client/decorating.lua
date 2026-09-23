@@ -1016,23 +1016,73 @@ local function pickUpCartEntry(index, free)
 end
 
 ---@return integer? id, integer? entity
+local AIM_REACH <const> = 25.0
+
+-- a shape test only finds a piece the engine agrees is solid, which left our own props
+-- unselectable even though their bounds match the base game ones byte for byte. The editor only
+-- ever wants the piece being looked at, so the ray is tested against each piece's own box
+---@param origin vector3
+---@param dir vector3 normalised
+---@param entity integer
+---@return number? distance along the ray
+local function rayHitsEntity(origin, dir, entity)
+    local minimum, maximum = GetModelDimensions(GetEntityModel(entity))
+    local far = origin + dir * AIM_REACH
+
+    local o = GetOffsetFromEntityGivenWorldCoords(entity, origin.x, origin.y, origin.z)
+    local d = GetOffsetFromEntityGivenWorldCoords(entity, far.x, far.y, far.z) - o
+
+    local tmin, tmax = 0.0, 1.0
+
+    for axis = 1, 3 do
+        local start = axis == 1 and o.x or axis == 2 and o.y or o.z
+        local delta = axis == 1 and d.x or axis == 2 and d.y or d.z
+        local low = axis == 1 and minimum.x or axis == 2 and minimum.y or minimum.z
+        local high = axis == 1 and maximum.x or axis == 2 and maximum.y or maximum.z
+
+        if math.abs(delta) < 0.000001 then
+            if start < low or start > high then return end
+        else
+            local first = (low - start) / delta
+            local second = (high - start) / delta
+            if first > second then first, second = second, first end
+            if first > tmin then tmin = first end
+            if second < tmax then tmax = second end
+            if tmin > tmax then return end
+        end
+    end
+
+    return tmin * AIM_REACH
+end
+
 local function raycastDecoration()
     local camPos, camRot = GetDecoratingCam()
     local pitch, yaw = math.rad(camRot.x), math.rad(camRot.z)
     local cp = math.cos(pitch)
     local dir = vec3(-math.sin(yaw) * cp, math.cos(yaw) * cp, math.sin(pitch))
-    local dest = camPos + dir * 25.0
 
-    local probe = StartExpensiveSynchronousShapeTestLosProbe(
-        camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, 16, previewObject or 0, 4)
-    local status, hit, _, _, entity = GetShapeTestResult(probe)
-    if status ~= 2 or not (hit == true or hit == 1) or not entity or entity == 0 then return end
+    local best, nearest
 
-    -- a camera dome is its own prop, so aiming at one means aiming at the camera it sits on
-    local owner = GetCameraHeadOwner and GetCameraHeadOwner(entity)
-    if owner and DecorationObjects[owner] then return DecorationObjects[owner] end
+    for _, entity in pairs(DecorationObjects) do
+        if entity ~= previewObject and DoesEntityExist(entity) then
+            local distance = rayHitsEntity(camPos, dir, entity)
+            if distance and (not nearest or distance < nearest) then
+                best, nearest = entity, distance
+            end
+        end
+    end
 
-    if decorationIdFor(entity) or cartIndexFor(entity) then return entity end
+    for i = 1, #cart do
+        local entity = cart[i].entity
+        if entity and entity ~= previewObject and DoesEntityExist(entity) then
+            local distance = rayHitsEntity(camPos, dir, entity)
+            if distance and (not nearest or distance < nearest) then
+                best, nearest = entity, distance
+            end
+        end
+    end
+
+    return best
 end
 
 ---@return integer[]
@@ -1244,6 +1294,8 @@ function FreePlaceModel(model, prompt, doors)
         DisableControlAction(0, 74, true)
         DisableControlAction(0, 45, true)
         DisableControlAction(0, 19, true)
+        DisableControlAction(0, 199, true)
+        DisableControlAction(0, 200, true)
         DisablePlayerFiring(cache.playerId, true)
 
         if not freecamMoving then
@@ -1396,6 +1448,8 @@ function ToggleDecorating()
         while IsUIFocused() and IsDecorating do Wait(0) end
         if not IsDecorating then break end
         DisableControlAction(0, 37, true)
+        DisableControlAction(0, 199, true)
+        DisableControlAction(0, 200, true)
         if IsDisabledControlJustReleased(0, 202) then
             if previewObject and previewObject ~= pendingObject and DoesEntityExist(previewObject) and lastMatrix then
                 ApplyGizmoMatrix(previewObject, lastMatrix)
@@ -1518,6 +1572,8 @@ function ToggleDecorating()
             DisableControlAction(0, 74, true) -- H stays with the NUI wall snap
             DisableControlAction(0, 45, true) -- R walks the rotation axis
             DisableControlAction(0, 19, true) -- alt is the fine pass
+            DisableControlAction(0, 199, true) -- escape closes the editor, not the pause menu
+            DisableControlAction(0, 200, true)
             DisablePlayerFiring(cache.playerId, true)
 
 
