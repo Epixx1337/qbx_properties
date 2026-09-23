@@ -5,7 +5,7 @@ if not security then return end
 
 local doorbells = {}
 local spawned = {}
-local attached = {}
+local attachedTo = {}
 local editable = {}
 local placing = false
 
@@ -16,7 +16,8 @@ local function sameModel(a, b)
     return a % 4294967296 == b % 4294967296
 end
 
--- the door streams in and out with a fresh handle each time, so the bell is re-hung every pass
+-- a dynamic interior swaps the door for a fresh entity as it loads, so the bell is re-hung
+-- against whatever door is there now rather than once
 ---@param entry table
 ---@param object integer
 ---@return boolean
@@ -27,8 +28,14 @@ local function attachToDoor(entry, object)
     local entity = GetClosestObjectOfType(door.x, door.y, door.z, 1.5, door.model, false, false, false)
     if entity == 0 or not DoesEntityExist(entity) then return false end
 
+    if attachedTo[entry.propertyId] == entity and IsEntityAttachedToEntity(object, entity) then
+        return true
+    end
+
+    if IsEntityAttached(object) then DetachEntity(object, false, false) end
     FreezeEntityPosition(object, false)
     AttachEntityToEntity(object, entity, 0, door.ox, door.oy, door.oz, 0.0, 0.0, door.w, false, false, false, false, 2, true)
+    attachedTo[entry.propertyId] = entity
     return true
 end
 
@@ -40,7 +47,7 @@ local function despawnDoorbell(propertyId)
         DeleteEntity(entity)
     end
     spawned[propertyId] = nil
-    attached[propertyId] = nil
+    attachedTo[propertyId] = nil
 end
 
 ---@param propertyId integer
@@ -81,7 +88,9 @@ end
 
 ---@param entry table
 local function spawnDoorbell(entry)
-    if spawned[entry.propertyId] then return end
+    local existing = spawned[entry.propertyId]
+    if existing and DoesEntityExist(existing) then return end
+    if existing then despawnDoorbell(entry.propertyId) end
 
     local hash = lib.requestModel(entry.model, 10000)
     if not hash then return end
@@ -91,7 +100,7 @@ local function spawnDoorbell(entry)
     FreezeEntityPosition(object, true)
     SetModelAsNoLongerNeeded(hash)
     spawned[entry.propertyId] = object
-    attached[entry.propertyId] = attachToDoor(entry, object)
+    attachToDoor(entry, object)
     ApplyDoorbellTargets(entry.propertyId)
 end
 
@@ -105,22 +114,26 @@ CreateThread(function()
 
     while true do
         local ped = GetEntityCoords(cache.ped)
+        local near = false
 
         for i = 1, #doorbells do
             local entry = doorbells[i]
             if #(ped - entry.coords) < 60.0 then
+                near = true
                 spawnDoorbell(entry)
 
                 local object = spawned[entry.propertyId]
-                if entry.door and object and not attached[entry.propertyId] then
-                    attached[entry.propertyId] = attachToDoor(entry, object)
+                if entry.door and object and DoesEntityExist(object) then
+                    attachToDoor(entry, object)
                 end
             else
                 despawnDoorbell(entry.propertyId)
             end
         end
 
-        Wait(2000)
+        -- a door being swapped in should not leave a gap you can see, so watch it closely
+        -- only while one is actually in range
+        Wait(near and 500 or 2000)
     end
 end)
 
