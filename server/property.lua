@@ -1332,6 +1332,8 @@ local function registerGarage(propertyId, name, garage)
     exports.qbx_garages:RegisterGarage(garageName, {
         label = name,
         vehicleType = 'car',
+        -- the garage belongs to the house, so everyone holding keys shares what is parked in it
+        shared = true,
         accessPoints = accessPoints,
         canAccess = canAccess,
     })
