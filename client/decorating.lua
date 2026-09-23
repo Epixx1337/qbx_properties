@@ -1080,6 +1080,96 @@ end
 local SPC_LEAVE_CAMERA_CONTROL_ON <const> = 256
 
 ---@param mobile boolean walking around while freePlacing, rather than posed with the clipboard
+---@param model string
+---@param prompt string
+---@return vector4?
+function FreePlaceModel(model, prompt)
+    if IsDecorating or previewObject then return end
+
+    local hash = GetHashKey(model)
+    if not IsModelValid(hash) or not lib.requestModel(hash, 20000) then
+        lib.notify({ type = 'error', description = ('%s is not a valid model.'):format(model) })
+        return
+    end
+
+    local camPos = GetDecoratingCam()
+    previewObject = CreateObjectNoOffset(hash, camPos.x, camPos.y, camPos.z, false, false, false)
+    SetModelAsNoLongerNeeded(hash)
+    FreezeEntityPosition(previewObject, true)
+    SetEntityCollision(previewObject, false, false)
+    SetEntityDrawOutline(previewObject, true)
+    pendingObject = previewObject
+
+    placeDistance = placeConfig.distance or 4.0
+    placeLift = 0.0
+    placeHeading = GetEntityHeading(previewObject)
+    freePlacing = true
+    groundFollow = placeConfig.ground ~= false
+
+    SetCursorMode(false)
+    SetUIFocus(false)
+    SendUI('placement:show', { prompt = prompt, freePlace = true })
+
+    local confirmed, cancelled = false, false
+    local started = GetGameTimer()
+
+    while not confirmed and not cancelled do
+        Wait(0)
+        DisableControlAction(0, 24, true)
+        DisableControlAction(0, 25, true)
+        DisableControlAction(0, 22, true)
+        DisableControlAction(0, 23, true)
+        DisableControlAction(0, 47, true)
+        DisableControlAction(0, 73, true)
+        DisablePlayerFiring(cache.playerId, true)
+
+        if not freecamMoving then
+            local up = IsDisabledControlJustPressed(0, 241)
+            local down = IsDisabledControlJustPressed(0, 242)
+
+            if up or down then
+                local direction = up and 1.0 or -1.0
+                if IsDisabledControlPressed(0, 21) then
+                    if groundFollow then
+                        placeLift = math.min(math.max(placeLift + direction * (placeConfig.liftStep or 0.05), 0.0), placeConfig.maxLift or 4.0)
+                    else
+                        placeDistance = math.min(math.max(placeDistance + direction * 0.25, placeConfig.minDistance or 1.0), placeConfig.reach or 15.0)
+                    end
+                else
+                    local step = IsDisabledControlPressed(0, 36) and (placeConfig.coarseStep or 45.0) or (placeConfig.rotationStep or 5.0)
+                    placeHeading = placeHeading + direction * step
+                end
+            end
+        end
+
+        if IsDisabledControlJustReleased(0, 47) then
+            groundFollow = not groundFollow
+            placeLift = 0.0
+        end
+        if IsDisabledControlJustReleased(0, 73) then gridSnap = not gridSnap end
+
+        updateFreePlace()
+        if gridConfig.enabled then drawFurnitureGrid(GetEntityCoords(previewObject)) end
+
+        if IsDisabledControlJustReleased(0, 24) and GetGameTimer() - started > 250 then confirmed = true end
+        if IsDisabledControlJustReleased(0, 202) or IsDisabledControlJustReleased(0, 177) then cancelled = true end
+    end
+
+    local coords = GetEntityCoords(previewObject)
+    local heading = GetEntityHeading(previewObject)
+
+    DeleteEntity(previewObject)
+    previewObject = nil
+    pendingObject = nil
+    freePlacing = false
+    SendUI('placement:hide')
+    SetCursorMode(false)
+    SetUIFocus(false)
+
+    if cancelled then return end
+    return vec4(coords.x, coords.y, coords.z, heading)
+end
+
 function SetPlacementMobility(mobile)
     if not IsDecorating then return end
 

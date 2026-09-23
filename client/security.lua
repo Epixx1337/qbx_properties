@@ -61,12 +61,17 @@ RegisterNetEvent('qbx_properties:client:doorbellPlaced', function(propertyId, po
 
     if not point then return end
 
-    doorbells[#doorbells + 1] = {
+    local entry = {
         propertyId = propertyId,
         model = point.model,
         coords = vec3(point.x, point.y, point.z),
         heading = tonumber(point.w) or 0.0,
     }
+    doorbells[#doorbells + 1] = entry
+
+    if #(GetEntityCoords(cache.ped) - entry.coords) < 60.0 then
+        spawnDoorbell(entry)
+    end
 end)
 
 ---@param coords vector3
@@ -88,13 +93,9 @@ function PlaceDoorbell()
     placing = true
     despawnDoorbell(target.propertyId)
 
-    local ped = GetEntityCoords(cache.ped)
-    local forward = GetEntityForwardVector(cache.ped)
-    local origin = ped + forward * 1.0 + vec3(0.0, 0.0, 0.6)
-
     local prompt = target.replacing and ('Move the doorbell of %s'):format(target.name)
         or ('Fit a doorbell at %s'):format(target.name)
-    local result = PlaceModelWithGizmo(target.model, origin, prompt)
+    local result = FreePlaceModel(target.model, prompt)
 
     placing = false
 

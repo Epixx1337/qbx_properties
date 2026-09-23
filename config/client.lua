@@ -67,12 +67,7 @@ return {
                 power = 40,
             },
             {
-                object = 'qbx_cctv_mount',
-                label = 'Camera Mount',
-                price = 500,
-            },
-            {
-                object = 'qbx_cctv_head',
+                object = 'qbx_cctv',
                 label = 'Security Camera',
                 type = 'camera',
                 price = 2000,

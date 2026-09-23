@@ -117,6 +117,7 @@ files {
     'stream/props/qbx_props.ytyp',
     'stream/props/cdx_intercom_prop.ytyp',
     'stream/props/qbx_properties_props.ytyp',
+    'stream/props/qbx_properties_props.ytd',
 }
 
 data_file 'AUDIO_WAVEPACK' 'stream/audiodirectory'
