@@ -148,6 +148,7 @@ RegisterNetEvent('qbx_properties:client:doorbellPlaced', function(propertyId, po
 end)
 
 local heads = {}
+local headOwner = {}
 local headPan = {}
 
 ---@param decorationId integer
@@ -157,24 +158,41 @@ function GetCameraHead(decorationId)
     if head and DoesEntityExist(head) then return head end
 end
 
+---@param entity integer
+---@return integer? the camera a dome belongs to
+function GetCameraHeadOwner(entity)
+    return headOwner[entity]
+end
+
+-- a camera on a wall lies on its side, so its own up axis points out along the lens and turning
+-- about it would roll the picture. A pan is always about the world vertical
+---@param decorationId integer
+local function applyHead(decorationId)
+    local head = heads[decorationId]
+    local base = DecorationObjects[decorationId]
+    if not head or not DoesEntityExist(head) then return end
+    if not base or not DoesEntityExist(base) then return end
+
+    local coords = GetEntityCoords(base)
+    local rot = GetEntityRotation(base, 2)
+
+    SetEntityCoordsNoOffset(head, coords.x, coords.y, coords.z, false, false, false)
+    SetEntityRotation(head, rot.x, rot.y, (rot.z + (headPan[decorationId] or 0.0)) % 360.0, 2, false)
+end
+
 -- the dome and the mount are separate props sharing an origin, so panning turns the dome
 -- while the bracket stays on the wall
 ---@param decorationId integer
 ---@param pan number
 function SetCameraPan(decorationId, pan)
-    local head = GetCameraHead(decorationId)
-    local base = DecorationObjects[decorationId]
-    if not head or not base or not DoesEntityExist(base) then return end
-
     headPan[decorationId] = pan
-    -- re-attaching an already attached entity keeps the old offset, so it has to come off first
-    if IsEntityAttached(head) then DetachEntity(head, false, false) end
-    AttachEntityToEntity(head, base, 0, 0.0, 0.0, 0.0, 0.0, 0.0, pan, false, false, false, false, 2, true)
+    applyHead(decorationId)
 end
 
 ---@param decorationId integer
 local function removeHead(decorationId)
     local head = heads[decorationId]
+    if head then headOwner[head] = nil end
     if head and DoesEntityExist(head) then DeleteEntity(head) end
     heads[decorationId] = nil
     headPan[decorationId] = nil
@@ -201,9 +219,22 @@ AddEventHandler('qbx_properties:client:decorationSpawned', function(decorationId
     local coords = GetEntityCoords(entity)
     local head = CreateObjectNoOffset(hash, coords.x, coords.y, coords.z, false, false, false)
     SetModelAsNoLongerNeeded(hash)
-    SetEntityCollision(head, false, false)
+    FreezeEntityPosition(head, true)
     heads[decorationId] = head
+    headOwner[head] = decorationId
     SetCameraPan(decorationId, pan)
+end)
+
+-- the dome is not attached, so it follows its mount from here instead
+CreateThread(function()
+    while true do
+        local any = false
+        for id in pairs(heads) do
+            any = true
+            applyHead(id)
+        end
+        Wait(any and (IsDecorating and 0 or 500) or 1000)
+    end
 end)
 
 AddEventHandler('qbx_properties:client:decorationRemoved', removeHead)

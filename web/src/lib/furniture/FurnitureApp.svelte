@@ -31,6 +31,8 @@
 
   let mode = $state('catalog')
   let placedSearch = $state('')
+  const AXES = { z: 'Yaw', x: 'Pitch', y: 'Roll' }
+
   let renaming = $state(null)
   let renameInput = $state(null)
 
@@ -441,7 +443,9 @@
         <span><kbd>R</kbd> Rotate</span>
         <span><kbd>L</kbd> Axis space</span>
         {#if furniture.freePlacing}
-          <span><kbd>Scroll</kbd> Turn</span>
+          <span><kbd>Scroll</kbd> Turn {AXES[furniture.axis] ?? 'Yaw'}</span>
+          <span class="active"><kbd>R</kbd> {AXES[furniture.axis] ?? 'Yaw'}</span>
+          <span><kbd>Alt</kbd> Fine</span>
           <span><kbd>Click</kbd> Place</span>
         {:else}
           <span><kbd>G</kbd> Snap to ground</span>

@@ -215,6 +215,8 @@ function SetCursorMode(value)
     else
         LeaveCursorMode()
     end
+
+    RefreshDecoratingMobility()
 end
 
 function HasPreviewObject()
@@ -1026,6 +1028,10 @@ local function raycastDecoration()
     local status, hit, _, _, entity = GetShapeTestResult(probe)
     if status ~= 2 or not (hit == true or hit == 1) or not entity or entity == 0 then return end
 
+    -- a camera dome is its own prop, so aiming at one means aiming at the camera it sits on
+    local owner = GetCameraHeadOwner and GetCameraHeadOwner(entity)
+    if owner and DecorationObjects[owner] then return DecorationObjects[owner] end
+
     if decorationIdFor(entity) or cartIndexFor(entity) then return entity end
 end
 
@@ -1300,6 +1306,12 @@ function FreePlaceModel(model, prompt, doors)
     placeDoors = nil
     if cancelled then return end
     return vec4(coords.x, coords.y, coords.z, heading), placeSurface
+end
+
+-- walking belongs to world mode, not just to carrying a piece, otherwise tab leaves you rooted
+function RefreshDecoratingMobility()
+    if not IsDecorating then return end
+    SetPlacementMobility(not cursorMode and not freecamMoving)
 end
 
 function SetPlacementMobility(mobile)

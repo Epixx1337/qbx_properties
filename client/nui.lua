@@ -87,6 +87,11 @@ end)
 RegisterNUICallback('setFocus', function(data, cb)
     cb(1)
     SetUIFocus(data == true or data?.focus == true)
+
+    if IsDecorating then
+        RefreshDecoratingMobility()
+        PushDecoratingState()
+    end
 end)
 
 RegisterNUICallback('key', function(data, cb)

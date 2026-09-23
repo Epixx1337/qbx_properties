@@ -572,7 +572,7 @@
           <div class="nearby">
             {#each tablet.doorcam.cams as cam, i (i)}
               <button class="chip" class:chip-active={doorcamIndex === i + 1} onclick={() => (doorcamIndex = i + 1)}>
-                {cam.custom ? 'Doorcam' : `Door ${i + (tablet.doorcam.cams[0]?.custom ? 0 : 1)}`}
+                {cam.label ?? (cam.custom ? 'Doorcam' : `Door ${i + (tablet.doorcam.cams[0]?.custom ? 0 : 1)}`)}
               </button>
             {/each}
           </div>

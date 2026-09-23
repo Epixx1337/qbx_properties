@@ -90,6 +90,7 @@
     furniture.tintSupported = data.tintSupported ?? false
     furniture.pickup = data.pickup ?? false
     furniture.gridSnap = data.gridSnap ?? false
+    furniture.axis = data.axis ?? 'z'
     furniture.gridSize = data.gridSize ?? 0.25
     furniture.freePlacing = data.freePlacing ?? false
     furniture.freePlaceSupported = data.freePlaceSupported ?? false
