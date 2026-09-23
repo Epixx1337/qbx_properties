@@ -105,8 +105,20 @@ lib.callback.register('qbx_properties:callback:getDoorbellSpots', function(sourc
     return spots
 end)
 
-lib.callback.register('qbx_properties:callback:canPlaceDoorbell', function(source)
-    local property = findDoorbellProperty(source)
+lib.callback.register('qbx_properties:callback:canPlaceDoorbell', function(source, propertyId)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player then return end
+
+    local property
+    propertyId = ToId(propertyId)
+
+    if propertyId then
+        property = MySQL.single.await(('SELECT %s FROM properties WHERE id = ?'):format(DOOR_COLUMNS), {propertyId})
+        if not property or not HasPropertyAccess(player.PlayerData.citizenid, property, 'furniture') then return end
+    else
+        property = findDoorbellProperty(source)
+    end
+
     if not property then return end
 
     return {

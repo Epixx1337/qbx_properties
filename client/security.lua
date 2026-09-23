@@ -5,12 +5,16 @@ if not security then return end
 
 local doorbells = {}
 local spawned = {}
+local editable = {}
 local placing = false
 
 ---@param propertyId integer
 local function despawnDoorbell(propertyId)
     local entity = spawned[propertyId]
-    if entity and DoesEntityExist(entity) then DeleteEntity(entity) end
+    if entity and DoesEntityExist(entity) then
+        exports.ox_target:removeLocalEntity(entity)
+        DeleteEntity(entity)
+    end
     spawned[propertyId] = nil
 end
 
@@ -26,6 +30,32 @@ local function spawnDoorbell(entry)
     FreezeEntityPosition(object, true)
     SetModelAsNoLongerNeeded(hash)
     spawned[entry.propertyId] = object
+
+    if not editable[entry.propertyId] then return end
+
+    local propertyId = entry.propertyId
+    exports.ox_target:addLocalEntity(object, {
+        {
+            name = ('qbx_properties_doorbell_move_%d'):format(propertyId),
+            label = 'Move doorbell',
+            icon = 'fas fa-up-down-left-right',
+            distance = TargetDistance('doorbell', 1.5),
+            onSelect = function() PlaceDoorbell(propertyId) end,
+        },
+        {
+            name = ('qbx_properties_doorbell_remove_%d'):format(propertyId),
+            label = 'Remove doorbell',
+            icon = 'fas fa-trash',
+            distance = TargetDistance('doorbell', 1.5),
+            onSelect = function()
+                local ok = lib.callback.await('qbx_properties:callback:removeDoorbell', false, propertyId)
+                lib.notify({
+                    type = ok and 'success' or 'error',
+                    description = ok and 'The doorbell is removed.' or 'That did not work.',
+                })
+            end,
+        },
+    })
 end
 
 local function refreshDoorbells()
@@ -81,10 +111,11 @@ function FindCameraEntity(coords)
     if entity ~= 0 then return entity end
 end
 
-function PlaceDoorbell()
+---@param propertyId integer? the doorbell being moved, otherwise the nearest door you may furnish
+function PlaceDoorbell(propertyId)
     if placing then return end
 
-    local target = lib.callback.await('qbx_properties:callback:canPlaceDoorbell', false)
+    local target = lib.callback.await('qbx_properties:callback:canPlaceDoorbell', false, propertyId)
     if not target then
         lib.notify({ type = 'error', description = 'Stand by one of your own doors to fit a doorbell.' })
         return
@@ -125,7 +156,7 @@ local function showDoorbellRadial()
     AddPropertyRadial('qbx_properties_doorbell', {
         label = 'Place doorbell',
         icon = 'bell',
-        onSelect = PlaceDoorbell,
+        onSelect = function() PlaceDoorbell() end,
     })
 end
 
@@ -138,6 +169,13 @@ function RefreshDoorbellSpots()
 
     local spots = lib.callback.await('qbx_properties:callback:getDoorbellSpots', false) or {}
     local range = (security.doorbellRange or 2.0) + 1.0
+
+    table.wipe(editable)
+    for i = 1, #spots do editable[spots[i].propertyId] = true end
+
+    for propertyId in pairs(spawned) do
+        despawnDoorbell(propertyId)
+    end
 
     for i = 1, #spots do
         doorPoints[#doorPoints + 1] = lib.points.new({
