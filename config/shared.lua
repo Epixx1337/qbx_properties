@@ -76,7 +76,7 @@ return {
         cameraModel = 'qbx_cctv',
         lens = {
             qbx_doorbell = { offset = vec3(0.0, -0.011, 0.100), facing = 180.0, pitch = -12.0 },
-            qbx_cctv = { offset = vec3(0.0, -0.022, 0.237), facing = 180.0, pitch = -18.0 },
+            qbx_cctv = { offset = vec3(0.0, -0.011, 0.118), facing = 180.0, pitch = -18.0 },
         },
         doorbellRange = 2.0, -- how close to a door you must stand to fit the doorbell
         cameras = { -- security cameras a property holds before upgrades, the doorbell is separate
