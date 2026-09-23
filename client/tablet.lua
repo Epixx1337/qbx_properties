@@ -176,10 +176,9 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
     local mounted = heading - pan
     local limit = (sharedConfig.security and sharedConfig.security.pan.limit) or 80.0
     local step = (sharedConfig.security and sharedConfig.security.pan.step) or 6.0
-    local lens = point.model and sharedConfig.security and sharedConfig.security.lens[point.model]
-    local facing = lens and lens.facing or 0.0
-    local head = point.id and FindCameraEntity(position)
-    local origin = head and DoesEntityExist(head) and GetEntityCoords(head) or nil
+    local base = point.id and DecorationObjects[point.id]
+    local head = point.id and GetCameraHead(point.id)
+    local origin = base and DoesEntityExist(base) and GetEntityCoords(base) or nil
     local arm = origin and (position - origin) or nil
 
     local deadline = GetGameTimer() + 60000
@@ -196,8 +195,8 @@ RegisterNUICallback('tablet:showDoorcam', function(data, cb)
                 pan = turned
                 heading = (mounted + pan) % 360.0
 
-                if head and DoesEntityExist(head) then
-                    SetEntityHeading(head, (heading - facing) % 360.0)
+                if head then
+                    SetCameraPan(point.id, pan)
 
                     if arm then
                         local a = math.rad(pan - startPan)

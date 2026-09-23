@@ -270,6 +270,7 @@ function SpawnDecoration(decoration)
             SetEntityCoordsNoOffset(proxy, decoration.coords.x, decoration.coords.y, decoration.coords.z, false, false, false)
             SetEntityRotation(proxy, decoration.rotation.x, decoration.rotation.y, decoration.rotation.z, 2, false)
         end
+        TriggerEvent('qbx_properties:client:decorationSpawned', decoration.id, existing, decoration.model, decoration.camera_pan)
         if IsDecorating then PushPlacedDecorations() end
         return existing
     end
@@ -315,6 +316,7 @@ function SpawnDecoration(decoration)
     end
     addInteraction(entity, decoration)
     applyPower(entity, decoration.model, decoration.id)
+    TriggerEvent('qbx_properties:client:decorationSpawned', decoration.id, entity, decoration.model, decoration.camera_pan)
 
     if IsDecorating then PushPlacedDecorations() end
 
@@ -335,6 +337,7 @@ function DespawnDecoration(id)
         DeleteEntity(entity)
     end
 
+    TriggerEvent('qbx_properties:client:decorationRemoved', id)
     removeInteraction(id)
     targeted[id] = nil
     lightEntities[entity] = nil

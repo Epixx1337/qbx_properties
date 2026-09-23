@@ -74,6 +74,7 @@ return {
     security = {
         doorbellModel = 'qbx_doorbell',
         cameraModel = 'qbx_cctv',
+        cameraHeadModel = 'qbx_cctv_head',
         lens = {
             qbx_doorbell = { offset = vec3(0.0, -0.011, 0.100), facing = 180.0, pitch = -12.0 },
             qbx_cctv = { offset = vec3(0.0, -0.011, 0.118), facing = 180.0, pitch = -18.0 },

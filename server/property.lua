@@ -168,8 +168,7 @@ function BuildDecorationPayload(property)
         local temp = json.decode(decorations[i].coords)
         decorations[i].coords = anchor and RotateOffset(anchor, vec3(temp.x, temp.y, temp.z)) or vec3(temp.x, temp.y, temp.z)
         temp = json.decode(decorations[i].rotation)
-        local pan = tonumber(decorations[i].camera_pan) or 0.0
-        decorations[i].rotation = anchor and vec3(temp.x, temp.y, (temp.z + anchor.w + pan) % 360.0) or vec3(temp.x, temp.y, (temp.z + pan) % 360.0)
+        decorations[i].rotation = anchor and vec3(temp.x, temp.y, (temp.z + anchor.w) % 360.0) or vec3(temp.x, temp.y, temp.z)
         decorations[i].interaction = types[decorations[i].model]
         decorations[i].stashIndex = indexes[decorations[i].id]
     end

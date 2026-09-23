@@ -147,6 +147,67 @@ RegisterNetEvent('qbx_properties:client:doorbellPlaced', function(propertyId, po
     end
 end)
 
+local heads = {}
+local headPan = {}
+
+---@param decorationId integer
+---@return integer? the dome that sits on the mount
+function GetCameraHead(decorationId)
+    local head = heads[decorationId]
+    if head and DoesEntityExist(head) then return head end
+end
+
+-- the dome and the mount are separate props sharing an origin, so panning turns the dome
+-- while the bracket stays on the wall
+---@param decorationId integer
+---@param pan number
+function SetCameraPan(decorationId, pan)
+    local head = GetCameraHead(decorationId)
+    local base = DecorationObjects[decorationId]
+    if not head or not base or not DoesEntityExist(base) then return end
+
+    headPan[decorationId] = pan
+    AttachEntityToEntity(head, base, 0, 0.0, 0.0, 0.0, 0.0, 0.0, pan, false, false, false, false, 2, true)
+end
+
+---@param decorationId integer
+local function removeHead(decorationId)
+    local head = heads[decorationId]
+    if head and DoesEntityExist(head) then DeleteEntity(head) end
+    heads[decorationId] = nil
+    headPan[decorationId] = nil
+end
+
+AddEventHandler('qbx_properties:client:decorationSpawned', function(decorationId, entity, model, pan)
+    if model ~= security.cameraModel or not security.cameraHeadModel then return end
+
+    pan = tonumber(pan) or 0.0
+
+    if GetCameraHead(decorationId) then
+        if headPan[decorationId] ~= pan then SetCameraPan(decorationId, pan) end
+        return
+    end
+
+    removeHead(decorationId)
+
+    local hash = lib.requestModel(security.cameraHeadModel, 10000)
+    if not hash then return end
+
+    local coords = GetEntityCoords(entity)
+    local head = CreateObjectNoOffset(hash, coords.x, coords.y, coords.z, false, false, false)
+    SetModelAsNoLongerNeeded(hash)
+    SetEntityCollision(head, false, false)
+    heads[decorationId] = head
+    SetCameraPan(decorationId, pan)
+end)
+
+AddEventHandler('qbx_properties:client:decorationRemoved', removeHead)
+
+AddEventHandler('onResourceStop', function(resource)
+    if resource ~= cache.resource then return end
+    for id in pairs(heads) do removeHead(id) end
+end)
+
 ---@param coords vector3
 ---@return integer?
 function FindCameraEntity(coords)
