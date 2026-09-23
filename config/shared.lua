@@ -75,8 +75,6 @@ return {
         doorbellModel = 'qbx_doorbell',
         cameraModel = 'qbx_cctv_head',
         mountModel = 'qbx_cctv_mount',
-        -- where the lens sits inside each prop and which way it looks, so the view always lines up
-        -- with the model instead of needing a hand tuned offset per property
         lens = {
             qbx_doorbell = { offset = vec3(0.0, -0.011, 0.100), facing = 180.0, pitch = -12.0 },
             qbx_cctv_head = { offset = vec3(0.0, -0.064, 0.084), facing = 180.0, pitch = -18.0 },

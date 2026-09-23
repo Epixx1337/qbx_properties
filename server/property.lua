@@ -898,8 +898,6 @@ lib.callback.register('qbx_properties:callback:requestRingers', function(source)
     return listRingers(propertyId)
 end)
 
--- a placed prop carries its own position and heading, so the view is taken from the lens rather
--- than from an offset someone has to tune per property
 ---@param model string
 ---@param coords table
 ---@param heading number

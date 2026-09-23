@@ -112,17 +112,55 @@ function PlaceDoorbell()
         lib.notify({ type = 'error', description = 'That spot does not work for the doorbell.' })
     end
     refreshDoorbells()
+    RefreshDoorbellSpots()
 end
 
 RegisterNetEvent('qbx_properties:client:placeDoorbell', PlaceDoorbell)
 
-CreateThread(function()
-    Wait(2000)
+local doorPoints = {}
+local atDoor = 0
+
+local function showDoorbellRadial()
     AddPropertyRadial('qbx_properties_doorbell', {
         label = 'Place doorbell',
         icon = 'bell',
         onSelect = PlaceDoorbell,
     })
+end
+
+function RefreshDoorbellSpots()
+    for i = 1, #doorPoints do doorPoints[i]:remove() end
+    table.wipe(doorPoints)
+
+    atDoor = 0
+    RemovePropertyRadial('qbx_properties_doorbell')
+
+    local spots = lib.callback.await('qbx_properties:callback:getDoorbellSpots', false) or {}
+    local range = (security.doorbellRange or 2.0) + 1.0
+
+    for i = 1, #spots do
+        doorPoints[#doorPoints + 1] = lib.points.new({
+            coords = spots[i].coords,
+            distance = range,
+            onEnter = function()
+                atDoor = atDoor + 1
+                showDoorbellRadial()
+            end,
+            onExit = function()
+                atDoor = math.max(atDoor - 1, 0)
+                if atDoor == 0 then RemovePropertyRadial('qbx_properties_doorbell') end
+            end,
+        })
+    end
+end
+
+RegisterNetEvent('qbx_properties:client:invalidateUnitAccess', RefreshDoorbellSpots)
+RegisterNetEvent('qbx_properties:client:refreshBlips', RefreshDoorbellSpots)
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', RefreshDoorbellSpots)
+
+CreateThread(function()
+    Wait(3000)
+    if LocalPlayer.state.isLoggedIn then RefreshDoorbellSpots() end
 end)
 
 AddEventHandler('onResourceStop', function(resource)
@@ -130,4 +168,5 @@ AddEventHandler('onResourceStop', function(resource)
     for propertyId in pairs(spawned) do
         despawnDoorbell(propertyId)
     end
+    for i = 1, #doorPoints do doorPoints[i]:remove() end
 end)

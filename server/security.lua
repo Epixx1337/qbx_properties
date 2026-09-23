@@ -60,8 +60,6 @@ local function findDoorbellProperty(source)
     local citizenId = player.PlayerData.citizenid
     local coords = GetEntityCoords(GetPlayerPed(source))
 
-    -- only rows whose stored point is already in the neighbourhood, plus the caller's own units,
-    -- so standing anywhere does not walk every owned property on the server
     local rows = MySQL.query.await(([[
         SELECT %s FROM properties
         WHERE owner IS NOT NULL AND building IS NULL
@@ -82,6 +80,30 @@ local function findDoorbellProperty(source)
         end
     end
 end
+
+lib.callback.register('qbx_properties:callback:getDoorbellSpots', function(source)
+    local player = exports.qbx_core:GetPlayer(source)
+    if not player then return {} end
+
+    local citizenId = player.PlayerData.citizenid
+    local rows = MySQL.query.await(([[
+        SELECT %s FROM properties
+        WHERE owner = ? OR tenant = ? OR JSON_SEARCH(keyholders, 'one', ?) IS NOT NULL
+    ]]):format(DOOR_COLUMNS), {citizenId, citizenId, citizenId}) or {}
+
+    local spots = {}
+    for i = 1, #rows do
+        local property = rows[i]
+        if HasPropertyAccess(citizenId, property, 'furniture') then
+            local points = doorPoints(property)
+            for j = 1, #points do
+                spots[#spots + 1] = { propertyId = property.id, coords = points[j] }
+            end
+        end
+    end
+
+    return spots
+end)
 
 lib.callback.register('qbx_properties:callback:canPlaceDoorbell', function(source)
     local property = findDoorbellProperty(source)
