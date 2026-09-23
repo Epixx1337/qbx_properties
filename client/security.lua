@@ -43,23 +43,18 @@ local function despawnDoorbell(propertyId)
     attached[propertyId] = nil
 end
 
----@param entry table
-local function spawnDoorbell(entry)
-    if spawned[entry.propertyId] then return end
+---@param propertyId integer
+function ApplyDoorbellTargets(propertyId)
+    local object = spawned[propertyId]
+    if not object or not DoesEntityExist(object) then return end
 
-    local hash = lib.requestModel(entry.model, 10000)
-    if not hash then return end
+    exports.ox_target:removeLocalEntity(object, {
+        ('qbx_properties_doorbell_move_%d'):format(propertyId),
+        ('qbx_properties_doorbell_remove_%d'):format(propertyId),
+    })
 
-    local object = CreateObjectNoOffset(hash, entry.coords.x, entry.coords.y, entry.coords.z, false, false, false)
-    SetEntityHeading(object, entry.heading)
-    FreezeEntityPosition(object, true)
-    SetModelAsNoLongerNeeded(hash)
-    spawned[entry.propertyId] = object
-    attached[entry.propertyId] = attachToDoor(entry, object)
+    if not editable[propertyId] then return end
 
-    if not editable[entry.propertyId] then return end
-
-    local propertyId = entry.propertyId
     exports.ox_target:addLocalEntity(object, {
         {
             name = ('qbx_properties_doorbell_move_%d'):format(propertyId),
@@ -82,6 +77,22 @@ local function spawnDoorbell(entry)
             end,
         },
     })
+end
+
+---@param entry table
+local function spawnDoorbell(entry)
+    if spawned[entry.propertyId] then return end
+
+    local hash = lib.requestModel(entry.model, 10000)
+    if not hash then return end
+
+    local object = CreateObjectNoOffset(hash, entry.coords.x, entry.coords.y, entry.coords.z, false, false, false)
+    SetEntityHeading(object, entry.heading)
+    FreezeEntityPosition(object, true)
+    SetModelAsNoLongerNeeded(hash)
+    spawned[entry.propertyId] = object
+    attached[entry.propertyId] = attachToDoor(entry, object)
+    ApplyDoorbellTargets(entry.propertyId)
 end
 
 local function refreshDoorbells()
@@ -227,7 +238,7 @@ function RefreshDoorbellSpots()
     for i = 1, #spots do editable[spots[i].propertyId] = true end
 
     for propertyId in pairs(spawned) do
-        despawnDoorbell(propertyId)
+        ApplyDoorbellTargets(propertyId)
     end
 
     for i = 1, #spots do

@@ -137,6 +137,7 @@ local placeLift = 0.0
 local placeStartedAt = 0
 local groundFollow = placeConfig.ground ~= false
 local placeSurface
+local wallSnap = false
 
 ---@param value boolean
 function SetCursorMode(value)
@@ -319,7 +320,9 @@ local function currentObjectId()
 end
 
 ---@param id integer
-function SelectPlacedDecoration(id)
+---@param id integer
+---@param gizmo boolean? keep the cursor on it instead of picking it up
+function SelectPlacedDecoration(id, gizmo)
     local entity = DecorationObjects[id]
     if not IsDecorating or not entity or not DoesEntityExist(entity) then return end
 
@@ -330,7 +333,13 @@ function SelectPlacedDecoration(id)
     currentlySelected = nil
     currentTint = DecorationTints[id] or 0
     SetEntityDrawOutline(entity, true)
-    SetFreePlacing(false)
+
+    if not gizmo then
+        placeDistance = math.min(math.max(#(GetEntityCoords(entity) - GetDecoratingCam()),
+            placeConfig.minDistance or 1.0), placeConfig.reach or 15.0)
+    end
+
+    SetFreePlacing(not gizmo and placeConfig.default ~= false)
     PushDecoratingState()
 end
 
@@ -774,7 +783,7 @@ local function placeTarget()
 
     local probe = StartExpensiveSynchronousShapeTestLosProbe(
         camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, 1 | 16 | 256, previewObject, 4)
-    local status, hit, endCoords, _, _, entityHit = GetShapeTestResultIncludingMaterial(probe)
+    local status, hit, endCoords, normal, _, entityHit = GetShapeTestResultIncludingMaterial(probe)
 
     local landed = status == 2 and (hit == true or hit == 1)
     local point = landed and endCoords or camPos + dir * math.min(placeDistance, reach)
@@ -787,7 +796,7 @@ local function placeTarget()
         return pedCoords + offset / #(offset) * limit, false
     end
 
-    return point, landed, landed and entityHit or nil
+    return point, landed, landed and entityHit or nil, landed and normal or nil
 end
 
 ---@param entity integer
@@ -800,8 +809,21 @@ end
 local function updateFreePlace()
     if not previewObject or not DoesEntityExist(previewObject) then return end
 
-    local target, onSurface, surface = placeTarget()
+    local target, onSurface, surface, normal = placeTarget()
     placeSurface = surface
+
+    -- against a wall the piece lies flat on the surface it is aimed at, lens pointing back out of it
+    if wallSnap and onSurface and normal and math.abs(normal.z) < 0.7 then
+        local _, max = GetModelDimensions(GetEntityModel(previewObject))
+        local point = target + normal * max.y
+
+        placeHeading = math.deg(math.atan(normal.x, -normal.y)) % 360.0
+        SetEntityCoordsNoOffset(previewObject, point.x, point.y, point.z + placeLift, false, false, false)
+        SetEntityRotation(previewObject, 0.0, 0.0, placeHeading, 2, false)
+        ApplySelectionOffsets()
+        return
+    end
+
     local lift = placeLift
     if onSurface and groundFollow then lift = lift + baseOffset(previewObject) end
 
@@ -1108,6 +1130,7 @@ function FreePlaceModel(model, prompt)
     freePlacing = true
     groundFollow = placeConfig.ground ~= false
     placeSurface = nil
+    wallSnap = false
 
     SetCursorMode(false)
     SetUIFocus(false)
@@ -1124,6 +1147,7 @@ function FreePlaceModel(model, prompt)
         DisableControlAction(0, 23, true)
         DisableControlAction(0, 47, true)
         DisableControlAction(0, 73, true)
+        DisableControlAction(0, 74, true)
         DisablePlayerFiring(cache.playerId, true)
 
         if not freecamMoving then
@@ -1150,6 +1174,10 @@ function FreePlaceModel(model, prompt)
             placeLift = 0.0
         end
         if IsDisabledControlJustReleased(0, 73) then gridSnap = not gridSnap end
+        if IsDisabledControlJustReleased(0, 74) then
+            wallSnap = not wallSnap
+            placeLift = 0.0
+        end
 
         updateFreePlace()
         if gridConfig.enabled then drawFurnitureGrid(GetEntityCoords(previewObject)) end
@@ -1288,7 +1316,7 @@ function ToggleDecorating()
                 pickUpCartEntry(cartIndex, true)
             elseif id and entity then
                 if IsDisabledControlPressed(0, 36) then
-                    if not previewObject then SelectPlacedDecoration(id) end
+                    if not previewObject then SelectPlacedDecoration(id, true) end
                     toggleExtraSelection(id, entity)
                     PushDecoratingState()
                 else
