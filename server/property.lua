@@ -510,8 +510,10 @@ local function exitProperty(playerSource, isLogout, fallbackCoords)
     if not player then return end
 
     if isLogout then
+        -- building rooms get released and reassigned, so the raw logout coords can land in someone
+        -- else's unit; keep the id so spawning re-resolves to the player's own unit. MLO coords stay valid.
         local row = MySQL.single.await('SELECT building, interior FROM properties WHERE id = ?', {propertyId})
-        if row and (row.building or row.interior == 'mlo') then
+        if row and not row.building and row.interior == 'mlo' then
             player.Functions.SetMetaData('currentPropertyId', nil)
         end
         return
@@ -741,7 +743,16 @@ RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
 
     spawnArmed[playerSource] = true
     spawning[playerSource] = true
-    SetTimeout(60000, function() spawning[playerSource] = nil end)
+    SetTimeout(60000, function()
+        spawning[playerSource] = nil
+        -- the player spawned somewhere else; drop the retained id so a later
+        -- "last location" uses their actual logout coords instead of the old unit
+        if enteredProperty[playerSource] then return end
+        local player = exports.qbx_core:GetPlayer(playerSource)
+        if player and player.PlayerData.metadata.currentPropertyId then
+            player.Functions.SetMetaData('currentPropertyId', nil)
+        end
+    end)
 end)
 
 RegisterNetEvent('QBCore:Server:OnPlayerLoaded', function()
@@ -791,7 +802,8 @@ RegisterNetEvent('qbx_properties:server:enterProperty', function(data)
 
             if own then
                 propertyId = own.id
-            elseif isSpawn then
+            elseif isSpawn and not hasAccess(player.PlayerData.citizenid, propertyId) then
+                player.Functions.SetMetaData('currentPropertyId', nil)
                 local entrance = Buildings[target.building] and Buildings[target.building].entrance
                 if entrance then
                     SetEntityCoords(GetPlayerPed(playerSource), entrance.x, entrance.y, entrance.z, false, false, false, false)
@@ -811,7 +823,10 @@ RegisterNetEvent('qbx_properties:server:enterProperty', function(data)
     end
 
     if not allowed then
-        if isSpawn then TriggerClientEvent('qbx_properties:client:finishSpawn', playerSource) end
+        if isSpawn then
+            player.Functions.SetMetaData('currentPropertyId', nil)
+            TriggerClientEvent('qbx_properties:client:finishSpawn', playerSource)
+        end
         return
     end
 
