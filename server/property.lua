@@ -1115,6 +1115,8 @@ local function doorcamPoints(property)
 end
 
 lib.callback.register('qbx_properties:callback:getDoorcamData', function(source)
+    if (sharedConfig.doorcam or {}).enabled == false then return end
+
     local propertyId = enteredProperty[source]
     local player = exports.qbx_core:GetPlayer(source)
     if not player or not propertyId then return end

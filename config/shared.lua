@@ -320,6 +320,7 @@ return {
     -- Automatic doorbell camera placement for shell and IPL properties without a realtor-set doorcam;
     -- realtors place exact cameras from the Manage tab, which always wins over these offsets
     doorcam = {
+        enabled = true, -- false hides the tablet's Doorcam tab and the realtor doorcam tools; ringers are still let in from the property menu
         height = 1.2, -- metres above the entrance point
         rotate = 180.0, -- degrees added to the entrance heading so the camera faces visitors
     },

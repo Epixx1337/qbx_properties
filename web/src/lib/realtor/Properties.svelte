@@ -166,7 +166,9 @@
               ]
             : []),
           { label: 'Set mailbox', run: () => fetchNui('realtor:setMailbox', { propertyId: selected.id }) },
-          { label: details.hasDoorcam ? 'Re-place doorcam' : 'Set doorcam', run: () => fetchNui('realtor:setDoorcam', { propertyId: selected.id }) },
+          ...(details.doorcams === false
+            ? []
+            : [{ label: details.hasDoorcam ? 'Re-place doorcam' : 'Set doorcam', run: () => fetchNui('realtor:setDoorcam', { propertyId: selected.id }) }]),
           ...(details.hasDoorcam ? [{ label: 'Clear doorcam', run: () => fetchNui('realtor:clearDoorcam', { propertyId: selected.id }) }] : []),
           ...(selected.owner ? [] : [{ label: 'Enter property', run: () => fetchNui('realtor:enterProperty', { propertyId: selected.id }) }]),
         ]

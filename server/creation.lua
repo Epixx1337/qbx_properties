@@ -308,6 +308,7 @@ lib.callback.register('qbx_properties:callback:getPropertyDetails', function(sou
         hasGarden = property.garden_zone ~= nil,
         hasGarage = property.garage ~= nil,
         hasDoorcam = property.doorcam ~= nil,
+        doorcams = (sharedConfig.doorcam or {}).enabled ~= false,
         wallColor = property.wall_color,
         utilities = {
             paidUntil = property.paidUntil,
@@ -773,6 +774,7 @@ lib.callback.register('qbx_properties:callback:setDoorcam', function(source, pro
     local player = exports.qbx_core:GetPlayer(source)
     propertyId = ToId(propertyId)
     if not player or not propertyId or not IsRealtor(player.PlayerData.job) then return false end
+    if (sharedConfig.doorcam or {}).enabled == false then return false end
     if type(point) ~= 'table' or type(point.x) ~= 'number' or type(point.y) ~= 'number' or type(point.z) ~= 'number' then return false end
 
     local property = MySQL.single.await('SELECT id, property_name, coords FROM properties WHERE id = ? AND building IS NULL', {propertyId})
