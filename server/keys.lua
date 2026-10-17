@@ -33,6 +33,7 @@ local function keyMetadata(property)
         description = building and property.property_name or string.format('Opens the doors of %s', property.property_name),
         property = property.id,
         lock = lockVersion(property),
+        building = property.building,
         imageurl = ('nui://%s/web/build/items/property_key.png'):format(GetCurrentResourceName()),
     }
 end
@@ -109,6 +110,44 @@ function HasPropertyKey(source, property)
     return false
 end
 
+---@param metadata table key item metadata
+---@param buildingKey string
+---@return boolean dead this key belongs to the building and no longer opens anything
+local function isDeadBuildingKey(metadata, buildingKey)
+    local propertyId = tonumber(metadata.property)
+    if not propertyId then return false end
+
+    local row = MySQL.single.await('SELECT building, lock_version FROM properties WHERE id = ?', {propertyId})
+    if not row then return metadata.building == buildingKey end
+    if row.building ~= buildingKey then return false end
+
+    return tonumber(metadata.lock) ~= row.lock_version
+end
+
+---@param source integer
+---@param property table needs id, property_name, building
+---@return boolean recut a dead key already in the pockets was re-cut for this unit
+local function recutBuildingKey(source, property)
+    if not property.building then return false end
+
+    local slots = exports.ox_inventory:Search(source, 'slots', keys.item)
+    if type(slots) ~= 'table' then return false end
+
+    local recut = false
+    for _, slot in pairs(slots) do
+        if type(slot) == 'table' and type(slot.metadata) == 'table' and isDeadBuildingKey(slot.metadata, property.building) then
+            if recut then
+                exports.ox_inventory:RemoveItem(source, keys.item, 1, nil, slot.slot)
+            else
+                exports.ox_inventory:SetMetadata(source, slot.slot, keyMetadata(property))
+                recut = true
+            end
+        end
+    end
+
+    return recut
+end
+
 ---@param source integer
 ---@param property table needs id, property_name, building
 ---@return boolean
@@ -120,15 +159,20 @@ function GivePropertyKey(source, property)
         return false
     end
 
-    if not exports.ox_inventory:CanCarryItem(source, keys.item, 1) then
-        exports.qbx_core:Notify(source, 'Your pockets are full, the key would not fit.', 'error')
-        return false
-    end
+    -- not loaded yet (login): leave the properties_keys row missing so issueMissingKeys retries once it is
+    if not exports.ox_inventory:GetInventory(source) then return false end
 
-    local ok, response = exports.ox_inventory:AddItem(source, keys.item, 1, keyMetadata(property))
-    if not ok then
-        lib.print.warn(('could not hand out a key for property %d: %s (is the %s item defined in ox_inventory?)'):format(property.id, tostring(response), keys.item))
-        return false
+    if not recutBuildingKey(source, property) then
+        if not exports.ox_inventory:CanCarryItem(source, keys.item, 1) then
+            exports.qbx_core:Notify(source, 'Your pockets are full, the key would not fit.', 'error')
+            return false
+        end
+
+        local ok, response = exports.ox_inventory:AddItem(source, keys.item, 1, keyMetadata(property))
+        if not ok then
+            lib.print.warn(('could not hand out a key for property %d: %s (is the %s item defined in ox_inventory?)'):format(property.id, tostring(response), keys.item))
+            return false
+        end
     end
 
     local player = exports.qbx_core:GetPlayer(source)
