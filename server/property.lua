@@ -9,6 +9,15 @@ local rentThreads = {}
 local enteredInPlace = {}
 local spawning = {}
 local spawnArmed = {}
+local concealedProperties = {}
+
+-- only shells need this, they share the space under an entrance; MLOs and building units are real places
+---@param propertyId integer
+local function syncConceal(propertyId)
+    if not concealedProperties[propertyId] then return end
+    local occupants = insideProperty[propertyId] or {}
+    lib.triggerClientEvent('qbx_properties:client:concealPlayers', occupants, occupants)
+end
 
 ---@param playerSource integer
 ---@return integer?
@@ -458,9 +467,8 @@ function EnterProperty(playerSource, id, isSpawn, inPlace)
     insideProperty[id] = insideProperty[id] or {}
     insideProperty[id][#insideProperty[id] + 1] = playerSource
 
-    if not isBuildingUnit then
-        lib.triggerClientEvent('qbx_properties:client:concealPlayers', insideProperty[id], insideProperty[id])
-    end
+    concealedProperties[id] = not enteredInPlace[playerSource] or nil
+    syncConceal(id)
 
     player.Functions.SetMetaData('currentPropertyId', id)
 
@@ -502,7 +510,7 @@ local function exitProperty(playerSource, isLogout, fallbackCoords)
         end
     end
 
-    lib.triggerClientEvent('qbx_properties:client:concealPlayers', occupants, occupants)
+    syncConceal(propertyId)
     local logPropertyId = propertyId
     enteredProperty[playerSource] = nil
 
@@ -714,12 +722,8 @@ RegisterNetEvent('qbx_properties:server:enterWalkIn', function(propertyId)
     propertyId = ToId(propertyId)
     if not player or not propertyId then return end
 
-    local property = MySQL.single.await('SELECT owner, coords FROM properties WHERE id = ?', {propertyId})
+    local property = MySQL.single.await('SELECT coords FROM properties WHERE id = ?', {propertyId})
     if not property then return end
-
-    if not hasAccess(player.PlayerData.citizenid, propertyId) then
-        if property.owner or not IsRealtor(player.PlayerData.job) then return end
-    end
 
     local coords = json.decode(property.coords)
     if #(GetEntityCoords(GetPlayerPed(playerSource)) - vec3(coords.x, coords.y, coords.z)) > 60.0 then return end
@@ -1262,7 +1266,7 @@ RegisterNetEvent('qbx_properties:server:logoutProperty', function()
         end
     end
 
-    lib.triggerClientEvent('qbx_properties:client:concealPlayers', occupants, occupants)
+    syncConceal(propertyId)
     enteredProperty[playerSource] = nil
     exports.qbx_core:Logout(playerSource)
     Wait(50)
@@ -1330,7 +1334,7 @@ AddEventHandler('playerDropped', function ()
         end
     end
 
-    lib.triggerClientEvent('qbx_properties:client:concealPlayers', occupants, occupants)
+    syncConceal(propertyId)
 
     if not playerCitizenId then return end
     local property = MySQL.single.await('SELECT coords FROM properties WHERE id = ?', {propertyId})

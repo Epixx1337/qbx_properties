@@ -283,7 +283,6 @@ lib.callback.register('qbx_properties:callback:getRoomDecorations', function(sou
     if not player then return {} end
 
     local citizenId = player.PlayerData.citizenid
-    if not HasPropertyAccess(citizenId, property, 'door') and not IsRealtor(player.PlayerData.job) then return {} end
 
     local decorations = GetPropertyDecorations(property)
     local stashIndexes = RegisterPropertyStashes(property, decorations)
